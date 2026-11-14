@@ -3,6 +3,7 @@
 package browser
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -134,4 +135,121 @@ func TestTheTicketSetupNamesWhatShipsInTheReadersLanguage(t *testing.T) {
 	if got := p.text("#table-priority tbody"); strings.Contains(got, "very-high") {
 		t.Errorf("a priority is shown by its identifier: %q", got)
 	}
+}
+
+// The queue card makes a queue under another with access for one role, shows it
+// by its place in the tree and who reaches it, moves it to the top - which the
+// form has to say out loud - and deletes it.
+func TestTheQueueCardPlacesAQueueAndSaysWhoReachesIt(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+
+	p.run("open the ticket setup", p.click(`.tab[data-view="ticketsetup"]`),
+		chromedp.WaitVisible("#table-queue", chromedp.ByID))
+	p.waitForText("#table-queue tbody", "Service Desk")
+
+	var agentRole string
+
+	p.evalJSON(`JSON.stringify(document.querySelector('#queue-access-list select[data-role]') ?
+		[...document.querySelectorAll('#queue-access-list label')]
+			.filter((label) => label.textContent.startsWith('Agent'))
+			.map((label) => label.querySelector('select').dataset.role).join('') : '')`, &agentRole)
+
+	if agentRole == "" {
+		t.Fatal("the queue form offers no access for the agents")
+	}
+
+	p.run("describe a queue", chromedp.SetValue(`#form-queue [name="name"]`, "Second level", chromedp.ByQuery),
+		p.chooseOption(`#form-queue [name="parentId"]`, p.queueID("Service Desk")),
+		p.chooseOption(`#queue-access-list select[data-role="`+agentRole+`"]`, "read"),
+		p.click("#queue-submit"))
+	p.waitForText("#table-queue tbody", "Service Desk › Second level")
+
+	if row := p.queueRow("Service Desk › Second level"); !strings.Contains(row, "reads its tickets") {
+		t.Errorf("the new queue's row does not say the agents read it: %q", row)
+	}
+
+	p.pressInQueueRow("Service Desk › Second level", "button.link:not(.danger)")
+	p.run("the form holds it", chromedp.WaitVisible("#queue-cancel", chromedp.ByID))
+	p.run("move it to the top", p.chooseOption(`#form-queue [name="parentId"]`, ""), p.click("#queue-submit"))
+
+	moved := false
+
+	for deadline := time.Now().Add(waitPatience); time.Now().Before(deadline) && !moved; {
+		moved = p.queueRow("Second level") != "" && p.queueRow("Service Desk › Second level") == ""
+		if !moved {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+
+	if !moved {
+		t.Fatal("choosing the top did not move the queue out from under the desk")
+	}
+
+	p.pressInQueueRow("Second level", "button.danger")
+	p.run("confirm", chromedp.WaitVisible(".confirm-overlay", chromedp.ByQuery),
+		p.click(".confirm-actions button.danger"))
+	p.waitGone(".confirm-overlay")
+
+	for deadline := time.Now().Add(waitPatience); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		if p.queueRow("Second level") == "" {
+			return
+		}
+	}
+
+	t.Error("confirming the delete left the queue in the table")
+}
+
+// queueID is the id the queue card's parent choices give the queue with this
+// path, as the value to choose.
+func (p *page) queueID(path string) string {
+	var id string
+
+	p.evalJSON(`JSON.stringify([...document.querySelectorAll('#form-queue [name="parentId"] option')]
+		.filter((option) => option.textContent === `+jsString(path)+`)
+		.map((option) => option.value).join(''))`, &id)
+
+	if id == "" {
+		p.t.Fatalf("the queue form offers nothing called %q to sit under", path)
+	}
+
+	return id
+}
+
+// queueRow is the text of the queue card's row for the queue with this path, or
+// nothing where there is none.
+func (p *page) queueRow(path string) string {
+	var row string
+
+	p.evalJSON(`JSON.stringify([...document.querySelectorAll('#table-queue tbody tr')]
+		.filter((row) => [...row.cells].some((cell) => cell.textContent === `+jsString(path)+`))
+		.map((row) => row.textContent).join(''))`, &row)
+
+	return row
+}
+
+// pressInQueueRow presses a button in the queue card's row for this path.
+func (p *page) pressInQueueRow(path, button string) {
+	var pressed bool
+
+	p.evalJSON(`JSON.stringify((() => {
+		const row = [...document.querySelectorAll('#table-queue tbody tr')]
+			.find((row) => [...row.cells].some((cell) => cell.textContent === `+jsString(path)+`));
+		const button = row?.querySelector('`+button+`');
+		button?.click();
+		return Boolean(button);
+	})())`, &pressed)
+
+	if !pressed {
+		p.t.Fatalf("the row of %q has no %s", path, button)
+	}
+}
+
+// jsString writes a Go string as a JavaScript string literal, quotes and all.
+func jsString(s string) string {
+	quoted, _ := json.Marshal(s)
+
+	return string(quoted)
 }

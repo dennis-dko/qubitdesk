@@ -292,10 +292,11 @@ func TestNoTranslationIsUnused(t *testing.T) {
 			}
 
 			// The ticket states, priorities and types, looked up as
-			// t(`status.${status}`) and the like from whatever the server sent, and
-			// the types a state can have.
-			// TestEveryShippedValueAndStateTypeIsNamedInBothLanguages holds all four
-			// to what ships and what the server knows.
+			// t(`status.${status}`) and the like from whatever the server sent, the
+			// types a state can have, what an answer to a closed ticket does and how
+			// far a role reaches into a queue.
+			// TestEveryShippedValueAndStateTypeIsNamedInBothLanguages holds all of
+			// them to what ships and what the server knows.
 			if state, isState := strings.CutPrefix(key, "status."); isState {
 				if _, known := ticketStates(t)[state]; known {
 					continue
@@ -316,6 +317,18 @@ func TestNoTranslationIsUnused(t *testing.T) {
 
 			if kind, isStateType := strings.CutPrefix(key, "statetype."); isStateType {
 				if slices.Contains(model.StateTypes(), model.StateType(kind)) {
+					continue
+				}
+			}
+
+			if followUp, isFollowUp := strings.CutPrefix(key, "followup."); isFollowUp {
+				if slices.Contains(model.FollowUps(), model.FollowUp(followUp)) {
+					continue
+				}
+			}
+
+			if level, isLevel := strings.CutPrefix(key, "queueaccess."); isLevel {
+				if slices.Contains(model.AccessLevels(), model.AccessLevel(level)) {
 					continue
 				}
 			}

@@ -13,7 +13,7 @@
 const API = '/api/v1';
 
 /** Cached lookups so tables can show names instead of raw ids. */
-const cache = { users: [], roles: [], permissions: [] };
+const cache = { users: [], roles: [], permissions: [], queues: [] };
 
 /**
  * The branding as it was last read.
@@ -4907,9 +4907,11 @@ const CATALOGS = {
 async function loadTicketSetup() {
   if (!can('queues:write')) return;
 
-  const [states, priorities, types] = await Promise.all(
-    [CATALOGS.state, CATALOGS.priority, CATALOGS.type].map((catalog) => api(catalog.path)),
+  const [queues, states, priorities, types] = await Promise.all(
+    ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path].map((path) => api(path)),
   );
+
+  loadQueueCard(queues?.items ?? []);
 
   const lists = { state: states?.items ?? [], priority: priorities?.items ?? [], type: types?.items ?? [] };
 
@@ -5020,6 +5022,252 @@ function saveCatalogEntry(kind, form) {
       : api(catalog.path, { method: 'POST', body })),
     id ? catalog.saved() : catalog.created(),
     async () => { resetCatalogForm(kind); await refreshAll(); },
+  );
+}
+
+// ------------------------------------------------------------------ queues
+
+/** The English for what an answer to a closed ticket does, which are the server's model.FollowUps. */
+const FOLLOW_UP_TITLES = {
+  reopen: 'opens it again',
+  reject: 'is refused',
+  'new-ticket': 'opens a new ticket',
+};
+
+/** The English for how far a role reaches into a queue, which are the server's model.AccessLevels. */
+const ACCESS_TITLES = {
+  read: 'reads its tickets',
+  write: 'works in it',
+};
+
+/** What an answer to a closed ticket does, in the reader's language. */
+function followUpName(followUp) {
+  return t(`followup.${followUp}`, FOLLOW_UP_TITLES[followUp] ?? followUp);
+}
+
+/** How far a role reaches into a queue, in the reader's language. */
+function accessName(level) {
+  return t(`queueaccess.${level}`, ACCESS_TITLES[level] ?? level);
+}
+
+/**
+ * A queue's place in the tree: its parents' names before its own.
+ *
+ * Stops at a queue it has passed, as the server's walk up the tree does, so a
+ * tree somebody broke by hand in the database draws a name rather than hanging
+ * the page.
+ */
+function queuePath(queue, byId) {
+  const names = [queue.name];
+  const passed = new Set([queue.id]);
+
+  for (let at = byId.get(queue.parentId); at && !passed.has(at.id); at = byId.get(at.parentId)) {
+    names.unshift(at.name);
+    passed.add(at.id);
+  }
+
+  return names.join(' › ');
+}
+
+/** Whether a queue sits under another - or is it - however many levels down. */
+function sitsUnder(queue, ancestor, byId) {
+  const passed = new Set();
+
+  for (let at = queue; at && !passed.has(at.id); at = byId.get(at.parentId)) {
+    if (at.id === ancestor.id) return true;
+    passed.add(at.id);
+  }
+
+  return false;
+}
+
+/** The name of the role with this id, as the role list has it. */
+function roleNameOf(roleId) {
+  return (cache.roles ?? []).find((role) => role.id === roleId)?.name ?? `#${roleId}`;
+}
+
+/**
+ * Fills the queue card from the queues the screen just read.
+ *
+ * Not over a queue somebody is part way through: refilling the parent list and
+ * the access would put a half-chosen form back to what it was.
+ */
+function loadQueueCard(queues) {
+  cache.queues = queues;
+
+  const byId = new Map(queues.map((queue) => [queue.id, queue]));
+  const tbody = $('#table-queue tbody');
+
+  if (tbody) {
+    const rows = [...queues]
+      .sort((a, b) => queuePath(a, byId).localeCompare(queuePath(b, byId)))
+      .map((queue) => queueRow(queue, byId));
+
+    fillTable(tbody, rows, 6, t('catalog.queuesEmpty', 'No queues.'));
+  }
+
+  const form = $('#form-queue');
+  if (form && !beingEdited(form)) {
+    fillFollowUps(form);
+    fillParents(form, null);
+    drawQueueAccess([]);
+  }
+}
+
+/** One queue as a row of the queue card's table. */
+function queueRow(queue, byId) {
+  const access = (queue.access ?? [])
+    .map((entry) => `${roleTitle(roleNameOf(entry.roleId))}: ${accessName(entry.level)}`)
+    .join(', ');
+
+  return el('tr', {},
+    el('td', { class: 'text', text: queuePath(queue, byId) }),
+    el('td', { class: 'text', text: followUpName(queue.followUp) }),
+    el('td', {
+      class: 'num',
+      text: queue.unlockMinutes ? String(queue.unlockMinutes) : t('catalog.never', 'never'),
+    }),
+    el('td', { class: 'text', text: access || t('catalog.onlySetup', 'only whoever sets up queues') }),
+    el('td', { text: queue.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editQueue(queue) }),
+      deleteButton({
+        label: `${t('field.queue', 'Queue')} "${queue.name}"`,
+        path: `/queues/${queue.id}`,
+        message: t('msg.queueDeleted', 'Queue deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/** The three things an answer to a closed ticket can do, as the form's choices. */
+function fillFollowUps(form) {
+  fillSelect(form.elements.followUp,
+    Object.keys(FOLLOW_UP_TITLES).map((followUp) => ({ value: followUp, label: followUpName(followUp) })),
+    { labelKey: 'label', valueKey: 'value' });
+}
+
+/**
+ * The queues a queue can sit under: every one but itself and those below it,
+ * which the server refuses because the tree would loop.
+ */
+function fillParents(form, editing) {
+  const byId = new Map(cache.queues.map((queue) => [queue.id, queue]));
+  const choices = cache.queues
+    .filter((queue) => !editing || !sitsUnder(queue, editing, byId))
+    .map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  fillSelect(form.elements.parentId, choices,
+    { placeholder: t('catalog.topLevel', 'nothing - at the top'), labelKey: 'label', valueKey: 'value' });
+}
+
+/**
+ * One choice per role of how far it reaches into the queue.
+ *
+ * Hidden without the roles, which only somebody who may read them has: the form
+ * then sends no access at all, and the server leaves it as it is rather than
+ * taking it away.
+ */
+function drawQueueAccess(access) {
+  const fieldset = $('#queue-access');
+  const list = $('#queue-access-list');
+  if (!fieldset || !list) return;
+
+  const roles = cache.roles ?? [];
+  fieldset.hidden = roles.length === 0;
+
+  list.replaceChildren(...roles.map((role) => {
+    const select = el('select', { name: 'access', 'data-role': String(role.id) },
+      el('option', { value: '', text: t('catalog.noAccess', 'no access') }),
+      ...Object.keys(ACCESS_TITLES).map((level) => el('option', { value: level, text: accessName(level) })));
+
+    select.value = access.find((entry) => entry.roleId === role.id)?.level ?? '';
+
+    return el('label', {}, el('span', { text: roleTitle(role.name) }), select);
+  }));
+}
+
+/** Opens a queue in the form, to correct it. */
+function editQueue(queue) {
+  const form = $('#form-queue');
+
+  form.elements.id.value = String(queue.id);
+  form.elements.name.value = queue.name;
+  form.elements.description.value = queue.description ?? '';
+  form.elements.unlockMinutes.value = String(queue.unlockMinutes);
+  form.elements.valid.checked = queue.valid;
+
+  fillFollowUps(form);
+  form.elements.followUp.value = queue.followUp;
+
+  fillParents(form, queue);
+  form.elements.parentId.value = queue.parentId ? String(queue.parentId) : '';
+
+  drawQueueAccess(queue.access ?? []);
+
+  // Drawn rather than declared with a key, because it carries the queue's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#queue-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('queueFormTitle', () => {
+    heading.textContent = t('catalog.queueEdit', 'Edit the queue {0}').replace('{0}', queue.name);
+  });
+
+  swapTheLabel($('#queue-submit'), 'action.save', 'Save');
+  $('#queue-cancel').hidden = false;
+
+  form.elements.name.focus();
+}
+
+/** Puts the queue form back to making a new queue. */
+function resetQueueForm() {
+  const form = $('#form-queue');
+
+  form.reset();
+  form.elements.id.value = '';
+
+  fillFollowUps(form);
+  fillParents(form, null);
+  drawQueueAccess([]);
+
+  stopRedrawing('queueFormTitle');
+  swapTheLabel($('#queue-form-title'), 'catalog.queueCreate', 'Add a queue');
+  swapTheLabel($('#queue-submit'), 'action.create', 'Create');
+  $('#queue-cancel').hidden = true;
+}
+
+/** Sends the queue form: a new queue, or the correction of the one it holds. */
+function saveQueue(form) {
+  const id = form.elements.id.value;
+  const parent = form.elements.parentId.value;
+
+  const sent = {
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    followUp: form.elements.followUp.value,
+    unlockMinutes: Number(form.elements.unlockMinutes.value),
+    valid: form.elements.valid.checked,
+
+    // Said out loud when there is none: a parent sent as nothing cannot be told
+    // apart from one that was not sent, and a correction would keep the old one.
+    ...(parent ? { parentId: Number(parent) } : { clearParent: true }),
+  };
+
+  if (!$('#queue-access').hidden) {
+    sent.access = $$('#queue-access-list select', form)
+      .filter((select) => select.value)
+      .map((select) => ({ roleId: Number(select.dataset.role), level: select.value }));
+  }
+
+  const body = JSON.stringify(sent);
+
+  mutate(
+    () => (id ? api(`/queues/${id}`, { method: 'PUT', body }) : api('/queues', { method: 'POST', body })),
+    id ? t('msg.queueSaved', 'Queue saved') : t('msg.queueCreated', 'Queue created'),
+    async () => { resetQueueForm(); await refreshAll(); },
   );
 }
 
@@ -7503,6 +7751,7 @@ function forgetTheLastAccount() {
   cache.users = [];
   cache.roles = [];
   cache.permissions = [];
+  cache.queues = [];
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -7915,6 +8164,15 @@ const TOUR_STEPS = [
     text: () => t('tour.roles.text',
       'A role is a set of rights, and each one is enforced by real code rather than by a '
       + 'hidden button. Tick what the role may do; every account holding it changes with it.'),
+  },
+  {
+    target: '#queue-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.queues.title', 'Where tickets go'),
+    text: () => t('tour.queues.text',
+      'A queue is where tickets are sorted to, and each role reaches the queues it is given - to '
+      + 'read their tickets, or to work in them. A role with no access does not see a queue at all.'),
   },
   {
     target: '#state-card',
@@ -12469,6 +12727,13 @@ function wireForms() {
   });
 
   $('#role-reset').addEventListener('click', resetRoleForm);
+
+  $('#form-queue').addEventListener('submit', (e) => {
+    e.preventDefault();
+    saveQueue(e.target);
+  });
+
+  $('#queue-cancel').addEventListener('click', resetQueueForm);
 
   for (const kind of Object.keys(CATALOGS)) {
     $(`#form-${kind}`).addEventListener('submit', (e) => {

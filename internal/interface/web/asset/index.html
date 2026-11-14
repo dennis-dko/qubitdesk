@@ -628,6 +628,48 @@
          the database connection. Each card is a table and one form that makes a
          value or corrects one, told apart by the hidden id. -->
     <section id="view-ticketsetup" class="view" hidden>
+      <div class="card" id="queue-card">
+        <h2 data-i18n="catalog.queues">Queues</h2>
+        <p class="muted" data-i18n="catalog.queuesIntro">Where tickets are sorted to, and which role reaches each queue - to read its tickets, or to work in it. A role with no access does not see the queue at all; whoever may set up queues reaches every one. A queue sits under another to be found, and its access is its own.</p>
+        <div class="table-wrap">
+          <table id="table-queue">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="field.followUp">Answer to a closed ticket</th>
+                <th class="num" data-i18n="field.unlockMinutes">Unlock after (minutes)</th>
+                <th data-i18n="field.access">Access</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-queue" class="form" data-perm="queues:write">
+          <h3 id="queue-form-title" data-i18n="catalog.queueCreate">Add a queue</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="255" required></label>
+            <label data-i18n="field.parentId">Under<select name="parentId"></select></label>
+            <label data-i18n="field.followUp">Answer to a closed ticket<select name="followUp" required></select></label>
+            <label data-i18n="field.unlockMinutes">Unlock after (minutes)<input type="number" name="unlockMinutes" min="0" max="10080" value="0" required></label>
+            <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <!-- One line per role, each choosing how far that role reaches. Built
+               from the roles, which only somebody who may read them has; without
+               them the access is left as it is rather than sent empty. -->
+          <fieldset class="queue-access" id="queue-access">
+            <legend data-i18n="field.access">Access</legend>
+            <div id="queue-access-list" class="grid"></div>
+          </fieldset>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="catalog.offeredQueue">Tickets can be put into it</span></label>
+          <div class="row">
+            <button type="submit" id="queue-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="queue-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
       <div class="card" id="state-card">
         <h2 data-i18n="catalog.states">Ticket states</h2>
         <p class="muted" data-i18n="catalog.statesIntro">The states a ticket can be in. Each has a type, and the type is what the application does with a ticket in it. The states it moves tickets into by itself ship with it and stay as they are; a state tickets are in is made invalid rather than deleted.</p>

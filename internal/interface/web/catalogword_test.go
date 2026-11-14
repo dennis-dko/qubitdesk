@@ -94,7 +94,9 @@ func scriptTitles(t *testing.T, table string) map[string]struct{} {
 // went is a word nobody notices is wrong. A value an installation adds is shown
 // as it was typed, the only sensible answer for a word this application has never
 // seen. The types a state can have are held the same way, to model.StateTypes,
-// because the form offers them from the script's table.
+// because the form offers them from the script's table - and so are what an
+// answer to a closed ticket does and how far a role reaches into a queue, to
+// model.FollowUps and model.AccessLevels.
 func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 	dict, ok := dictionaries(t)["de"]
 	if !ok {
@@ -106,6 +108,16 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		stateTypes[string(kind)] = struct{}{}
 	}
 
+	followUps := map[string]struct{}{}
+	for _, followUp := range model.FollowUps() {
+		followUps[string(followUp)] = struct{}{}
+	}
+
+	levels := map[string]struct{}{}
+	for _, level := range model.AccessLevels() {
+		levels[string(level)] = struct{}{}
+	}
+
 	for _, family := range []struct {
 		prefix, titles string
 		shipped        map[string]struct{}
@@ -114,6 +126,8 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		{"priority.", "SHIPPED_PRIORITY_TITLES", shippedPriorities(t)},
 		{"tickettype.", "SHIPPED_TYPE_TITLES", shippedTicketTypes(t)},
 		{"statetype.", "STATE_TYPE_TITLES", stateTypes},
+		{"followup.", "FOLLOW_UP_TITLES", followUps},
+		{"queueaccess.", "ACCESS_TITLES", levels},
 	} {
 		english := scriptTitles(t, family.titles)
 
