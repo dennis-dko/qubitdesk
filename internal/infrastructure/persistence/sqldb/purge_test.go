@@ -84,16 +84,21 @@ func twoAccounts(t *testing.T, db *sql.DB) (leaving, staying *model.User) {
 // ticket writes a ticket straight into the table, in the seeded queue, and
 // returns its id. The purge is about what points at an account, so the cases
 // below need rows that do and nothing of how a ticket is otherwise made.
-func ticket(t *testing.T, db *sql.DB, number string, state model.TicketState, owner, responsible *uint) uint {
+func ticket(t *testing.T, db *sql.DB, number, state string, owner, responsible *uint) uint {
 	t.Helper()
 
 	now := time.Now().UTC()
 
 	result, err := db.Exec(`INSERT INTO tickets
-		(number, title, queue_id, state, priority, owner_id, responsible_id, locked, locked_at,
-		 channel, created_at, updated_at)
-		VALUES (?, ?, (SELECT id FROM queues ORDER BY id LIMIT 1), ?, 3, ?, ?, ?, ?, 'phone', ?, ?)`,
-		number, "Ticket "+number, string(state), owner, responsible, owner != nil, now, now, now)
+		(number, title, queue_id, state_id, priority_id, type_id, owner_id, responsible_id,
+		 locked, locked_at, channel, created_at, updated_at)
+		VALUES (?, ?, (SELECT id FROM queues ORDER BY id LIMIT 1),
+		 (SELECT id FROM ticket_states WHERE name = ?),
+		 (SELECT id FROM ticket_priorities WHERE name = ?),
+		 (SELECT id FROM ticket_types WHERE name = ?),
+		 ?, ?, ?, ?, 'phone', ?, ?)`,
+		number, "Ticket "+number, state, model.PriorityNormal, model.TypeUnclassified,
+		owner, responsible, owner != nil, now, now, now)
 	if err != nil {
 		t.Fatalf("create ticket %s: %v", number, err)
 	}
@@ -249,8 +254,8 @@ func TestAnAccountLeavesBehindTheTicketsItOwnsThatAreNotFinished(t *testing.T) {
 	users := sqldb.NewUserRepository(db, sqldb.DialectSQLite)
 
 	ticket(t, db, "2026111200000001", model.StateOpen, &leaving.ID, nil)
-	ticket(t, db, "2026111200000002", model.StatePendingReminder, &leaving.ID, nil)
-	ticket(t, db, "2026111200000003", model.StateClosedSuccessful, &leaving.ID, nil)
+	ticket(t, db, "2026111200000002", "pending-reminder", &leaving.ID, nil)
+	ticket(t, db, "2026111200000003", model.StateClosed, &leaving.ID, nil)
 	ticket(t, db, "2026111200000004", model.StateMerged, &leaving.ID, nil)
 	ticket(t, db, "2026111200000005", model.StateOpen, &staying.ID, &leaving.ID)
 

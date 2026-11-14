@@ -49,24 +49,27 @@ own.
 
 ## Everything about you
 
-Under **My account**, *Everything about me* downloads what this installation keeps
-about your account as a ZIP: a JSON file per part - the account, the tickets you
-own or are responsible for, the contact you sign in as, the tickets you watch, your
-notifications and the queues you are told about, the articles you wrote, and the
-personal tokens, passkeys, sessions, push subscriptions and provider links you
-have - each an array of rows with the columns as they are stored, and
-`about.json` saying what the archive is. It is the right of access and of
-portability (GDPR articles 15 and 20), open to anybody signed in whatever their
-role lets them do here, and only ever about their own account.
+Under **My account**, *Everything about me* downloads what this installation
+keeps about your account as a ZIP: a JSON file per part - the account, the
+tickets you own or are responsible for, the contact you sign in as, the tickets
+you watch, your notifications and the queues you are told about, the articles
+you wrote and the time you noted on tickets, and the personal tokens, passkeys,
+sessions, push subscriptions and provider links you have - each an array of rows
+with the columns as they are stored, and `about.json` saying what the archive
+is. It is the right of access and of portability (GDPR articles 15 and 20), open
+to anybody signed in whatever their role lets them do here, and only ever about
+their own account.
 
 It holds exactly what erasing the account would delete or release, read from the
 same list of tables, so nothing can be erased that could not have been handed
-over first. An article is handed over as where and when it was written rather
-than as its text: an answer quotes the customer it answers, and the export of one
-person is not the place for another's words. What it leaves out is what would be
-a way in for whoever finds the file: the password's hash, the second factor's
-seed, the hashes of tokens and sessions, and a passkey's key material. About
-those it says that they exist, when they were made and when they were last used.
+over first - and with it the articles and the time, which erasing leaves in the
+tickets because they are the organisation's record. An article is handed over as
+where and when it was written rather than as its text: an answer quotes the
+customer it answers, and the export of one person is not the place for another's
+words. What it leaves out is what would be a way in for whoever finds the file:
+the password's hash, the second factor's seed, the hashes of tokens and
+sessions, and a passkey's key material. About those it says that they exist,
+when they were made and when they were last used.
 
 ## Spreadsheets
 

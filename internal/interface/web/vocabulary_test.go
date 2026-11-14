@@ -494,12 +494,14 @@ func restartRefusalCodes(t *testing.T) map[string]struct{} {
 	return codes
 }
 
-// Every state a ticket can be in has a German word for it.
+// Every state a ticket ships with has a German word for it.
 //
 // The badge is rendered as t(`status.${status}`) from whatever the server sent, so
 // no literal key appears in the source and the coverage tests cannot see these.
 // Without a word they render as the raw value, which is how "active" sat in the
-// middle of an otherwise German table.
+// middle of an otherwise German table. A state an installation adds is shown as
+// it was typed, which is the only sensible answer for a word this application has
+// never seen.
 func TestEveryTicketStateIsNamed(t *testing.T) {
 	states := ticketStates(t)
 	if len(states) == 0 {
@@ -527,20 +529,27 @@ func TestEveryTicketStateIsNamed(t *testing.T) {
 	}
 }
 
-// ticketStates reads what a ticket's state can be, out of the model.
+// ticketStates reads the states a ticket ships with, out of the migration that
+// seeds them: they are rows now, and what an installation starts with is what
+// that migration writes.
 func ticketStates(t *testing.T) map[string]struct{} {
 	t.Helper()
 
 	source, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"internal", "domain", "model", "ticket_state.go"))
+		"internal", "infrastructure", "persistence", "migration", "migration.go"))
 	if err != nil {
-		t.Fatalf("reading the ticket states: %v", err)
+		t.Fatalf("reading the migrations: %v", err)
+	}
+
+	seed := regexp.MustCompile(`(?s)func seedTicketStates\(.*?\n}\n`).Find(source)
+	if seed == nil {
+		t.Fatal("the migrations no longer seed the ticket states in seedTicketStates")
 	}
 
 	states := map[string]struct{}{}
-	pattern := regexp.MustCompile(`State\w+\s+TicketState\s*=\s*"([a-z_]+)"`)
+	pattern := regexp.MustCompile(`\{"([a-z-]+)", "[a-z-]+", "`)
 
-	for _, match := range pattern.FindAllSubmatch(source, -1) {
+	for _, match := range pattern.FindAllSubmatch(seed, -1) {
 		states[string(match[1])] = struct{}{}
 	}
 

@@ -91,19 +91,20 @@ func (r *UserRepository) PurgeUser(ctx context.Context, userID uint) error {
 // anybody would miss. A finished ticket loses its owner's name the same way,
 // and is not counted, because nobody is waiting on it.
 func (r *UserRepository) CountUnfinishedOwnedBy(ctx context.Context, userID uint) (int, error) {
-	finished := model.FinishedStates()
+	finished := model.FinishedStateTypes()
 
 	args := make([]any, 0, len(finished)+1)
 	args = append(args, userID)
 
-	for _, state := range finished {
-		args = append(args, string(state))
+	for _, kind := range finished {
+		args = append(args, string(kind))
 	}
 
 	var count int
 
 	err := r.db.QueryRowContext(ctx, r.rebind(
-		"SELECT COUNT(*) FROM tickets WHERE owner_id = ? AND state NOT IN "+marks(len(finished))),
+		"SELECT COUNT(*) FROM tickets t JOIN ticket_states s ON s.id = t.state_id "+
+			"WHERE t.owner_id = ? AND s.state_type NOT IN "+marks(len(finished))),
 		args...).Scan(&count)
 	if err != nil {
 		return 0, apperror.Internal(err)

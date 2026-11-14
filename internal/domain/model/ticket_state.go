@@ -1,41 +1,65 @@
 package model
 
-// TicketState is where a ticket stands. The states are constants rather than
-// rows because each of them does something: a new ticket is waiting for its
-// first answer, a pending one comes back at a moment, a closed one stops owing
-// anybody anything. A state that existed only in the database would be a word
-// with no behaviour behind it.
-type TicketState string
+// StateType is what a ticket state does. The states themselves are rows an
+// installation names and adds to; the types are constants, because each of them
+// is something the code does: a new ticket waits for its first answer, a pending
+// one comes back at a moment, a closed one owes nobody anything. A type that
+// existed only in the database would be a word with no behaviour behind it.
+type StateType string
 
 const (
-	// StateNew is a ticket nobody has answered yet.
-	StateNew TicketState = "new"
+	// StateTypeNew is a ticket nobody has worked on yet.
+	StateTypeNew StateType = "new"
 
-	// StateOpen is a ticket being worked on.
-	StateOpen TicketState = "open"
+	// StateTypeOpen is a ticket somebody is working on.
+	StateTypeOpen StateType = "open"
 
-	// StatePendingReminder is a ticket waiting for something - the customer, a
-	// delivery, a date - that reminds its owner when the moment it is waiting
-	// until has come.
-	StatePendingReminder TicketState = "pending_reminder"
+	// StateTypePendingReminder waits for something - the customer, a delivery, a
+	// date - and reminds its owner when the moment it waits until has come.
+	StateTypePendingReminder StateType = "pending-reminder"
 
-	// StatePendingClose is a ticket that closes by itself, as solved, when the
-	// moment it is waiting until has come - unless the customer writes before.
-	StatePendingClose TicketState = "pending_close"
+	// StateTypePendingAuto waits until a moment and then moves by itself - into
+	// the closed state, as an installation ships - unless its customer writes
+	// first.
+	StateTypePendingAuto StateType = "pending-auto"
 
-	// StateClosedSuccessful and StateClosedUnsuccessful are a ticket that is
-	// done, told apart by whether what was asked could be given.
-	StateClosedSuccessful   TicketState = "closed_successful"
-	StateClosedUnsuccessful TicketState = "closed_unsuccessful"
+	// StateTypeClosed is a ticket that is done.
+	StateTypeClosed StateType = "closed"
 
-	// StateMerged is a ticket folded into another one, which is where it is
-	// carried on. It is reached by merging and by nothing else, and is not left
-	// again.
-	StateMerged TicketState = "merged"
+	// StateTypeRemoved is a ticket that should never have been one, kept rather
+	// than deleted because deleting cannot be taken back.
+	StateTypeRemoved StateType = "removed"
+
+	// StateTypeMerged is a ticket folded into another, which is where it is
+	// carried on. It is reached by merging and by nothing else.
+	StateTypeMerged StateType = "merged"
 )
 
-// FinishedStates lists the states of a ticket nobody has to do anything about
-// any more.
-func FinishedStates() []TicketState {
-	return []TicketState{StateClosedSuccessful, StateClosedUnsuccessful, StateMerged}
+// StateTypes lists every type a state can have, in the order a ticket usually
+// passes through them. A state of any other type is refused, because nothing
+// would know what to do with a ticket in it.
+func StateTypes() []StateType {
+	return []StateType{
+		StateTypeNew, StateTypeOpen,
+		StateTypePendingReminder, StateTypePendingAuto,
+		StateTypeClosed, StateTypeRemoved, StateTypeMerged,
+	}
 }
+
+// FinishedStateTypes lists the types of state a ticket is in once nobody has to
+// do anything about it any more.
+func FinishedStateTypes() []StateType {
+	return []StateType{StateTypeClosed, StateTypeRemoved, StateTypeMerged}
+}
+
+// The states the code moves tickets into by itself, by the names the migration
+// seeds them under: a ticket starts new, an answer from its customer opens it
+// again, a pending close ends closed, and a merge leaves it merged. Each is
+// marked is_system, so it can be neither renamed nor deleted, and the name goes
+// on finding it.
+const (
+	StateNew    = "new"
+	StateOpen   = "open"
+	StateClosed = "closed"
+	StateMerged = "merged"
+)

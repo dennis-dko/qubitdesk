@@ -292,7 +292,7 @@ func TestNoTranslationIsUnused(t *testing.T) {
 
 			// And the ticket states, looked up as t(`status.${status}`) from
 			// whatever the server sent. TestEveryTicketStateIsNamed checks these
-			// against the model.
+			// against the states the migration ships.
 			if state, isState := strings.CutPrefix(key, "status."); isState {
 				if _, known := ticketStates(t)[state]; known {
 					continue

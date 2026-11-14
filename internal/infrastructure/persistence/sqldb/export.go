@@ -30,9 +30,10 @@ var accountExport = []struct {
 	{"account", "SELECT u.id, u.name, u.email, COALESCE(r.name, '') AS role, u.language, u.theme, " +
 		"u.timezone, u.is_external, u.external_id, u.totp_enabled, u.must_change_password, u.tour_seen " +
 		"FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = ?"},
-	{"owned-tickets", "SELECT id, number, title, state, created_at FROM tickets WHERE owner_id = ? ORDER BY id"},
-	{"tickets-responsible-for", "SELECT id, number, title, state, created_at " +
-		"FROM tickets WHERE responsible_id = ? ORDER BY id"},
+	{"owned-tickets", "SELECT t.id, t.number, t.title, s.name AS state, t.created_at " +
+		"FROM tickets t LEFT JOIN ticket_states s ON s.id = t.state_id WHERE t.owner_id = ? ORDER BY t.id"},
+	{"tickets-responsible-for", "SELECT t.id, t.number, t.title, s.name AS state, t.created_at " +
+		"FROM tickets t LEFT JOIN ticket_states s ON s.id = t.state_id WHERE t.responsible_id = ? ORDER BY t.id"},
 	{"contact", "SELECT id, organisation_id, name, email, phone, created_at FROM contacts WHERE user_id = ?"},
 	{"watched-tickets", "SELECT ticket_id FROM ticket_watchers WHERE user_id = ? ORDER BY ticket_id"},
 	{"notifications", "SELECT ticket_id, kind, created_at, read_at " +
@@ -46,8 +47,10 @@ var accountExport = []struct {
 		"FROM sessions WHERE user_id = ? ORDER BY created_at"},
 	{"push-subscriptions", "SELECT origin, created_at FROM push_subscriptions WHERE user_id = ? ORDER BY id"},
 	{"openid-links", "SELECT issuer, subject, created_at FROM openid_identities WHERE user_id = ? ORDER BY id"},
-	{"written-articles", "SELECT id, ticket_id, channel, subject, time_minutes, created_at " +
+	{"written-articles", "SELECT id, ticket_id, channel, subject, created_at " +
 		"FROM articles WHERE sender = 'agent' AND author_id = ? ORDER BY id"},
+	{"accounted-time", "SELECT ticket_id, article_id, minutes, created_at " +
+		"FROM time_accounting WHERE created_by = ? ORDER BY id"},
 }
 
 // ExportUser reads everything held about an account, a part per table, each row

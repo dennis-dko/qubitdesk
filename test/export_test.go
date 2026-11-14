@@ -68,6 +68,8 @@ func TestEveryTableErasedWithAnAccountIsInItsExport(t *testing.T) {
 var writtenAndKept = map[string]string{
 	"articles": "what an agent wrote in a ticket is the ticket's record and stays, signed by an id " +
 		"that names nobody once the account is gone; the export says where and when it was written",
+	"time_accounting": "the time an agent noted on a ticket is the organisation's record of the work, " +
+		"and stays with an id that names nobody once the account is gone",
 }
 
 // tablesIn returns every table a pattern's first group names in a source, sorted

@@ -53,75 +53,87 @@ func All(dialect string) map[int64]migration.Migrate {
 		20261112011500: {UP: func(d migration.Datasource) error { return createAdminEvents(d, dialect) }},
 		20261112011600: {UP: func(d migration.Datasource) error { return createDirectoryRuns(d, dialect) }},
 
-		// Where tickets go and how fast they are owed an answer.
-		20261112011700: {UP: func(d migration.Datasource) error { return createServiceLevels(d, dialect) }},
-		20261112011800: {UP: func(d migration.Datasource) error { return createQueues(d, dialect) }},
-		20261112011900: {UP: func(d migration.Datasource) error { return createQueueRoles(d, dialect) }},
-		20261112012000: {UP: func(d migration.Datasource) error { return createTicketTypes(d, dialect) }},
-		20261112012100: {UP: func(d migration.Datasource) error { return seedTheFirstQueue(d, dialect) }},
+		// What a ticket can be: the states, priorities and types an installation
+		// sorts its tickets by, each shipped with the values a service desk starts
+		// from.
+		20261112011700: {UP: func(d migration.Datasource) error { return createTicketStates(d, dialect) }},
+		20261112011800: {UP: func(d migration.Datasource) error { return seedTicketStates(d, dialect) }},
+		20261112011900: {UP: func(d migration.Datasource) error { return createTicketPriorities(d, dialect) }},
+		20261112012000: {UP: func(d migration.Datasource) error { return seedTicketPriorities(d, dialect) }},
+		20261112012100: {UP: func(d migration.Datasource) error { return createTicketTypes(d, dialect) }},
 		20261112012200: {UP: func(d migration.Datasource) error { return seedTicketTypes(d, dialect) }},
-		20261112012300: {UP: func(d migration.Datasource) error { return createUserQueues(d, dialect) }},
+
+		// Where tickets go and how fast they are owed an answer.
+		20261112012300: {UP: func(d migration.Datasource) error { return createServiceLevels(d, dialect) }},
+		20261112012400: {UP: func(d migration.Datasource) error { return createQueues(d, dialect) }},
+		20261112012500: {UP: func(d migration.Datasource) error { return createQueueRoles(d, dialect) }},
+		20261112012600: {UP: func(d migration.Datasource) error { return seedTheFirstQueue(d, dialect) }},
+		20261112012700: {UP: func(d migration.Datasource) error { return createUserQueues(d, dialect) }},
 
 		// Who tickets come from.
-		20261112012400: {UP: func(d migration.Datasource) error { return createOrganisations(d, dialect) }},
-		20261112012500: {UP: func(d migration.Datasource) error { return createContacts(d, dialect) }},
-		20261112012600: {UP: func(d migration.Datasource) error {
+		20261112012800: {UP: func(d migration.Datasource) error { return createOrganisations(d, dialect) }},
+		20261112012900: {UP: func(d migration.Datasource) error { return createContacts(d, dialect) }},
+		20261112013000: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_contacts_organisation", "contacts", "organisation_id")
 		}},
 
 		// The tickets, and everything written in them.
-		20261112012700: {UP: func(d migration.Datasource) error { return createTickets(d, dialect) }},
-		20261112012800: {UP: func(d migration.Datasource) error {
-			return createIndex(d, "idx_tickets_queue_state", "tickets", "queue_id, state")
+		20261112013100: {UP: func(d migration.Datasource) error { return createTickets(d, dialect) }},
+		20261112013200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_tickets_queue_state", "tickets", "queue_id, state_id")
 		}},
-		20261112012900: {UP: func(d migration.Datasource) error {
+		20261112013300: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_tickets_owner", "tickets", "owner_id")
 		}},
-		20261112013000: {UP: func(d migration.Datasource) error {
+		20261112013400: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_tickets_contact", "tickets", "contact_id")
 		}},
-		20261112013100: {UP: func(d migration.Datasource) error {
+		20261112013500: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_tickets_organisation", "tickets", "organisation_id")
 		}},
-		20261112013200: {UP: func(d migration.Datasource) error {
+		20261112013600: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_tickets_updated", "tickets", "updated_at")
 		}},
-		20261112013300: {UP: func(d migration.Datasource) error { return createArticles(d, dialect) }},
-		20261112013400: {UP: func(d migration.Datasource) error {
+		20261112013700: {UP: func(d migration.Datasource) error { return createArticles(d, dialect) }},
+		20261112013800: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_articles_ticket", "articles", "ticket_id")
 		}},
-		20261112013500: {UP: func(d migration.Datasource) error {
+		20261112013900: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_articles_message", "articles", "message_id")
 		}},
-		20261112013600: {UP: func(d migration.Datasource) error { return createAttachments(d, dialect) }},
-		20261112013700: {UP: func(d migration.Datasource) error {
+		20261112014000: {UP: func(d migration.Datasource) error { return createAttachments(d, dialect) }},
+		20261112014100: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_attachments_article", "attachments", "article_id")
 		}},
-		20261112013800: {UP: func(d migration.Datasource) error { return createTicketHistory(d, dialect) }},
-		20261112013900: {UP: func(d migration.Datasource) error {
+		20261112014200: {UP: func(d migration.Datasource) error { return createTimeAccounting(d, dialect) }},
+		20261112014300: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_time_accounting_ticket", "time_accounting", "ticket_id")
+		}},
+		20261112014400: {UP: func(d migration.Datasource) error { return createTicketHistory(d, dialect) }},
+		20261112014500: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_ticket_history_ticket", "ticket_history", "ticket_id")
 		}},
-		20261112014000: {UP: func(d migration.Datasource) error { return createTicketLinks(d, dialect) }},
-		20261112014100: {UP: func(d migration.Datasource) error {
+		20261112014600: {UP: func(d migration.Datasource) error { return createTicketLinks(d, dialect) }},
+		20261112014700: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_ticket_links_linked", "ticket_links", "linked_id")
 		}},
-		20261112014200: {UP: func(d migration.Datasource) error { return createTicketWatchers(d, dialect) }},
-		20261112014300: {UP: func(d migration.Datasource) error {
+		20261112014800: {UP: func(d migration.Datasource) error { return createTicketWatchers(d, dialect) }},
+		20261112014900: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_ticket_watchers_user", "ticket_watchers", "user_id")
 		}},
-		20261112014400: {UP: func(d migration.Datasource) error { return createNotifications(d, dialect) }},
-		20261112014500: {UP: func(d migration.Datasource) error {
+		20261112015000: {UP: func(d migration.Datasource) error { return createNotifications(d, dialect) }},
+		20261112015100: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_notifications_user", "notifications", "user_id, read_at")
 		}},
 
 		// What an answer is written from, and how it leaves and arrives.
-		20261112014600: {UP: func(d migration.Datasource) error { return createResponseTemplates(d, dialect) }},
-		20261112014700: {UP: func(d migration.Datasource) error { return createMailAccounts(d, dialect) }},
+		20261112015200: {UP: func(d migration.Datasource) error { return createResponseTemplates(d, dialect) }},
+		20261112015300: {UP: func(d migration.Datasource) error { return createMailAccounts(d, dialect) }},
 
 		// The knowledge base.
-		20261112014800: {UP: func(d migration.Datasource) error { return createFAQCategories(d, dialect) }},
-		20261112014900: {UP: func(d migration.Datasource) error { return createFAQArticles(d, dialect) }},
-		20261112015000: {UP: func(d migration.Datasource) error {
+		20261112015400: {UP: func(d migration.Datasource) error { return createFAQCategories(d, dialect) }},
+		20261112015500: {UP: func(d migration.Datasource) error { return createFAQArticles(d, dialect) }},
+		20261112015600: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_faq_articles_category", "faq_articles", "category_id")
 		}},
 	}
@@ -368,6 +380,90 @@ func createDirectoryRuns(d migration.Datasource, dialect string) error {
 	)`, primaryKey(dialect), timestamp(dialect), boolean(dialect)))
 }
 
+// createTicketStates keeps the states a ticket can be in. A state is a row
+// because an installation names its own - waiting for the customer is a pending
+// state as much as the shipped one is - and what a state does is its type, which
+// is code (model.StateType): a type the code did not know would be a word with
+// no behaviour behind it.
+//
+// valid says whether the state is offered for a ticket from now on; one that is
+// not stays on the tickets already in it. is_system marks a state the code moves
+// tickets into by itself, which is neither renamed, retyped, made invalid nor
+// deleted.
+func createTicketStates(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_states (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		state_type VARCHAR(32) NOT NULL,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		is_system %[2]s NOT NULL DEFAULT %[4]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), falseLiteral(dialect)))
+}
+
+// seedTicketStates gives a new installation the states KIX18 ships, named by
+// identifiers the interface translates. Four are the code's own - a ticket
+// starts new, an answer from its customer opens it again, a pending close ends
+// closed, a merge leaves it merged - and are marked is_system; the other three
+// are an installation's to rename, retire or delete.
+//
+// Written out rather than taken from the model: a finished migration says what
+// it did, and must not change with a constant that is allowed to.
+func seedTicketStates(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect,
+		"INSERT INTO ticket_states (name, state_type, description, is_system) VALUES (?, ?, ?, ?)")
+
+	for _, state := range []struct {
+		name, kind, description string
+		system                  bool
+	}{
+		{"new", "new", "A ticket nobody has worked on yet.", true},
+		{"open", "open", "A ticket somebody is working on.", true},
+		{"pending-reminder", "pending-reminder", "Waits until a moment, and then reminds its owner.", false},
+		{"pending-auto-close", "pending-auto", "Waits until a moment, and then closes by itself.", false},
+		{"closed", "closed", "A ticket that is done.", true},
+		{"removed", "removed", "A ticket that should never have been one.", false},
+		{"merged", "merged", "A ticket carried on in the one it was merged into.", true},
+	} {
+		if _, err := d.SQL.Exec(insert, state.name, state.kind, state.description, state.system); err != nil {
+			return fmt.Errorf("seeding the ticket state %q: %w", state.name, err)
+		}
+	}
+
+	return nil
+}
+
+// createTicketPriorities keeps how urgent a ticket can be. level orders them,
+// the most urgent first, because a name says nothing about where it belongs:
+// very-high sorts after normal by its letters. valid and is_system mean what
+// they mean for a state.
+func createTicketPriorities(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_priorities (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		level INT NOT NULL,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		is_system %[2]s NOT NULL DEFAULT %[4]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), falseLiteral(dialect)))
+}
+
+// seedTicketPriorities gives a new installation KIX18's five priorities. normal
+// is what a ticket starts with when nobody says otherwise, so it is the code's
+// own and marked is_system; the others are the installation's.
+func seedTicketPriorities(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect,
+		"INSERT INTO ticket_priorities (name, level, is_system) VALUES (?, ?, ?)")
+
+	for level, name := range []string{"very-high", "high", "normal", "low", "very-low"} {
+		if _, err := d.SQL.Exec(insert, name, level+1, name == "normal"); err != nil {
+			return fmt.Errorf("seeding the ticket priority %q: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
 // createServiceLevels keeps what a ticket is owed: how long until the first
 // answer, how long between answers, how long until it is solved - each in
 // minutes of the installation's service hours, and zero where that promise is
@@ -391,12 +487,17 @@ func createServiceLevels(d migration.Datasource, dialect string) error {
 // with, what an answer to a closed ticket does, and after how many minutes
 // without its owner doing anything a ticket is free for somebody else again.
 //
+// parent_id puts a queue under another, as KIX18 nests its teams; the tree is
+// for finding a queue, and a queue's access is its own rather than its
+// parent's. valid says whether a ticket may still be moved into it.
+//
 // The two texts have no default because MySQL allows none on a text column;
 // they are written with every row, empty where there is nothing to say.
 func createQueues(d migration.Datasource, dialect string) error {
 	return exec(d, fmt.Sprintf(`CREATE TABLE queues (
 		%[1]s,
 		name VARCHAR(255) NOT NULL UNIQUE,
+		parent_id %[3]s REFERENCES queues(id),
 		description VARCHAR(2000) NOT NULL DEFAULT '',
 		email VARCHAR(255) NOT NULL DEFAULT '',
 		signature %[2]s NOT NULL,
@@ -404,7 +505,7 @@ func createQueues(d migration.Datasource, dialect string) error {
 		service_level_id %[3]s REFERENCES service_levels(id),
 		follow_up VARCHAR(16) NOT NULL,
 		unlock_minutes INT NOT NULL DEFAULT 0,
-		active %[4]s NOT NULL DEFAULT %[5]s
+		valid %[4]s NOT NULL DEFAULT %[5]s
 	)`, primaryKey(dialect), longText(dialect), foreignKeyID(dialect), boolean(dialect), trueLiteral(dialect)))
 }
 
@@ -423,12 +524,15 @@ func createQueueRoles(d migration.Datasource, dialect string) error {
 // createTicketTypes keeps the kinds of ticket an installation tells apart. Rows
 // rather than constants, because nothing here behaves differently by type: a
 // type is a word to filter and count by, and which words is the installation's
-// to say.
+// to say. valid and is_system mean what they mean for a state.
 func createTicketTypes(d migration.Datasource, dialect string) error {
 	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_types (
-		%s,
-		name VARCHAR(120) NOT NULL UNIQUE
-	)`, primaryKey(dialect)))
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		is_system %[2]s NOT NULL DEFAULT %[4]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), falseLiteral(dialect)))
 }
 
 // seedTheFirstQueue gives a new installation one queue its agents can work in,
@@ -459,14 +563,15 @@ func seedTheFirstQueue(d migration.Datasource, dialect string) error {
 	return nil
 }
 
-// seedTicketTypes gives a new installation the three kinds of ticket a service
-// desk most often tells apart. They are rows like any other: an installation
-// renames them, removes them and adds its own.
+// seedTicketTypes gives a new installation KIX18's three types. unclassified is
+// what a ticket is when nobody has said what it is, so it is the code's own and
+// marked is_system; the other two are the installation's to rename, retire or
+// delete.
 func seedTicketTypes(d migration.Datasource, dialect string) error {
-	insert := sqldb.Rebind(dialect, "INSERT INTO ticket_types (name) VALUES (?)")
+	insert := sqldb.Rebind(dialect, "INSERT INTO ticket_types (name, is_system) VALUES (?, ?)")
 
-	for _, name := range []string{"Incident", "Service request", "Problem"} {
-		if _, err := d.SQL.Exec(insert, name); err != nil {
+	for _, name := range []string{"unclassified", "incident", "service-request"} {
+		if _, err := d.SQL.Exec(insert, name, name == "unclassified"); err != nil {
 			return fmt.Errorf("seeding the ticket type %q: %w", name, err)
 		}
 	}
@@ -545,9 +650,9 @@ func createTickets(d migration.Datasource, dialect string) error {
 		number VARCHAR(32) UNIQUE,
 		title VARCHAR(255) NOT NULL,
 		queue_id %[2]s NOT NULL REFERENCES queues(id),
-		state VARCHAR(32) NOT NULL,
-		priority INT NOT NULL,
-		type_id %[2]s REFERENCES ticket_types(id),
+		state_id %[2]s NOT NULL REFERENCES ticket_states(id),
+		priority_id %[2]s NOT NULL REFERENCES ticket_priorities(id),
+		type_id %[2]s NOT NULL REFERENCES ticket_types(id),
 		owner_id %[2]s REFERENCES users(id),
 		responsible_id %[2]s REFERENCES users(id),
 		locked %[3]s NOT NULL DEFAULT %[4]s,
@@ -584,7 +689,7 @@ func createArticles(d migration.Datasource, dialect string) error {
 		ticket_id %[2]s NOT NULL REFERENCES tickets(id),
 		sender VARCHAR(16) NOT NULL,
 		channel VARCHAR(16) NOT NULL,
-		visible %[3]s NOT NULL,
+		customer_visible %[3]s NOT NULL,
 		subject VARCHAR(255) NOT NULL DEFAULT '',
 		body %[4]s NOT NULL,
 		from_address VARCHAR(500) NOT NULL DEFAULT '',
@@ -594,7 +699,6 @@ func createArticles(d migration.Datasource, dialect string) error {
 		in_reply_to VARCHAR(255) NOT NULL DEFAULT '',
 		author_id %[2]s,
 		contact_id %[2]s,
-		time_minutes INT NOT NULL DEFAULT 0,
 		created_at %[5]s NOT NULL
 	)`, primaryKey(dialect), foreignKeyID(dialect), boolean(dialect), longText(dialect), timestamp(dialect)))
 }
@@ -611,6 +715,24 @@ func createAttachments(d migration.Datasource, dialect string) error {
 		size INT NOT NULL,
 		content %s NOT NULL
 	)`, primaryKey(dialect), foreignKeyID(dialect), largeBlob(dialect)))
+}
+
+// createTimeAccounting keeps the time worked on tickets, a line each time
+// somebody notes some, with the article it was noted with where there was one -
+// so a ticket's total is a sum rather than a figure anybody keeps and could get
+// wrong.
+//
+// created_by is an id without a key, like an article's author: the time stays
+// the organisation's record after the account that noted it is gone.
+func createTimeAccounting(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE time_accounting (
+		%[1]s,
+		ticket_id %[2]s NOT NULL REFERENCES tickets(id),
+		article_id %[2]s REFERENCES articles(id),
+		minutes INT NOT NULL,
+		created_by %[2]s,
+		created_at %[3]s NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
 }
 
 // createTicketHistory keeps what happened to a ticket, a line at a time: who
