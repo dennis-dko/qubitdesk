@@ -494,68 +494,6 @@ func restartRefusalCodes(t *testing.T) map[string]struct{} {
 	return codes
 }
 
-// Every state a ticket ships with has a German word for it.
-//
-// The badge is rendered as t(`status.${status}`) from whatever the server sent, so
-// no literal key appears in the source and the coverage tests cannot see these.
-// Without a word they render as the raw value, which is how "active" sat in the
-// middle of an otherwise German table. A state an installation adds is shown as
-// it was typed, which is the only sensible answer for a word this application has
-// never seen.
-func TestEveryTicketStateIsNamed(t *testing.T) {
-	states := ticketStates(t)
-	if len(states) == 0 {
-		t.Fatal("no ticket states found; this test is no longer reading the source")
-	}
-
-	dict, ok := dictionaries(t)["de"]
-	if !ok {
-		t.Fatal("app.js has no German dictionary")
-	}
-
-	var unnamed []string
-
-	for state := range states {
-		if _, found := dict["status."+state]; !found {
-			unnamed = append(unnamed, state)
-		}
-	}
-
-	sort.Strings(unnamed)
-
-	if len(unnamed) > 0 {
-		t.Errorf("%d ticket state(s) have no German word, so the badge shows the raw "+
-			"value: %v", len(unnamed), unnamed)
-	}
-}
-
-// ticketStates reads the states a ticket ships with, out of the migration that
-// seeds them: they are rows now, and what an installation starts with is what
-// that migration writes.
-func ticketStates(t *testing.T) map[string]struct{} {
-	t.Helper()
-
-	source, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"internal", "infrastructure", "persistence", "migration", "migration.go"))
-	if err != nil {
-		t.Fatalf("reading the migrations: %v", err)
-	}
-
-	seed := regexp.MustCompile(`(?s)func seedTicketStates\(.*?\n}\n`).Find(source)
-	if seed == nil {
-		t.Fatal("the migrations no longer seed the ticket states in seedTicketStates")
-	}
-
-	states := map[string]struct{}{}
-	pattern := regexp.MustCompile(`\{"([a-z-]+)", "[a-z-]+", "`)
-
-	for _, match := range pattern.FindAllSubmatch(seed, -1) {
-		states[string(match[1])] = struct{}{}
-	}
-
-	return states
-}
-
 // sheetCards reads the tables that have an export/import card out of app.js.
 //
 // The card is built by code, from this list, so the keys its words live under never

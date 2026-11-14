@@ -1631,9 +1631,16 @@ function holdFocus(button) {
   };
 }
 
-/** What a state is called, in the reader's language. */
+/**
+ * What a ticket's state is called, in the reader's language.
+ *
+ * The states that ship are named by identifiers - pending-reminder - which the
+ * dictionaries translate and SHIPPED_STATE_TITLES gives the English of; a state
+ * an installation adds is shown as it was typed, which is the only sensible
+ * answer for a word this application has never seen.
+ */
 function statusName(status) {
-  return t(`status.${status}`, status);
+  return t(`status.${status}`, SHIPPED_STATE_TITLES[status] ?? status);
 }
 
 /**
@@ -4770,6 +4777,248 @@ function swapTheLabel(node, key, english) {
   setLeadingText(node, t(key, english));
 }
 
+// ------------------------------------------------- what tickets are sorted by
+
+/** The English for the states a ticket ships with, by the identifier each is stored under. */
+const SHIPPED_STATE_TITLES = {
+  new: 'new',
+  open: 'open',
+  'pending-reminder': 'pending reminder',
+  'pending-auto-close': 'pending auto close',
+  closed: 'closed',
+  removed: 'removed',
+  merged: 'merged',
+};
+
+/** The English for the priorities that ship, as for the states. */
+const SHIPPED_PRIORITY_TITLES = {
+  'very-high': 'very high',
+  high: 'high',
+  normal: 'normal',
+  low: 'low',
+  'very-low': 'very low',
+};
+
+/** The English for the ticket types that ship, as for the states. */
+const SHIPPED_TYPE_TITLES = {
+  unclassified: 'unclassified',
+  incident: 'incident',
+  'service-request': 'service request',
+};
+
+/**
+ * The English for the types a state can have, which are the server's
+ * model.StateTypes: what the code does with a ticket in such a state. The type
+ * field offers exactly these, so a state the server would refuse cannot be
+ * chosen.
+ */
+const STATE_TYPE_TITLES = {
+  new: 'new',
+  open: 'open',
+  'pending-reminder': 'pending, with a reminder',
+  'pending-auto': 'pending, then moving by itself',
+  closed: 'closed',
+  removed: 'removed',
+  merged: 'merged',
+};
+
+/** What a priority is called, in the reader's language, as statusName says for a state. */
+function priorityName(name) {
+  return t(`priority.${name}`, SHIPPED_PRIORITY_TITLES[name] ?? name);
+}
+
+/** What a ticket type is called, in the reader's language, as statusName says for a state. */
+function ticketTypeName(name) {
+  return t(`tickettype.${name}`, SHIPPED_TYPE_TITLES[name] ?? name);
+}
+
+/** What a state's type is called, in the reader's language. */
+function stateTypeName(type) {
+  return t(`statetype.${type}`, STATE_TYPE_TITLES[type] ?? type);
+}
+
+/**
+ * The three cards of the ticket setup screen - states, priorities, types - each a
+ * table and one form that makes a value or corrects one.
+ *
+ * What differs between them is one column and one field - a state's type, a
+ * priority's level - and their words; the rest is the same and lives here once.
+ * A shipped value the code relies on (isSystem) is shown and not offered for
+ * editing or deleting, because the server refuses both: a button that is always
+ * refused teaches somebody the screen is broken.
+ */
+const CATALOGS = {
+  state: {
+    path: '/ticket-states',
+    columns: 5,
+    create: ['catalog.stateCreate', 'Add a state'],
+    title: (name) => statusName(name),
+    editing: (name) => t('catalog.stateEdit', 'Edit the state {0}').replace('{0}', name),
+    kind: () => t('field.state', 'State'),
+    empty: () => t('catalog.statesEmpty', 'No states.'),
+    created: () => t('msg.stateCreated', 'State created'),
+    saved: () => t('msg.stateSaved', 'State saved'),
+    deleted: () => t('msg.stateDeleted', 'State deleted'),
+    cells: (entry) => [el('td', { class: 'text', text: stateTypeName(entry.type) })],
+    fill: (form, entry) => { form.elements.type.value = entry.type; },
+    sent: (form) => ({ type: form.elements.type.value }),
+  },
+  priority: {
+    path: '/ticket-priorities',
+    columns: 5,
+    create: ['catalog.priorityCreate', 'Add a priority'],
+    title: (name) => priorityName(name),
+    editing: (name) => t('catalog.priorityEdit', 'Edit the priority {0}').replace('{0}', name),
+    kind: () => t('field.priority', 'Priority'),
+    empty: () => t('catalog.prioritiesEmpty', 'No priorities.'),
+    created: () => t('msg.priorityCreated', 'Priority created'),
+    saved: () => t('msg.prioritySaved', 'Priority saved'),
+    deleted: () => t('msg.priorityDeleted', 'Priority deleted'),
+    cells: (entry) => [el('td', { class: 'num', text: String(entry.level) })],
+    fill: (form, entry) => { form.elements.level.value = String(entry.level); },
+    sent: (form) => ({ level: Number(form.elements.level.value) }),
+  },
+  type: {
+    path: '/ticket-types',
+    columns: 4,
+    create: ['catalog.typeCreate', 'Add a type'],
+    title: (name) => ticketTypeName(name),
+    editing: (name) => t('catalog.typeEdit', 'Edit the type {0}').replace('{0}', name),
+    kind: () => t('field.type', 'Type'),
+    empty: () => t('catalog.typesEmpty', 'No types.'),
+    created: () => t('msg.typeCreated', 'Type created'),
+    saved: () => t('msg.typeSaved', 'Type saved'),
+    deleted: () => t('msg.typeDeleted', 'Type deleted'),
+    cells: () => [],
+    fill: () => {},
+    sent: () => ({}),
+  },
+};
+
+/**
+ * Fills the ticket setup screen, for whoever may set it up. The three lists are
+ * read by anybody who works tickets as well, but this screen is where they are
+ * changed, and it is behind the same right.
+ */
+async function loadTicketSetup() {
+  if (!can('queues:write')) return;
+
+  const [states, priorities, types] = await Promise.all(
+    [CATALOGS.state, CATALOGS.priority, CATALOGS.type].map((catalog) => api(catalog.path)),
+  );
+
+  const lists = { state: states?.items ?? [], priority: priorities?.items ?? [], type: types?.items ?? [] };
+
+  // Not over a state somebody is part way through choosing a type for: this runs
+  // on every reload of the screens, and refilling the select puts it back on its
+  // first entry.
+  const stateForm = $('#form-state');
+  if (stateForm && !beingEdited(stateForm)) {
+    fillSelect(stateForm.elements.type,
+      Object.keys(STATE_TYPE_TITLES).map((type) => ({ value: type, label: stateTypeName(type) })),
+      { labelKey: 'label', valueKey: 'value' });
+  }
+
+  for (const [kind, catalog] of Object.entries(CATALOGS)) {
+    const tbody = $(`#table-${kind} tbody`);
+    if (!tbody) continue;
+
+    fillTable(tbody, lists[kind].map((entry) => catalogRow(kind, entry)), catalog.columns, catalog.empty());
+  }
+}
+
+/** One value as a row of its card's table. */
+function catalogRow(kind, entry) {
+  const catalog = CATALOGS[kind];
+  const actions = el('td', { class: 'actions' });
+
+  if (entry.isSystem) {
+    actions.append(el('span', { class: 'muted', text: t('catalog.shipped', 'ships with the application') }));
+  } else {
+    actions.append(el('button', {
+      class: 'link',
+      text: t('action.edit', 'edit'),
+      onclick: () => editCatalogEntry(kind, entry),
+    }));
+
+    actions.append(deleteButton({
+      label: `${catalog.kind()} "${catalog.title(entry.name)}"`,
+      path: `${catalog.path}/${entry.id}`,
+      message: catalog.deleted(),
+      after: refreshAll,
+    }));
+  }
+
+  return el('tr', {},
+    el('td', { class: 'text', text: catalog.title(entry.name) }),
+    ...catalog.cells(entry),
+    el('td', { class: 'text', text: entry.description || '–' }),
+    el('td', { text: entry.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    actions,
+  );
+}
+
+/** Opens a value in its card's form, to correct it. */
+function editCatalogEntry(kind, entry) {
+  const catalog = CATALOGS[kind];
+  const form = $(`#form-${kind}`);
+
+  form.elements.id.value = String(entry.id);
+  form.elements.name.value = entry.name;
+  form.elements.description.value = entry.description ?? '';
+  form.elements.valid.checked = entry.valid;
+  catalog.fill(form, entry);
+
+  // Drawn rather than declared with a key, because it carries the value's name;
+  // see editRole for why the key has to come off.
+  const heading = $(`#${kind}-form-title`);
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable(`${kind}FormTitle`, () => {
+    heading.textContent = catalog.editing(catalog.title(entry.name));
+  });
+
+  swapTheLabel($(`#${kind}-submit`), 'action.save', 'Save');
+  $(`#${kind}-cancel`).hidden = false;
+
+  form.elements.name.focus();
+}
+
+/** Puts a card's form back to making a new value. */
+function resetCatalogForm(kind) {
+  const catalog = CATALOGS[kind];
+  const form = $(`#form-${kind}`);
+
+  form.reset();
+  form.elements.id.value = '';
+
+  stopRedrawing(`${kind}FormTitle`);
+  swapTheLabel($(`#${kind}-form-title`), ...catalog.create);
+  swapTheLabel($(`#${kind}-submit`), 'action.create', 'Create');
+  $(`#${kind}-cancel`).hidden = true;
+}
+
+/** Sends a card's form: a new value, or the correction of the one it holds. */
+function saveCatalogEntry(kind, form) {
+  const catalog = CATALOGS[kind];
+  const id = form.elements.id.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    valid: form.elements.valid.checked,
+    ...catalog.sent(form),
+  });
+
+  mutate(
+    () => (id
+      ? api(`${catalog.path}/${id}`, { method: 'PUT', body })
+      : api(catalog.path, { method: 'POST', body })),
+    id ? catalog.saved() : catalog.created(),
+    async () => { resetCatalogForm(kind); await refreshAll(); },
+  );
+}
+
 // ---------------------------------------------------------- public holidays
 
 /** A date as its calendar day in the browser's own zone, YYYY-MM-DD. */
@@ -7659,6 +7908,34 @@ const TOUR_STEPS = [
     text: () => t('tour.roles.text',
       'A role is a set of rights, and each one is enforced by real code rather than by a '
       + 'hidden button. Tick what the role may do; every account holding it changes with it.'),
+  },
+  {
+    target: '#state-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.states.title', 'Where a ticket can stand'),
+    text: () => t('tour.states.text',
+      'Every state has a type, and the type is what the application does with a ticket in it. '
+      + 'Add the states your desk works with; the ones the application moves tickets into by '
+      + 'itself ship with it and stay as they are.'),
+  },
+  {
+    target: '#priority-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.priorities.title', 'How urgent a ticket is'),
+    text: () => t('tour.priorities.text',
+      'Priorities are ordered by their level, 1 the most urgent. Normal is what a ticket starts '
+      + 'with when nobody says otherwise.'),
+  },
+  {
+    target: '#type-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.types.title', 'What kind of ticket it is'),
+    text: () => t('tour.types.text',
+      'Types are words to sort, filter and count by - nothing behaves differently by type. A '
+      + 'value tickets carry is made invalid rather than deleted, here as in the two cards above.'),
   },
   {
     target: '#passkey-card',
@@ -12119,6 +12396,7 @@ async function refreshAll() {
 
   // Roles first: the user table renders a role picker from them.
   await loadRoles();
+  await loadTicketSetup();
   await loadUsers();
   await loadAdmin();
   await loadTokens();
@@ -12184,6 +12462,15 @@ function wireForms() {
   });
 
   $('#role-reset').addEventListener('click', resetRoleForm);
+
+  for (const kind of Object.keys(CATALOGS)) {
+    $(`#form-${kind}`).addEventListener('submit', (e) => {
+      e.preventDefault();
+      saveCatalogEntry(kind, e.target);
+    });
+
+    $(`#${kind}-cancel`).addEventListener('click', () => resetCatalogForm(kind));
+  }
 
   // The same thing, offered where a shipped role is being read rather than at
   // the end of a form that is a screen further down.

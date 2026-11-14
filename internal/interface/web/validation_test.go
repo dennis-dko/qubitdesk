@@ -189,6 +189,7 @@ var numberRules = map[string]numberRule{
 	"form-operational/ldapSyncMaxDeleteRatio": {"0", "1", "any"},
 	"form-telemetry/tracerRatio":              {"0", "1", "any"},
 	"form-ldap/port":                          {"1", figure(model.MaxPort), "1"},
+	"form-priority/level":                     {"1", figure(model.MaxPriorityLevel), "1"},
 	"form-datasource/port":                    {"1", figure(model.MaxPort), "1"},
 
 	// Zero switches the timeout off; between it and the floor the server refuses

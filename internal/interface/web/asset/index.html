@@ -60,6 +60,11 @@
         <path d="M12 2.8 20 6v6.1c0 4.5-3.2 7.8-8 9.1-4.8-1.3-8-4.6-8-9.1V6z"/>
         <path d="m8.8 11.9 2.3 2.4 4.3-4.7"/>
       </symbol>
+      <symbol id="icon-ticketsetup" viewBox="0 0 24 24">
+        <path d="M4 7h9M17 7h3M4 17h3M11 17h9"/>
+        <circle cx="15" cy="7" r="2"/>
+        <circle cx="9" cy="17" r="2"/>
+      </symbol>
       <symbol id="icon-account" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="9"/>
         <circle cx="12" cy="9.8" r="3.2"/>
@@ -186,6 +191,7 @@
     <nav id="tabs">
       <button class="tab" data-view="users" data-perm="users:read" data-i18n="nav.users">Users<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-users"/></svg></button>
       <button class="tab" data-view="roles" data-perm="roles:read" data-i18n="nav.roles">Roles<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-roles"/></svg></button>
+      <button class="tab" data-view="ticketsetup" data-perm="queues:write" data-i18n="nav.ticketSetup">Ticket setup<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-ticketsetup"/></svg></button>
       <button class="tab" data-view="settings" data-i18n="nav.settings">My account<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-account"/></svg></button>
       <button class="tab" data-view="admin" id="tab-admin" hidden data-perm="settings:manage" data-i18n="nav.admin">Settings<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-admin"/></svg></button>
     </nav>
@@ -612,6 +618,109 @@
             <tbody></tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <!-- Ticket setup: what tickets are sorted by, as KIX18 has an administration
+         module for each. Behind queues:write, the right that sets up how tickets
+         are sorted, rather than settings:manage, which is the installation: the
+         person deciding what a ticket can be is not necessarily the one holding
+         the database connection. Each card is a table and one form that makes a
+         value or corrects one, told apart by the hidden id. -->
+    <section id="view-ticketsetup" class="view" hidden>
+      <div class="card" id="state-card">
+        <h2 data-i18n="catalog.states">Ticket states</h2>
+        <p class="muted" data-i18n="catalog.statesIntro">The states a ticket can be in. Each has a type, and the type is what the application does with a ticket in it. The states it moves tickets into by itself ship with it and stay as they are; a state tickets are in is made invalid rather than deleted.</p>
+        <div class="table-wrap">
+          <table id="table-state">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="field.type">Type</th>
+                <th data-i18n="field.description">Description</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-state" class="form" data-perm="queues:write">
+          <h3 id="state-form-title" data-i18n="catalog.stateCreate">Add a state</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="120" required></label>
+            <label data-i18n="field.type">Type<select name="type" required></select></label>
+            <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="catalog.offered">Offered for tickets</span></label>
+          <div class="row">
+            <button type="submit" id="state-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="state-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
+      <div class="card" id="priority-card">
+        <h2 data-i18n="catalog.priorities">Priorities</h2>
+        <p class="muted" data-i18n="catalog.prioritiesIntro">How urgent a ticket is, ordered by level - 1 is the most urgent. Normal is what a ticket starts with, so it ships with the application and stays as it is.</p>
+        <div class="table-wrap">
+          <table id="table-priority">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th class="num" data-i18n="field.level">Level</th>
+                <th data-i18n="field.description">Description</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-priority" class="form" data-perm="queues:write">
+          <h3 id="priority-form-title" data-i18n="catalog.priorityCreate">Add a priority</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="120" required></label>
+            <label data-i18n="field.level">Level<input type="number" name="level" min="1" max="99" required></label>
+            <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="catalog.offered">Offered for tickets</span></label>
+          <div class="row">
+            <button type="submit" id="priority-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="priority-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
+      <div class="card" id="type-card">
+        <h2 data-i18n="catalog.types">Ticket types</h2>
+        <p class="muted" data-i18n="catalog.typesIntro">The kinds of ticket this installation tells apart - words to sort, filter and count by; nothing behaves differently by type. Unclassified is what a ticket is until somebody says, so it ships with the application and stays as it is.</p>
+        <div class="table-wrap">
+          <table id="table-type">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="field.description">Description</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-type" class="form" data-perm="queues:write">
+          <h3 id="type-form-title" data-i18n="catalog.typeCreate">Add a type</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="120" required></label>
+            <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="catalog.offered">Offered for tickets</span></label>
+          <div class="row">
+            <button type="submit" id="type-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="type-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
       </div>
     </section>
 

@@ -265,8 +265,9 @@ What holds the round trip together:
 
 Under **Settings**, *Changes to the installation* lists who changed how the
 installation is run, newest first: an account created, corrected, given another
-role, given a new password or deleted; a role created, changed or deleted;
-accounts or roles imported; each settings card saved; maintenance mode
+role, given a new password or deleted; a role created, changed or deleted; a
+ticket state, priority or type created, changed or deleted; accounts or roles
+imported; each settings card saved; maintenance mode
 switched on or off; the directory synchronised; the application restarted, updated or set up. Everybody holding `settings:manage` can read it, and nobody else.
 
 A change is recorded once it has gone through - a refused request changed

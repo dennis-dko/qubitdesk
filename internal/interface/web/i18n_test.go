@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/support/i18n"
 )
 
@@ -290,11 +291,31 @@ func TestNoTranslationIsUnused(t *testing.T) {
 				}
 			}
 
-			// And the ticket states, looked up as t(`status.${status}`) from
-			// whatever the server sent. TestEveryTicketStateIsNamed checks these
-			// against the states the migration ships.
+			// The ticket states, priorities and types, looked up as
+			// t(`status.${status}`) and the like from whatever the server sent, and
+			// the types a state can have.
+			// TestEveryShippedValueAndStateTypeIsNamedInBothLanguages holds all four
+			// to what ships and what the server knows.
 			if state, isState := strings.CutPrefix(key, "status."); isState {
 				if _, known := ticketStates(t)[state]; known {
+					continue
+				}
+			}
+
+			if name, isPriority := strings.CutPrefix(key, "priority."); isPriority {
+				if _, known := shippedPriorities(t)[name]; known {
+					continue
+				}
+			}
+
+			if name, isType := strings.CutPrefix(key, "tickettype."); isType {
+				if _, known := shippedTicketTypes(t)[name]; known {
+					continue
+				}
+			}
+
+			if kind, isStateType := strings.CutPrefix(key, "statetype."); isStateType {
+				if slices.Contains(model.StateTypes(), model.StateType(kind)) {
 					continue
 				}
 			}

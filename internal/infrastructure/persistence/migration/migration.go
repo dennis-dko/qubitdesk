@@ -402,7 +402,9 @@ func createTicketStates(d migration.Datasource, dialect string) error {
 }
 
 // seedTicketStates gives a new installation the states KIX18 ships, named by
-// identifiers the interface translates. Four are the code's own - a ticket
+// identifiers the interface translates, and with no description: one stored in
+// English would be shown in English to every reader, and the type says what each
+// is for. Four are the code's own - a ticket
 // starts new, an answer from its customer opens it again, a pending close ends
 // closed, a merge leaves it merged - and are marked is_system; the other three
 // are an installation's to rename, retire or delete.
@@ -411,21 +413,21 @@ func createTicketStates(d migration.Datasource, dialect string) error {
 // it did, and must not change with a constant that is allowed to.
 func seedTicketStates(d migration.Datasource, dialect string) error {
 	insert := sqldb.Rebind(dialect,
-		"INSERT INTO ticket_states (name, state_type, description, is_system) VALUES (?, ?, ?, ?)")
+		"INSERT INTO ticket_states (name, state_type, is_system) VALUES (?, ?, ?)")
 
 	for _, state := range []struct {
-		name, kind, description string
-		system                  bool
+		name, kind string
+		system     bool
 	}{
-		{"new", "new", "A ticket nobody has worked on yet.", true},
-		{"open", "open", "A ticket somebody is working on.", true},
-		{"pending-reminder", "pending-reminder", "Waits until a moment, and then reminds its owner.", false},
-		{"pending-auto-close", "pending-auto", "Waits until a moment, and then closes by itself.", false},
-		{"closed", "closed", "A ticket that is done.", true},
-		{"removed", "removed", "A ticket that should never have been one.", false},
-		{"merged", "merged", "A ticket carried on in the one it was merged into.", true},
+		{"new", "new", true},
+		{"open", "open", true},
+		{"pending-reminder", "pending-reminder", false},
+		{"pending-auto-close", "pending-auto", false},
+		{"closed", "closed", true},
+		{"removed", "removed", false},
+		{"merged", "merged", true},
 	} {
-		if _, err := d.SQL.Exec(insert, state.name, state.kind, state.description, state.system); err != nil {
+		if _, err := d.SQL.Exec(insert, state.name, state.kind, state.system); err != nil {
 			return fmt.Errorf("seeding the ticket state %q: %w", state.name, err)
 		}
 	}
