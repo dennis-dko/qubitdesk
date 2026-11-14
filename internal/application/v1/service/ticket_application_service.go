@@ -39,6 +39,10 @@ type TicketService interface {
 	// Assignees are the accounts a ticket in the queue can be given to: those
 	// on the staff side whose role works tickets there.
 	Assignees(ctx context.Context, caller *Principal, queueID uint) ([]*model.User, error)
+
+	// CustomerNames are the names of the contacts and the organisations the
+	// tickets name, by id.
+	CustomerNames(ctx context.Context, tickets []*model.Ticket) (map[uint]string, map[uint]string, error)
 }
 
 // TicketListFilter is what a listing asks for: a page, and what narrows it.
@@ -50,10 +54,12 @@ type TicketListFilter struct {
 	// something about.
 	Unfinished bool
 
-	OwnerID uint
-	Search  string
-	Limit   int
-	Page    int
+	OwnerID        uint
+	ContactID      uint
+	OrganisationID uint
+	Search         string
+	Limit          int
+	Page           int
 }
 
 // DefaultTicketPage and MaxTicketPage bound a page of tickets. A limit above the
@@ -83,6 +89,9 @@ type TicketApplicationService struct {
 	users      repository.UserRepository
 	roles      repository.RoleRepository
 
+	contacts      repository.ContactRepository
+	organisations repository.OrganisationRepository
+
 	// zone names the installation's zone, which a ticket's number is dated in.
 	zone func(ctx context.Context) string
 	now  func() time.Time
@@ -96,6 +105,7 @@ func NewTicketApplicationService(
 	tickets repository.TicketRepository,
 	queues repository.QueueRepository,
 	catalog TicketCatalogRepositories,
+	customers TicketCustomerRepositories,
 	users repository.UserRepository,
 	roles repository.RoleRepository,
 	zone func(ctx context.Context) string,
@@ -103,6 +113,7 @@ func NewTicketApplicationService(
 	return &TicketApplicationService{
 		tickets: tickets, queues: queues,
 		states: catalog.States, priorities: catalog.Priorities, types: catalog.Types,
+		contacts: customers.Contacts, organisations: customers.Organisations,
 		users: users, roles: roles, zone: zone, now: time.Now,
 	}
 }
@@ -177,14 +188,9 @@ func (s *TicketApplicationService) ListTickets(
 		}
 	}
 
-	var owner *uint
-	if filter.OwnerID != 0 {
-		owner = &filter.OwnerID
-	}
-
 	return s.tickets.List(ctx, repository.TicketFilter{
-		QueueIDs: reached, StateIDs: states, OwnerID: owner, Search: filter.Search,
-		Limit: filter.Limit, Page: filter.Page,
+		QueueIDs: reached, StateIDs: states, OwnerID: given(filter.OwnerID), ContactID: given(filter.ContactID),
+		OrganisationID: given(filter.OrganisationID), Search: filter.Search, Limit: filter.Limit, Page: filter.Page,
 	})
 }
 
@@ -254,6 +260,12 @@ func (s *TicketApplicationService) CreateTicket(
 	if ticket.ResponsibleID, err = s.staff(ctx, cmd.ResponsibleID); errors.Is(err, errNotStaff) {
 		return nil, apperror.InvalidFields("responsibleId")
 	} else if err != nil {
+		return nil, err
+	}
+
+	if err := s.chooseCustomer(ctx, ticket, customerChoice{
+		contactID: cmd.ContactID, organisationID: cmd.OrganisationID,
+	}, nil); err != nil {
 		return nil, err
 	}
 
@@ -332,6 +344,13 @@ func (s *TicketApplicationService) UpdateTicket(
 	}
 
 	if err := s.changePeople(ctx, caller, ticket, cmd, change, now); err != nil {
+		return nil, err
+	}
+
+	if err := s.chooseCustomer(ctx, ticket, customerChoice{
+		contactID: cmd.ContactID, clearContact: cmd.ClearContact,
+		organisationID: cmd.OrganisationID, clearOrganisation: cmd.ClearOrganisation,
+	}, change); err != nil {
 		return nil, err
 	}
 

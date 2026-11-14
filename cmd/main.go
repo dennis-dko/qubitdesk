@@ -627,12 +627,15 @@ func main() {
 		Types:      sqldb.NewTicketTypeRepository(db, cfg.Dialect),
 	}
 	queues := appservice.NewQueueApplicationService(queueRepo, roleRepo)
-	customers := appservice.NewCustomerApplicationService(
-		sqldb.NewOrganisationRepository(db, cfg.Dialect), sqldb.NewContactRepository(db, cfg.Dialect))
+	customerRepos := appservice.TicketCustomerRepositories{
+		Contacts:      sqldb.NewContactRepository(db, cfg.Dialect),
+		Organisations: sqldb.NewOrganisationRepository(db, cfg.Dialect),
+	}
+	customers := appservice.NewCustomerApplicationService(customerRepos.Organisations, customerRepos.Contacts)
 	ticketCatalog := appservice.NewTicketCatalogApplicationService(
 		catalogRepos.States, catalogRepos.Priorities, catalogRepos.Types)
 	tickets := appservice.NewTicketApplicationService(sqldb.NewTicketRepository(db, cfg.Dialect), queueRepo,
-		catalogRepos, userRepo, roleRepo, func(ctx context.Context) string {
+		catalogRepos, customerRepos, userRepo, roleRepo, func(ctx context.Context) string {
 			name, err := settingsService.Timezone(ctx)
 			if err != nil {
 				return model.DefaultTimezone

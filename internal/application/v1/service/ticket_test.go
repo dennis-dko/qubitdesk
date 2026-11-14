@@ -19,18 +19,20 @@ import (
 // only read and one they do not reach - and a caller on each side of
 // queues:write.
 type ticketFixture struct {
-	tickets    *service.TicketApplicationService
-	repo       *memory.TicketRepository
-	priorities *memory.TicketPriorityRepository
-	states     map[string]*model.TicketState
-	priority   map[string]*model.TicketPriority
-	desk       *model.Queue
-	readOnly   *model.Queue
-	hidden     *model.Queue
-	admin      *service.Principal
-	agent      *service.Principal
-	agentUser  *model.User
-	customer   *model.User
+	tickets       *service.TicketApplicationService
+	repo          *memory.TicketRepository
+	priorities    *memory.TicketPriorityRepository
+	contacts      *memory.ContactRepository
+	organisations *memory.OrganisationRepository
+	states        map[string]*model.TicketState
+	priority      map[string]*model.TicketPriority
+	desk          *model.Queue
+	readOnly      *model.Queue
+	hidden        *model.Queue
+	admin         *service.Principal
+	agent         *service.Principal
+	agentUser     *model.User
+	customer      *model.User
 }
 
 func newTicketFixture(t *testing.T) ticketFixture {
@@ -53,14 +55,16 @@ func newTicketFixture(t *testing.T) ticketFixture {
 	types := memory.NewTicketTypeRepository()
 
 	f := ticketFixture{
-		repo:       memory.NewTicketRepository(),
-		priorities: priorities,
-		states:     map[string]*model.TicketState{},
-		priority:   map[string]*model.TicketPriority{},
-		admin:      &service.Principal{User: adminUser, Role: adminRole, Permissions: model.AdminPermissions()},
-		agent:      &service.Principal{User: agentUser, Role: agentRole, Permissions: model.AgentPermissions()},
-		agentUser:  agentUser,
-		customer:   customer,
+		repo:          memory.NewTicketRepository(),
+		priorities:    priorities,
+		contacts:      memory.NewContactRepository(),
+		organisations: memory.NewOrganisationRepository(),
+		states:        map[string]*model.TicketState{},
+		priority:      map[string]*model.TicketPriority{},
+		admin:         &service.Principal{User: adminUser, Role: adminRole, Permissions: model.AdminPermissions()},
+		agent:         &service.Principal{User: agentUser, Role: agentRole, Permissions: model.AgentPermissions()},
+		agentUser:     agentUser,
+		customer:      customer,
 	}
 
 	for _, seed := range []model.TicketState{
@@ -95,6 +99,7 @@ func newTicketFixture(t *testing.T) ticketFixture {
 
 	f.tickets = service.NewTicketApplicationService(f.repo, queues,
 		service.TicketCatalogRepositories{States: states, Priorities: priorities, Types: types},
+		service.TicketCustomerRepositories{Contacts: f.contacts, Organisations: f.organisations},
 		users, roles, func(context.Context) string { return "Europe/Berlin" })
 
 	return f
@@ -391,6 +396,62 @@ func TestOpeningATicketIsCountedByHowItArrived(t *testing.T) {
 	if got := spy.counted[service.MetricTicketsOpened]; !slices.Equal(got, []string{"channel=note"}) {
 		t.Errorf("opening one ticket and being refused another counted %v, want one note", got)
 	}
+}
+
+// A ticket is for a contact still offered, and for the contact's organisation
+// unless it says otherwise; a contact or an organisation it already names stays,
+// retired or not, and every change is in the history by name.
+func TestATicketIsForAContactAndTheirOrganisation(t *testing.T) {
+	ctx := context.Background()
+	f := newTicketFixture(t)
+
+	acme, _ := f.organisations.Save(ctx, &model.Organisation{Name: "Acme", Valid: true})
+	bolt, _ := f.organisations.Save(ctx, &model.Organisation{Name: "Bolt", Valid: true})
+	ann, _ := f.contacts.Save(ctx, &model.Contact{Name: "Ann", OrganisationID: &acme.ID, Valid: true})
+	gone, _ := f.contacts.Save(ctx, &model.Contact{Name: "Gone", Valid: false})
+
+	ticket, err := f.tickets.CreateTicket(ctx, f.agent, command.CreateTicketCommand{
+		Title: ptr("Printer"), QueueID: &f.desk.ID, Body: ptr("It jams."), ContactID: &ann.ID,
+	})
+	if err != nil {
+		t.Fatalf("open a ticket for Ann: %v", err)
+	}
+
+	if ticket.ContactID == nil || *ticket.ContactID != ann.ID || ticket.OrganisationID == nil ||
+		*ticket.OrganisationID != acme.ID {
+		t.Errorf("a ticket for Ann is for %v at %v; want Ann at Acme", ticket.ContactID, ticket.OrganisationID)
+	}
+
+	_, err = f.tickets.CreateTicket(ctx, f.agent, command.CreateTicketCommand{
+		Title: ptr("x"), QueueID: &f.desk.ID, Body: ptr("y"), ContactID: &gone.ID,
+	})
+	refusedWith(t, err, "contactRetired")
+
+	moved, err := f.tickets.UpdateTicket(ctx, f.agent, ticket.ID, command.UpdateTicketCommand{OrganisationID: &bolt.ID})
+	if err != nil || moved.OrganisationID == nil || *moved.OrganisationID != bolt.ID || *moved.ContactID != ann.ID {
+		t.Fatalf("moving the ticket to Bolt answered %+v, %v; want Ann's ticket for Bolt", moved, err)
+	}
+
+	cleared, err := f.tickets.UpdateTicket(ctx, f.agent, ticket.ID, command.UpdateTicketCommand{ClearContact: true})
+	if err != nil || cleared.ContactID != nil || cleared.OrganisationID == nil {
+		t.Fatalf("taking Ann off answered %+v, %v; want the ticket kept for Bolt", cleared, err)
+	}
+
+	history, _ := f.tickets.History(ctx, f.agent, ticket.ID)
+
+	var lines []string
+	for _, entry := range history {
+		lines = append(lines, string(entry.Event)+" "+entry.OldValue+" > "+entry.NewValue)
+	}
+
+	for _, want := range []string{"organisation Acme > Bolt", "contact Ann > "} {
+		if !slices.Contains(lines, want) {
+			t.Errorf("the history does not say %q: %v", want, lines)
+		}
+	}
+
+	_, err = f.tickets.UpdateTicket(ctx, f.agent, ticket.ID, command.UpdateTicketCommand{ContactID: &ann.ID, ClearContact: true})
+	invalidFields(t, err, "contactId")
 }
 
 // A ticket can be given to whoever's role works in its queue, and to nobody else.

@@ -26,7 +26,8 @@ func NewTicketRepository(db DB, dialect string) *TicketRepository {
 var _ repository.TicketRepository = (*TicketRepository)(nil)
 
 const ticketColumns = "id, number, title, queue_id, state_id, priority_id, type_id, owner_id, responsible_id, " +
-	"locked, locked_at, channel, created_by, created_at, updated_at, closed_at, pending_until"
+	"contact_id, organisation_id, locked, locked_at, channel, created_by, created_at, updated_at, closed_at, " +
+	"pending_until"
 
 func (r *TicketRepository) Create(
 	ctx context.Context,
@@ -40,10 +41,11 @@ func (r *TicketRepository) Create(
 	err := r.withTx(ctx, func(tx base) error {
 		newID, err := tx.insert(ctx,
 			"INSERT INTO tickets (title, queue_id, state_id, priority_id, type_id, owner_id, responsible_id, "+
-				"locked, locked_at, channel, created_by, created_at, updated_at, closed_at, pending_until) "+
-				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"contact_id, organisation_id, locked, locked_at, channel, created_by, created_at, updated_at, "+
+				"closed_at, pending_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			ticket.Title, ticket.QueueID, ticket.StateID, ticket.PriorityID, ticket.TypeID,
-			ticket.OwnerID, ticket.ResponsibleID, ticket.Locked, ticket.LockedAt, string(ticket.Channel),
+			ticket.OwnerID, ticket.ResponsibleID, ticket.ContactID, ticket.OrganisationID,
+			ticket.Locked, ticket.LockedAt, string(ticket.Channel),
 			ticket.CreatedBy, ticket.CreatedAt, ticket.UpdatedAt, ticket.ClosedAt, ticket.PendingUntil)
 		if err != nil {
 			return apperror.Internal(err)
@@ -117,6 +119,16 @@ func (r *TicketRepository) List(ctx context.Context, filter repository.TicketFil
 		args = append(args, *filter.OwnerID)
 	}
 
+	if filter.ContactID != nil {
+		where = append(where, "contact_id = ?")
+		args = append(args, *filter.ContactID)
+	}
+
+	if filter.OrganisationID != nil {
+		where = append(where, "organisation_id = ?")
+		args = append(args, *filter.OrganisationID)
+	}
+
 	if search := strings.TrimSpace(filter.Search); search != "" {
 		where = append(where, "(LOWER(title) LIKE ? ESCAPE '!' OR number LIKE ? ESCAPE '!')")
 		pattern := "%" + strings.ToLower(likeEscaped(search)) + "%"
@@ -169,12 +181,12 @@ func (r *TicketRepository) Update(
 	err := r.withTx(ctx, func(tx base) error {
 		found, err := tx.update(ctx, "tickets",
 			"UPDATE tickets SET title = ?, queue_id = ?, state_id = ?, priority_id = ?, type_id = ?, owner_id = ?, "+
-				"responsible_id = ?, locked = ?, locked_at = ?, updated_at = ?, closed_at = ?, pending_until = ? "+
-				"WHERE id = ?",
+				"responsible_id = ?, contact_id = ?, organisation_id = ?, locked = ?, locked_at = ?, updated_at = ?, "+
+				"closed_at = ?, pending_until = ? WHERE id = ?",
 			ticket.ID,
 			ticket.Title, ticket.QueueID, ticket.StateID, ticket.PriorityID, ticket.TypeID, ticket.OwnerID,
-			ticket.ResponsibleID, ticket.Locked, ticket.LockedAt, ticket.UpdatedAt, ticket.ClosedAt,
-			ticket.PendingUntil, ticket.ID)
+			ticket.ResponsibleID, ticket.ContactID, ticket.OrganisationID, ticket.Locked, ticket.LockedAt,
+			ticket.UpdatedAt, ticket.ClosedAt, ticket.PendingUntil, ticket.ID)
 		if err != nil {
 			return apperror.Internal(err)
 		}
@@ -430,13 +442,15 @@ func scanTicket(row scanner) (*model.Ticket, error) {
 		ticket                        model.Ticket
 		number                        sql.NullString
 		owner, responsible, createdBy sql.NullInt64
+		contact, organisation         sql.NullInt64
 		channel                       string
 		lockedAt, created, updated    dateTime
 		closed, pending               dateTime
 	)
 
 	err := row.Scan(&ticket.ID, &number, &ticket.Title, &ticket.QueueID, &ticket.StateID, &ticket.PriorityID,
-		&ticket.TypeID, &owner, &responsible, &ticket.Locked, &lockedAt, &channel, &createdBy,
+		&ticket.TypeID, &owner, &responsible, &contact, &organisation, &ticket.Locked, &lockedAt, &channel,
+		&createdBy,
 		&created, &updated, &closed, &pending)
 	if err != nil {
 		return nil, err
@@ -445,6 +459,8 @@ func scanTicket(row scanner) (*model.Ticket, error) {
 	ticket.Number = number.String
 	ticket.OwnerID = optionalID(owner)
 	ticket.ResponsibleID = optionalID(responsible)
+	ticket.ContactID = optionalID(contact)
+	ticket.OrganisationID = optionalID(organisation)
 	ticket.CreatedBy = optionalID(createdBy)
 	ticket.Channel = model.Channel(channel)
 	ticket.LockedAt = ptr(lockedAt)

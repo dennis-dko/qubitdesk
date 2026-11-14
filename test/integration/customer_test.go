@@ -109,3 +109,62 @@ func TestAnAgentWorksCustomersAndACustomerAccountDoesNot(t *testing.T) {
 		t.Errorf("a customer's account listing contacts was answered %d, want 403", refused.Status)
 	}
 }
+
+// A ticket is for a contact and their organisation, says so by name, is found by
+// either, and outlives the contact: deleting a contact tickets are for asks
+// first, and once confirmed the ticket stays without the contact.
+func TestATicketIsForACustomerAndOutlivesTheContact(t *testing.T) {
+	t.Parallel()
+
+	a := start(t)
+	admin := a.signInAsAdmin("a-much-better-password")
+	desk := theDesk(t, admin)
+
+	var acme organisationResponse
+
+	admin.must(admin.api(http.MethodPost, "/organisations", map[string]any{"name": "Acme"}),
+		http.StatusCreated).Data(t, &acme)
+
+	var ann contactResponse
+
+	admin.must(admin.api(http.MethodPost, "/contacts", map[string]any{"name": "Ann", "organisationId": acme.ID}),
+		http.StatusCreated).Data(t, &ann)
+
+	var ticket struct {
+		ID               uint   `json:"id"`
+		ContactID        *uint  `json:"contactId"`
+		ContactName      string `json:"contactName"`
+		OrganisationName string `json:"organisationName"`
+	}
+
+	admin.must(admin.api(http.MethodPost, "/tickets", map[string]any{
+		"title": "Printer", "queueId": desk, "body": "It jams.", "contactId": ann.ID,
+	}), http.StatusCreated).Data(t, &ticket)
+
+	if ticket.ContactName != "Ann" || ticket.OrganisationName != "Acme" {
+		t.Errorf("a ticket for Ann reads as %+v; want it naming Ann and Acme", ticket)
+	}
+
+	var hers ticketList
+
+	admin.must(admin.api(http.MethodGet, "/tickets?contact="+strconv.FormatUint(uint64(ann.ID), 10), nil),
+		http.StatusOK).Data(t, &hers)
+
+	if hers.TotalCount != 1 {
+		t.Errorf("Ann's tickets number %d, want the one", hers.TotalCount)
+	}
+
+	asked := admin.api(http.MethodDelete, contactPath(ann.ID), nil)
+	if asked.Status != http.StatusConflict || errorCode(t, asked) != "contactDeletionNeedsConfirming" {
+		t.Fatalf("deleting Ann with a ticket for her was answered %d %s, want 409 contactDeletionNeedsConfirming",
+			asked.Status, asked.Body)
+	}
+
+	admin.must(admin.api(http.MethodDelete, contactPath(ann.ID)+"?confirm=true", nil), http.StatusNoContent)
+
+	admin.must(admin.api(http.MethodGet, ticketPath(ticket.ID), nil), http.StatusOK).Data(t, &ticket)
+
+	if ticket.ContactID != nil || ticket.OrganisationName != "Acme" {
+		t.Errorf("after Ann was deleted her ticket reads as %+v; want it kept for Acme without a contact", ticket)
+	}
+}

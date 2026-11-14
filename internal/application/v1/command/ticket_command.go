@@ -20,6 +20,11 @@ type CreateTicketCommand struct {
 	OwnerID       *uint
 	ResponsibleID *uint
 
+	// ContactID is who the ticket is for; OrganisationID is the contact's own
+	// organisation unless it is given.
+	ContactID      *uint
+	OrganisationID *uint
+
 	// The article the ticket starts from.
 	Channel         *string
 	CustomerVisible bool
@@ -46,6 +51,13 @@ type UpdateTicketCommand struct {
 	ClearOwner       bool
 	ResponsibleID    *uint
 	ClearResponsible bool
+
+	// A contact newly given brings its organisation along unless one is given
+	// too.
+	ContactID         *uint
+	ClearContact      bool
+	OrganisationID    *uint
+	ClearOrganisation bool
 
 	// Locked locks the ticket to its owner, or frees it. Locking a ticket nobody
 	// owns makes the caller its owner, as KIX18 does.

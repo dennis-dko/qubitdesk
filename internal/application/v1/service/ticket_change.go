@@ -452,6 +452,15 @@ func callerID(caller *Principal) *uint {
 	return &id
 }
 
+// given is an id a filter was given, or nothing for zero.
+func given(id uint) *uint {
+	if id == 0 {
+		return nil
+	}
+
+	return &id
+}
+
 func sameID(a, b *uint) bool {
 	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
 }

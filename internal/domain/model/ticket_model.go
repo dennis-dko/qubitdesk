@@ -24,6 +24,12 @@ type Ticket struct {
 	OwnerID       *uint
 	ResponsibleID *uint
 
+	// ContactID is who the ticket is for, and OrganisationID the company it is
+	// for - the contact's own unless the ticket says otherwise. Either may be
+	// nobody, and a deleted contact leaves the ticket naming nobody.
+	ContactID      *uint
+	OrganisationID *uint
+
 	// Locked keeps the ticket to its owner, so two agents do not answer it at
 	// once; LockedAt is when, which the queue's unlock time is counted from.
 	Locked   bool
@@ -130,18 +136,20 @@ type HistoryEvent string
 
 // The kinds of thing that happen to a ticket, each stored as its value.
 const (
-	HistoryCreated     HistoryEvent = "created"
-	HistoryTitle       HistoryEvent = "title"
-	HistoryQueue       HistoryEvent = "queue"
-	HistoryState       HistoryEvent = "state"
-	HistoryPriority    HistoryEvent = "priority"
-	HistoryType        HistoryEvent = "type"
-	HistoryOwner       HistoryEvent = "owner"
-	HistoryResponsible HistoryEvent = "responsible"
-	HistoryLock        HistoryEvent = "lock"
-	HistoryPending     HistoryEvent = "pending"
-	HistoryArticle     HistoryEvent = "article"
-	HistoryTime        HistoryEvent = "time"
+	HistoryCreated      HistoryEvent = "created"
+	HistoryTitle        HistoryEvent = "title"
+	HistoryQueue        HistoryEvent = "queue"
+	HistoryState        HistoryEvent = "state"
+	HistoryPriority     HistoryEvent = "priority"
+	HistoryType         HistoryEvent = "type"
+	HistoryOwner        HistoryEvent = "owner"
+	HistoryResponsible  HistoryEvent = "responsible"
+	HistoryContact      HistoryEvent = "contact"
+	HistoryOrganisation HistoryEvent = "organisation"
+	HistoryLock         HistoryEvent = "lock"
+	HistoryPending      HistoryEvent = "pending"
+	HistoryArticle      HistoryEvent = "article"
+	HistoryTime         HistoryEvent = "time"
 )
 
 // HistoryEvents lists every kind of thing that happens to a ticket, which is
@@ -149,7 +157,8 @@ const (
 func HistoryEvents() []HistoryEvent {
 	return []HistoryEvent{
 		HistoryCreated, HistoryTitle, HistoryQueue, HistoryState, HistoryPriority, HistoryType,
-		HistoryOwner, HistoryResponsible, HistoryLock, HistoryPending, HistoryArticle, HistoryTime,
+		HistoryOwner, HistoryResponsible, HistoryContact, HistoryOrganisation, HistoryLock, HistoryPending,
+		HistoryArticle, HistoryTime,
 	}
 }
 

@@ -34,26 +34,30 @@ func NewTicketHandler(tickets service.TicketService, authz *Authorizer) *TicketH
 // people it names - a reader who may not list the accounts still has to see who
 // owns a ticket.
 type TicketResponse struct {
-	ID              uint       `json:"id"`
-	Number          string     `json:"number"`
-	Title           string     `json:"title"`
-	QueueID         uint       `json:"queueId"`
-	StateID         uint       `json:"stateId"`
-	PriorityID      uint       `json:"priorityId"`
-	TypeID          uint       `json:"typeId"`
-	OwnerID         *uint      `json:"ownerId"`
-	OwnerName       string     `json:"ownerName"`
-	ResponsibleID   *uint      `json:"responsibleId"`
-	ResponsibleName string     `json:"responsibleName"`
-	Locked          bool       `json:"locked"`
-	LockedAt        *time.Time `json:"lockedAt"`
-	Channel         string     `json:"channel"`
-	CreatedBy       *uint      `json:"createdBy"`
-	CreatedByName   string     `json:"createdByName"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
-	ClosedAt        *time.Time `json:"closedAt"`
-	PendingUntil    *time.Time `json:"pendingUntil"`
+	ID               uint       `json:"id"`
+	Number           string     `json:"number"`
+	Title            string     `json:"title"`
+	QueueID          uint       `json:"queueId"`
+	StateID          uint       `json:"stateId"`
+	PriorityID       uint       `json:"priorityId"`
+	TypeID           uint       `json:"typeId"`
+	OwnerID          *uint      `json:"ownerId"`
+	OwnerName        string     `json:"ownerName"`
+	ResponsibleID    *uint      `json:"responsibleId"`
+	ResponsibleName  string     `json:"responsibleName"`
+	ContactID        *uint      `json:"contactId"`
+	ContactName      string     `json:"contactName"`
+	OrganisationID   *uint      `json:"organisationId"`
+	OrganisationName string     `json:"organisationName"`
+	Locked           bool       `json:"locked"`
+	LockedAt         *time.Time `json:"lockedAt"`
+	Channel          string     `json:"channel"`
+	CreatedBy        *uint      `json:"createdBy"`
+	CreatedByName    string     `json:"createdByName"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	UpdatedAt        time.Time  `json:"updatedAt"`
+	ClosedAt         *time.Time `json:"closedAt"`
+	PendingUntil     *time.Time `json:"pendingUntil"`
 }
 
 // TicketDetailResponse is one ticket with what is read about it beside: the
@@ -75,6 +79,8 @@ type CreateTicketRequest struct {
 	PendingUntil    *time.Time `json:"pendingUntil"`
 	OwnerID         *uint      `json:"ownerId"`
 	ResponsibleID   *uint      `json:"responsibleId"`
+	ContactID       *uint      `json:"contactId"`
+	OrganisationID  *uint      `json:"organisationId"`
 	Channel         *string    `json:"channel"`
 	CustomerVisible bool       `json:"customerVisible"`
 	Subject         *string    `json:"subject"`
@@ -86,17 +92,21 @@ type CreateTicketRequest struct {
 // ClearOwner and ClearResponsible take the person off, because an id sent as
 // null cannot be told apart from one that was not sent.
 type UpdateTicketRequest struct {
-	Title            *string    `json:"title"`
-	QueueID          *uint      `json:"queueId"`
-	StateID          *uint      `json:"stateId"`
-	PriorityID       *uint      `json:"priorityId"`
-	TypeID           *uint      `json:"typeId"`
-	PendingUntil     *time.Time `json:"pendingUntil"`
-	OwnerID          *uint      `json:"ownerId"`
-	ClearOwner       bool       `json:"clearOwner"`
-	ResponsibleID    *uint      `json:"responsibleId"`
-	ClearResponsible bool       `json:"clearResponsible"`
-	Locked           *bool      `json:"locked"`
+	Title             *string    `json:"title"`
+	QueueID           *uint      `json:"queueId"`
+	StateID           *uint      `json:"stateId"`
+	PriorityID        *uint      `json:"priorityId"`
+	TypeID            *uint      `json:"typeId"`
+	PendingUntil      *time.Time `json:"pendingUntil"`
+	OwnerID           *uint      `json:"ownerId"`
+	ClearOwner        bool       `json:"clearOwner"`
+	ResponsibleID     *uint      `json:"responsibleId"`
+	ClearResponsible  bool       `json:"clearResponsible"`
+	ContactID         *uint      `json:"contactId"`
+	ClearContact      bool       `json:"clearContact"`
+	OrganisationID    *uint      `json:"organisationId"`
+	ClearOrganisation bool       `json:"clearOrganisation"`
+	Locked            *bool      `json:"locked"`
 }
 
 // ArticleRequest writes an article in a ticket, with the time worked for it.
@@ -155,7 +165,7 @@ func (h *TicketHandler) List(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	names, err := h.tickets.Names(c, peopleOf(tickets...))
+	names, err := h.names(c, tickets...)
 	if err != nil {
 		return nil, toHTTPError(err)
 	}
@@ -198,6 +208,7 @@ func (h *TicketHandler) Create(c *gofr.Context) (any, error) {
 	ticket, err := h.tickets.CreateTicket(c, caller, command.CreateTicketCommand{
 		Title: req.Title, QueueID: req.QueueID, StateID: req.StateID, PriorityID: req.PriorityID,
 		TypeID: req.TypeID, PendingUntil: req.PendingUntil, OwnerID: req.OwnerID, ResponsibleID: req.ResponsibleID,
+		ContactID: req.ContactID, OrganisationID: req.OrganisationID,
 		Channel: req.Channel, CustomerVisible: req.CustomerVisible, Subject: req.Subject, Body: req.Body,
 		Minutes: req.Minutes,
 	})
@@ -228,7 +239,9 @@ func (h *TicketHandler) Update(c *gofr.Context) (any, error) {
 	if _, err := h.tickets.UpdateTicket(c, caller, id, command.UpdateTicketCommand{
 		Title: req.Title, QueueID: req.QueueID, StateID: req.StateID, PriorityID: req.PriorityID,
 		TypeID: req.TypeID, PendingUntil: req.PendingUntil, OwnerID: req.OwnerID, ClearOwner: req.ClearOwner,
-		ResponsibleID: req.ResponsibleID, ClearResponsible: req.ClearResponsible, Locked: req.Locked,
+		ResponsibleID: req.ResponsibleID, ClearResponsible: req.ClearResponsible,
+		ContactID: req.ContactID, ClearContact: req.ClearContact,
+		OrganisationID: req.OrganisationID, ClearOrganisation: req.ClearOrganisation, Locked: req.Locked,
 	}); err != nil {
 		return nil, toHTTPError(err)
 	}
@@ -436,7 +449,7 @@ func (h *TicketHandler) detail(c *gofr.Context, caller *service.Principal, id ui
 		return nil, toHTTPError(err)
 	}
 
-	names, err := h.tickets.Names(c, peopleOf(ticket))
+	names, err := h.names(c, ticket)
 	if err != nil {
 		return nil, toHTTPError(err)
 	}
@@ -494,9 +507,19 @@ func ticketListFilter(c *gofr.Context, caller *service.Principal) (service.Ticke
 		return service.TicketListFilter{}, err
 	}
 
+	contact, err := queryUint(c, "contact")
+	if err != nil {
+		return service.TicketListFilter{}, err
+	}
+
+	organisation, err := queryUint(c, "organisation")
+	if err != nil {
+		return service.TicketListFilter{}, err
+	}
+
 	return service.TicketListFilter{
 		QueueID: queue, StateIDs: states, Unfinished: c.Param("unfinished") == "true", OwnerID: owner,
-		Search: c.Param("q"), Limit: limit, Page: page,
+		ContactID: contact, OrganisationID: organisation, Search: c.Param("q"), Limit: limit, Page: page,
 	}, nil
 }
 
@@ -517,14 +540,38 @@ func strictInt(raw, field string) (int, error) {
 	return value, nil
 }
 
-func newTicketResponse(ticket *model.Ticket, names map[uint]string) TicketResponse {
+// ticketNames are the names a ticket response carries: of the accounts, the
+// contacts and the organisations the tickets name.
+type ticketNames struct {
+	people, contacts, organisations map[uint]string
+}
+
+// names reads every name the tickets name, so a reader who may list neither the
+// accounts nor the customers still sees who owns a ticket and who it is for.
+func (h *TicketHandler) names(c *gofr.Context, tickets ...*model.Ticket) (ticketNames, error) {
+	people, err := h.tickets.Names(c, peopleOf(tickets...))
+	if err != nil {
+		return ticketNames{}, err
+	}
+
+	contacts, organisations, err := h.tickets.CustomerNames(c, tickets)
+	if err != nil {
+		return ticketNames{}, err
+	}
+
+	return ticketNames{people: people, contacts: contacts, organisations: organisations}, nil
+}
+
+func newTicketResponse(ticket *model.Ticket, names ticketNames) TicketResponse {
 	return TicketResponse{
 		ID: ticket.ID, Number: ticket.Number, Title: ticket.Title, QueueID: ticket.QueueID,
 		StateID: ticket.StateID, PriorityID: ticket.PriorityID, TypeID: ticket.TypeID,
-		OwnerID: ticket.OwnerID, OwnerName: nameIn(names, ticket.OwnerID),
-		ResponsibleID: ticket.ResponsibleID, ResponsibleName: nameIn(names, ticket.ResponsibleID),
+		OwnerID: ticket.OwnerID, OwnerName: nameIn(names.people, ticket.OwnerID),
+		ResponsibleID: ticket.ResponsibleID, ResponsibleName: nameIn(names.people, ticket.ResponsibleID),
+		ContactID: ticket.ContactID, ContactName: nameIn(names.contacts, ticket.ContactID),
+		OrganisationID: ticket.OrganisationID, OrganisationName: nameIn(names.organisations, ticket.OrganisationID),
 		Locked: ticket.Locked, LockedAt: ticket.LockedAt, Channel: string(ticket.Channel),
-		CreatedBy: ticket.CreatedBy, CreatedByName: nameIn(names, ticket.CreatedBy),
+		CreatedBy: ticket.CreatedBy, CreatedByName: nameIn(names.people, ticket.CreatedBy),
 		CreatedAt: ticket.CreatedAt, UpdatedAt: ticket.UpdatedAt, ClosedAt: ticket.ClosedAt,
 		PendingUntil: ticket.PendingUntil,
 	}

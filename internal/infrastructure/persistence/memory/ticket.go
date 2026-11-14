@@ -90,6 +90,9 @@ func (r *TicketRepository) List(_ context.Context, filter repository.TicketFilte
 		case !slices.Contains(filter.QueueIDs, ticket.QueueID):
 		case len(filter.StateIDs) > 0 && !slices.Contains(filter.StateIDs, ticket.StateID):
 		case filter.OwnerID != nil && (ticket.OwnerID == nil || *ticket.OwnerID != *filter.OwnerID):
+		case filter.ContactID != nil && (ticket.ContactID == nil || *ticket.ContactID != *filter.ContactID):
+		case filter.OrganisationID != nil &&
+			(ticket.OrganisationID == nil || *ticket.OrganisationID != *filter.OrganisationID):
 		case search != "" && !strings.Contains(strings.ToLower(ticket.Title), search) &&
 			!strings.Contains(ticket.Number, search):
 		default:

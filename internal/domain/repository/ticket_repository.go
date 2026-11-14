@@ -61,6 +61,11 @@ type TicketFilter struct {
 	// OwnerID narrows it to one agent's tickets, when given.
 	OwnerID *uint
 
+	// ContactID and OrganisationID narrow it to one customer's tickets, when
+	// given.
+	ContactID      *uint
+	OrganisationID *uint
+
 	// Search narrows it to tickets whose title or number holds the words.
 	Search string
 
