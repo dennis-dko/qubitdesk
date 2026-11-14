@@ -454,6 +454,7 @@ function errorMessage(body) {
  */
 const FIELD_NAMES = {
   access: 'Access',
+  address: 'Address',
   banner: 'Banner text',
   body: 'Text',
   baseDn: 'Base DN',
@@ -482,10 +483,14 @@ const FIELD_NAMES = {
   logLevel: 'Log level',
   minutes: 'Minutes',
   name: 'Name',
+  note: 'Note',
+  number: 'Number',
+  organisationId: 'Organisation',
   ownerId: 'Owner',
   page: 'Page',
   parentId: 'Under',
   pendingUntil: 'Pending until',
+  phone: 'Phone',
   port: 'Port',
   priorityId: 'Priority',
   queue: 'Queue',
@@ -510,6 +515,7 @@ const FIELD_NAMES = {
   type: 'Type',
   typeId: 'Type',
   unlockMinutes: 'Unlock after (minutes)',
+  url: 'Website',
   userFilter: 'User filter',
 };
 

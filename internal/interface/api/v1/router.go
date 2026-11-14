@@ -14,6 +14,7 @@ type Handlers struct {
 	Catalog  *rest.TicketCatalogHandler
 	Queues   *rest.QueueHandler
 	Tickets  *rest.TicketHandler
+	Customer *rest.CustomerHandler
 	Me       *rest.MeHandler
 	Settings *rest.SettingsHandler
 	Tokens   *rest.APITokenHandler
@@ -205,6 +206,18 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.GET(base+"/tickets/{id}/history", h.Tickets.History)
 	app.PUT(base+"/tickets/{id}/watch", h.Tickets.Watch)
 	app.DELETE(base+"/tickets/{id}/watch", h.Tickets.Unwatch)
+
+	// Who tickets come from.
+	app.GET(base+"/organisations", h.Customer.ListOrganisations)
+	app.GET(base+"/organisations/{id}", h.Customer.GetOrganisation)
+	app.POST(base+"/organisations", h.Customer.CreateOrganisation)
+	app.PUT(base+"/organisations/{id}", h.Customer.UpdateOrganisation)
+	app.DELETE(base+"/organisations/{id}", h.Customer.DeleteOrganisation)
+	app.GET(base+"/contacts", h.Customer.ListContacts)
+	app.GET(base+"/contacts/{id}", h.Customer.GetContact)
+	app.POST(base+"/contacts", h.Customer.CreateContact)
+	app.PUT(base+"/contacts/{id}", h.Customer.UpdateContact)
+	app.DELETE(base+"/contacts/{id}", h.Customer.DeleteContact)
 
 	// Where tickets are sorted to, and which role reaches each queue.
 	app.GET(base+"/queues", h.Queues.List)

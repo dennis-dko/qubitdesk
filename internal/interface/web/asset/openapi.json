@@ -49,6 +49,10 @@
     {
       "name": "tickets",
       "description": "What tickets are sorted by - the states, the priorities and the types - and, as the ticket system grows, the tickets themselves."
+    },
+    {
+      "name": "customers",
+      "description": "Who tickets come from: the organisations and their contacts. Reading takes `customers:read` and changing `customers:write`, and neither is narrowed by queue."
     }
   ],
   "paths": {
@@ -2348,6 +2352,187 @@
           },
           "404": {
             "description": "Not found, or not reached"
+          }
+        }
+      }
+    },
+    "/organisations": {
+      "get": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "List organisations",
+        "description": "One page of them by name and `totalCount` saying how many there are altogether: `q` narrows to a name or a number holding the words, `valid=true` to what is still offered; `limit` is 50 unless given and at most 200, more refused rather than quietly lowered, and `page` counts from 1.",
+        "responses": {
+          "200": {
+            "description": "A page of organisations"
+          },
+          "400": {
+            "description": "A limit above 200, or a filter that is not a number"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Create an organisation",
+        "description": "Needs a `name`. The `number` - its customer number - is unique where given; the `url` is shown as a link and is therefore only an http or https address.",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the organisation cannot be stored with"
+          },
+          "409": {
+            "description": "Another organisation already has the number"
+          }
+        }
+      }
+    },
+    "/organisations/{id}": {
+      "get": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Read an organisation",
+        "responses": {
+          "200": {
+            "description": "Organisation"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Change an organisation",
+        "description": "A field left out stays as it was; an empty one empties it. Making it invalid stops it being offered while what it has keeps it.",
+        "responses": {
+          "200": {
+            "description": "Changed"
+          },
+          "400": {
+            "description": "A field the organisation cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another organisation already has the number"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Delete an organisation",
+        "description": "Refused, with how many, while contacts or tickets belong to it: make it invalid instead.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Contacts or tickets belong to it"
+          }
+        }
+      }
+    },
+    "/contacts": {
+      "get": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "List contacts",
+        "description": "One page of them by name and `totalCount` saying how many there are altogether: `q` narrows to a name or an address holding the words, `valid=true` to what is still offered, `organisation` to one organisation's; `limit` is 50 unless given and at most 200, more refused rather than quietly lowered, and `page` counts from 1.",
+        "responses": {
+          "200": {
+            "description": "A page of contacts"
+          },
+          "400": {
+            "description": "A limit above 200, or a filter that is not a number"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Create a contact",
+        "description": "Needs a `name`. The `email` is unique where given, because an arriving message finds its sender by it; `organisationId` names an organisation still offered.",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the contact cannot be stored with"
+          },
+          "409": {
+            "description": "Another contact already has the address, or the organisation is no longer offered"
+          }
+        }
+      }
+    },
+    "/contacts/{id}": {
+      "get": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Read a contact",
+        "description": "`hasPortalAccount` says whether the contact signs in to the portal, not which account.",
+        "responses": {
+          "200": {
+            "description": "Contact"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Change a contact",
+        "description": "A field left out stays as it was; `clearOrganisation` takes the organisation off, because an id sent as null cannot be told apart from one not sent.",
+        "responses": {
+          "200": {
+            "description": "Changed"
+          },
+          "400": {
+            "description": "A field the contact cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another contact already has the address, or the organisation is no longer offered"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Delete a contact",
+        "description": "The tickets for the contact stay and keep no contact, as an account's stay when it goes. While tickets are for it, deleting needs `?confirm=true`, and the refusal says how many.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Tickets are for the contact and nobody confirmed"
           }
         }
       }

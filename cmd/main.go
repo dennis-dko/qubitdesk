@@ -627,6 +627,8 @@ func main() {
 		Types:      sqldb.NewTicketTypeRepository(db, cfg.Dialect),
 	}
 	queues := appservice.NewQueueApplicationService(queueRepo, roleRepo)
+	customers := appservice.NewCustomerApplicationService(
+		sqldb.NewOrganisationRepository(db, cfg.Dialect), sqldb.NewContactRepository(db, cfg.Dialect))
 	ticketCatalog := appservice.NewTicketCatalogApplicationService(
 		catalogRepos.States, catalogRepos.Priorities, catalogRepos.Types)
 	tickets := appservice.NewTicketApplicationService(sqldb.NewTicketRepository(db, cfg.Dialect), queueRepo,
@@ -966,6 +968,7 @@ func main() {
 		Catalog:  rest.NewTicketCatalogHandler(ticketCatalog, authorizer),
 		Queues:   rest.NewQueueHandler(queues, authorizer),
 		Tickets:  rest.NewTicketHandler(tickets, authorizer),
+		Customer: rest.NewCustomerHandler(customers, authorizer),
 		Me:       rest.NewMeHandler(auth, sessions, authorizer, instanceTimezone),
 		Push:     rest.NewPushHandler(push, authorizer),
 		Tokens:   rest.NewAPITokenHandler(apiTokens, authorizer),

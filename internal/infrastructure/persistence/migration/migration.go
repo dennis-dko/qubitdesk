@@ -594,17 +594,24 @@ func createUserQueues(d migration.Datasource, dialect string) error {
 
 // createOrganisations keeps the companies tickets come from. The name is not
 // unique: two customers may well be called the same, and the number an
-// installation gives each is what tells them apart where it keeps one.
+// installation gives each - its customer number, as KIX18 has one - is what
+// tells them apart. That number is unique and may be absent, which is why it is
+// nullable rather than empty: every database counts two empty strings as the
+// same value where it counts two NULLs as different.
+//
+// valid says whether the organisation is offered for a ticket or a contact from
+// now on; one that is not keeps the tickets and contacts it has.
 func createOrganisations(d migration.Datasource, dialect string) error {
 	return exec(d, fmt.Sprintf(`CREATE TABLE organisations (
-		%s,
+		%[1]s,
 		name VARCHAR(255) NOT NULL,
-		number VARCHAR(64) NOT NULL DEFAULT '',
+		number VARCHAR(64) UNIQUE,
 		address VARCHAR(1000) NOT NULL DEFAULT '',
 		url VARCHAR(255) NOT NULL DEFAULT '',
 		note VARCHAR(2000) NOT NULL DEFAULT '',
-		created_at %s NOT NULL
-	)`, primaryKey(dialect), timestamp(dialect)))
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		created_at %[4]s NOT NULL
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), timestamp(dialect)))
 }
 
 // createContacts keeps the people tickets come from.
@@ -617,6 +624,8 @@ func createOrganisations(d migration.Datasource, dialect string) error {
 // user_id is the account a contact signs in to the portal with, absent for the
 // many who never do. Unique, because the portal shows an account its contact's
 // tickets, and an account that were two contacts would have no answer to whose.
+//
+// valid means what it means for an organisation.
 func createContacts(d migration.Datasource, dialect string) error {
 	return exec(d, fmt.Sprintf(`CREATE TABLE contacts (
 		%[1]s,
@@ -627,8 +636,10 @@ func createContacts(d migration.Datasource, dialect string) error {
 		note VARCHAR(2000) NOT NULL DEFAULT '',
 		user_id %[2]s UNIQUE REFERENCES users(id),
 		sees_organisation %[3]s NOT NULL DEFAULT %[4]s,
+		valid %[3]s NOT NULL DEFAULT %[6]s,
 		created_at %[5]s NOT NULL
-	)`, primaryKey(dialect), foreignKeyID(dialect), boolean(dialect), falseLiteral(dialect), timestamp(dialect)))
+	)`, primaryKey(dialect), foreignKeyID(dialect), boolean(dialect), falseLiteral(dialect), timestamp(dialect),
+		trueLiteral(dialect)))
 }
 
 // createTickets keeps the tickets.

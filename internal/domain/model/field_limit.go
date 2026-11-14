@@ -28,6 +28,14 @@ const (
 
 	// MaxTokenLabelLength covers api_tokens.name, VARCHAR(120).
 	MaxTokenLabelLength = 120
+	// MaxOrganisationNumberLength covers organisations.number, VARCHAR(64).
+	MaxOrganisationNumberLength = 64
+	// MaxAddressLength covers organisations.address, VARCHAR(1000).
+	MaxAddressLength = 1000
+	// MaxURLLength covers organisations.url, VARCHAR(255).
+	MaxURLLength = 255
+	// MaxPhoneLength covers contacts.phone, VARCHAR(64).
+	MaxPhoneLength = 64
 	// MaxCatalogNameLength covers the names of what tickets are sorted by:
 	// ticket_states.name, ticket_priorities.name and ticket_types.name, each
 	// VARCHAR(120).
