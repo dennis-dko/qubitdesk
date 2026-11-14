@@ -1,12 +1,15 @@
 package sqldb_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"slices"
 	"testing"
 
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
 // The states, the priority and the type the code moves tickets into by itself are
@@ -77,5 +80,75 @@ func TestEveryShippedStateHasATypeTheCodeKnows(t *testing.T) {
 		if !slices.Contains(seen, kind) {
 			t.Errorf("no shipped state is of type %q", kind)
 		}
+	}
+}
+
+// The repositories over the real tables: a ticket carrying a state is counted, a
+// name another state has is refused with the code the interface translates, an
+// id nobody has is a "not found" naming the kind of record, and a state made
+// through the application is the installation's own even when the caller says
+// otherwise - is_system is the seeding migration's to write.
+func TestTheStateRepositoryKeepsTheRulesOfTheTable(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	states := sqldb.NewTicketStateRepository(db, sqldb.DialectSQLite)
+
+	all, err := states.GetAll(ctx)
+	if err != nil || len(all) != len(model.StateTypes()) {
+		t.Fatalf("the shipped states read as %d, %v; want one per type", len(all), err)
+	}
+
+	var open *model.TicketState
+
+	for _, state := range all {
+		if state.Name == model.StateOpen {
+			open = state
+		}
+	}
+
+	ticket(t, db, "2026111400000001", model.StateOpen, nil, nil)
+	ticket(t, db, "2026111400000002", model.StateOpen, nil, nil)
+
+	if count, err := states.CountTickets(ctx, open.ID); err != nil || count != 2 {
+		t.Errorf("two tickets are open and the count says %d, %v", count, err)
+	}
+
+	made, err := states.Save(ctx, &model.TicketState{
+		Name: "on hold", Type: model.StateTypePendingReminder, Valid: true, IsSystem: true,
+	})
+	if err != nil {
+		t.Fatalf("save a state: %v", err)
+	}
+
+	if made.IsSystem {
+		t.Error("a state made through the application was stored as one the code relies on")
+	}
+
+	_, err = states.Save(ctx, &model.TicketState{Name: "on hold", Type: model.StateTypeOpen})
+	if detail, ok := apperror.Detail(err); !ok || detail.Code != "stateNameTaken" {
+		t.Errorf("a second state named on hold answered %v, want stateNameTaken", err)
+	}
+
+	_, err = states.GetByID(ctx, 9999)
+	if detail, ok := apperror.Detail(err); !ok || detail.Kind != apperror.KindNotFound || detail.Entity != "state" {
+		t.Errorf("reading a state nobody has answered %v, want a state not found", err)
+	}
+
+	made.Description = "waits"
+
+	if _, err := states.Update(ctx, made); err != nil {
+		t.Fatalf("change the state: %v", err)
+	}
+
+	if _, err := states.Update(ctx, made); err != nil {
+		t.Errorf("saving the state unchanged answered %v; MySQL counts no changed row there", err)
+	}
+
+	if err := states.Delete(ctx, made.ID); err != nil {
+		t.Fatalf("delete the state: %v", err)
+	}
+
+	if err := states.Delete(ctx, made.ID); apperror.KindOf(err) != apperror.KindNotFound {
+		t.Errorf("deleting it twice answered %v, want not found", err)
 	}
 }

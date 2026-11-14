@@ -27,8 +27,8 @@ const (
 	PermSettingsManage = "settings:manage"
 
 	// PermQueueWrite sets up how tickets are sorted and answered: the queues and
-	// which role reaches each, the ticket types, the service levels and the answer
-	// templates.
+	// which role reaches each, the states, priorities and types tickets are sorted
+	// by, the service levels and the answer templates.
 	//
 	// Whoever holds it reaches every queue. A separate lock on the queues
 	// themselves would be decoration: the holder can grant their own role access to

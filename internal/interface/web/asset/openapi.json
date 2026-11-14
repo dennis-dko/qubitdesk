@@ -45,6 +45,10 @@
     {
       "name": "setup",
       "description": "First-run wizard"
+    },
+    {
+      "name": "tickets",
+      "description": "What tickets are sorted by - the states, the priorities and the types - and, as the ticket system grows, the tickets themselves."
     }
   ],
   "paths": {
@@ -1800,6 +1804,270 @@
           },
           "403": {
             "description": "Missing permission"
+          }
+        }
+      }
+    },
+    "/ticket-states": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the states",
+        "description": "Open to `tickets:read`, which working a ticket needs, and to `queues:write`, which setting these up needs.",
+        "responses": {
+          "200": {
+            "description": "States"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Create a state",
+        "description": "Takes `queues:write`. Needs a `name` and a `type` - one of `new`, `open`, `pending-reminder`, `pending-auto`, `closed`, `removed` and `merged` - because the type is what the code does with a ticket in it. A new state is the installation's own, and valid unless it says otherwise.",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the state cannot be stored with"
+          },
+          "409": {
+            "description": "Another state already has the name"
+          }
+        }
+      }
+    },
+    "/ticket-states/{id}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read a state",
+        "description": "Open to `tickets:read`, which working a ticket needs, and to `queues:write`, which setting these up needs.",
+        "responses": {
+          "200": {
+            "description": "State"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change a state",
+        "description": "Takes `queues:write`; a field left out stays as it was. A value the code moves tickets into by itself (`isSystem`) ships with the application and stays as it is. Making a state invalid takes it out of what is offered while the tickets carrying it keep it. The type is the code's to act on, so it is one of the seven listed under creating one.",
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the state cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Shipped, or another state already has the name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete a state",
+        "description": "Takes `queues:write`. A value the code moves tickets into by itself (`isSystem`) ships with the application and stays as it is. A state tickets carry is refused with how many carry it: make it invalid instead.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Shipped, or tickets carry it"
+          }
+        }
+      }
+    },
+    "/ticket-priorities": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the priorities",
+        "description": "Open to `tickets:read`, which working a ticket needs, and to `queues:write`, which setting these up needs.",
+        "responses": {
+          "200": {
+            "description": "Priorities"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Create a priority",
+        "description": "Takes `queues:write`. Needs a `name` and a `level` from 1, the most urgent, to 99, which orders it among the others. A new priority is the installation's own, and valid unless it says otherwise.",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the priority cannot be stored with"
+          },
+          "409": {
+            "description": "Another priority already has the name"
+          }
+        }
+      }
+    },
+    "/ticket-priorities/{id}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read a priority",
+        "description": "Open to `tickets:read`, which working a ticket needs, and to `queues:write`, which setting these up needs.",
+        "responses": {
+          "200": {
+            "description": "Priority"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change a priority",
+        "description": "Takes `queues:write`; a field left out stays as it was. A value the code moves tickets into by itself (`isSystem`) ships with the application and stays as it is. Making a priority invalid takes it out of what is offered while the tickets carrying it keep it.",
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the priority cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Shipped, or another priority already has the name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete a priority",
+        "description": "Takes `queues:write`. A value the code moves tickets into by itself (`isSystem`) ships with the application and stays as it is. A priority tickets carry is refused with how many carry it: make it invalid instead.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Shipped, or tickets carry it"
+          }
+        }
+      }
+    },
+    "/ticket-types": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the types",
+        "description": "Open to `tickets:read`, which working a ticket needs, and to `queues:write`, which setting these up needs.",
+        "responses": {
+          "200": {
+            "description": "Types"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Create a type",
+        "description": "Takes `queues:write`. Needs a `name`; nothing behaves differently by type, it is a word to sort, filter and count by. A new type is the installation's own, and valid unless it says otherwise.",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the type cannot be stored with"
+          },
+          "409": {
+            "description": "Another type already has the name"
+          }
+        }
+      }
+    },
+    "/ticket-types/{id}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read a type",
+        "description": "Open to `tickets:read`, which working a ticket needs, and to `queues:write`, which setting these up needs.",
+        "responses": {
+          "200": {
+            "description": "Type"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change a type",
+        "description": "Takes `queues:write`; a field left out stays as it was. A value the code moves tickets into by itself (`isSystem`) ships with the application and stays as it is. Making a type invalid takes it out of what is offered while the tickets carrying it keep it.",
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the type cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Shipped, or another type already has the name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete a type",
+        "description": "Takes `queues:write`. A value the code moves tickets into by itself (`isSystem`) ships with the application and stays as it is. A type tickets carry is refused with how many carry it: make it invalid instead.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Shipped, or tickets carry it"
           }
         }
       }

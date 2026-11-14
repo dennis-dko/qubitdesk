@@ -2,6 +2,7 @@ package rest
 
 import (
 	"net/http"
+	"slices"
 
 	"gofr.dev/pkg/gofr"
 
@@ -157,6 +158,22 @@ func (a *Authorizer) Require(c *gofr.Context, permission string) (*service.Princ
 	}
 
 	return nil, missingPermission(permission)
+}
+
+// RequireAny returns the caller only if they hold at least one of the
+// permissions. A refusal names the first, which is the one a caller would
+// ordinarily be expected to hold.
+func (a *Authorizer) RequireAny(c *gofr.Context, permissions ...string) (*service.Principal, error) {
+	principal, err := a.permittedPrincipal(c)
+	if err != nil {
+		return nil, err
+	}
+
+	if a.open || slices.ContainsFunc(permissions, principal.Can) {
+		return principal, nil
+	}
+
+	return nil, missingPermission(permissions[0])
 }
 
 // permittedPrincipal resolves the caller and refuses anyone still on their

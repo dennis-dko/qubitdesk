@@ -620,6 +620,10 @@ func main() {
 
 	users := appservice.NewUserApplicationService(userRepo, roleRepo, userRepo, userRepo)
 	roles := appservice.NewRoleApplicationService(roleRepo)
+	ticketCatalog := appservice.NewTicketCatalogApplicationService(
+		sqldb.NewTicketStateRepository(db, cfg.Dialect),
+		sqldb.NewTicketPriorityRepository(db, cfg.Dialect),
+		sqldb.NewTicketTypeRepository(db, cfg.Dialect))
 
 	// What this installation is called in a language, wherever it has to name
 	// itself: the prompt a passkey device shows.
@@ -945,6 +949,7 @@ func main() {
 					return sessions.LogoutOthers(ctx, userID, "")
 				})),
 		Roles:    rest.NewRoleHandler(roles, authorizer),
+		Catalog:  rest.NewTicketCatalogHandler(ticketCatalog, authorizer),
 		Me:       rest.NewMeHandler(auth, sessions, authorizer, instanceTimezone),
 		Push:     rest.NewPushHandler(push, authorizer),
 		Tokens:   rest.NewAPITokenHandler(apiTokens, authorizer),

@@ -28,6 +28,10 @@ const (
 
 	// MaxTokenLabelLength covers api_tokens.name, VARCHAR(120).
 	MaxTokenLabelLength = 120
+	// MaxCatalogNameLength covers the names of what tickets are sorted by:
+	// ticket_states.name, ticket_priorities.name and ticket_types.name, each
+	// VARCHAR(120).
+	MaxCatalogNameLength = 120
 
 	// MaxDescriptionLength bounds the TEXT columns that describe something - a
 	// role, a queue, a service level. Chosen, not derived: long enough for what

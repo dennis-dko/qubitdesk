@@ -11,6 +11,7 @@ type Handlers struct {
 	Auth     *rest.AuthHandler
 	Users    *rest.UserHandler
 	Roles    *rest.RoleHandler
+	Catalog  *rest.TicketCatalogHandler
 	Me       *rest.MeHandler
 	Settings *rest.SettingsHandler
 	Tokens   *rest.APITokenHandler
@@ -187,4 +188,22 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.PUT(base+"/roles/{id}", h.Roles.Update)
 	app.DELETE(base+"/roles/{id}", h.Roles.Delete)
 	app.GET(base+"/permissions", h.Roles.Permissions)
+
+	// What tickets are sorted by: the states, the priorities and the types, each
+	// shipped with values a service desk starts from.
+	app.GET(base+"/ticket-states", h.Catalog.ListStates)
+	app.GET(base+"/ticket-states/{id}", h.Catalog.GetState)
+	app.POST(base+"/ticket-states", h.Catalog.CreateState)
+	app.PUT(base+"/ticket-states/{id}", h.Catalog.UpdateState)
+	app.DELETE(base+"/ticket-states/{id}", h.Catalog.DeleteState)
+	app.GET(base+"/ticket-priorities", h.Catalog.ListPriorities)
+	app.GET(base+"/ticket-priorities/{id}", h.Catalog.GetPriority)
+	app.POST(base+"/ticket-priorities", h.Catalog.CreatePriority)
+	app.PUT(base+"/ticket-priorities/{id}", h.Catalog.UpdatePriority)
+	app.DELETE(base+"/ticket-priorities/{id}", h.Catalog.DeletePriority)
+	app.GET(base+"/ticket-types", h.Catalog.ListTypes)
+	app.GET(base+"/ticket-types/{id}", h.Catalog.GetType)
+	app.POST(base+"/ticket-types", h.Catalog.CreateType)
+	app.PUT(base+"/ticket-types/{id}", h.Catalog.UpdateType)
+	app.DELETE(base+"/ticket-types/{id}", h.Catalog.DeleteType)
 }

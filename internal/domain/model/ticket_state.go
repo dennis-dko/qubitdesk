@@ -52,6 +52,24 @@ func FinishedStateTypes() []StateType {
 	return []StateType{StateTypeClosed, StateTypeRemoved, StateTypeMerged}
 }
 
+// TicketState is one of the states a ticket can be in: a name, and the type that
+// says what the code does with a ticket in it.
+type TicketState struct {
+	ID          uint
+	Name        string
+	Type        StateType
+	Description string
+
+	// Valid says whether the state is offered for a ticket from now on. One that
+	// is not stays on the tickets already in it, which is why a state in use is
+	// retired rather than deleted.
+	Valid bool
+
+	// IsSystem marks a state the code moves tickets into by itself. It stays as
+	// it shipped: not renamed, retyped, retired or deleted.
+	IsSystem bool
+}
+
 // The states the code moves tickets into by itself, by the names the migration
 // seeds them under: a ticket starts new, an answer from its customer opens it
 // again, a pending close ends closed, and a merge leaves it merged. Each is
