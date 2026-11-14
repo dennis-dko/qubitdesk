@@ -620,6 +620,7 @@ func main() {
 
 	users := appservice.NewUserApplicationService(userRepo, roleRepo, userRepo, userRepo)
 	roles := appservice.NewRoleApplicationService(roleRepo)
+	queues := appservice.NewQueueApplicationService(sqldb.NewQueueRepository(db, cfg.Dialect), roleRepo)
 	ticketCatalog := appservice.NewTicketCatalogApplicationService(
 		sqldb.NewTicketStateRepository(db, cfg.Dialect),
 		sqldb.NewTicketPriorityRepository(db, cfg.Dialect),
@@ -950,6 +951,7 @@ func main() {
 				})),
 		Roles:    rest.NewRoleHandler(roles, authorizer),
 		Catalog:  rest.NewTicketCatalogHandler(ticketCatalog, authorizer),
+		Queues:   rest.NewQueueHandler(queues, authorizer),
 		Me:       rest.NewMeHandler(auth, sessions, authorizer, instanceTimezone),
 		Push:     rest.NewPushHandler(push, authorizer),
 		Tokens:   rest.NewAPITokenHandler(apiTokens, authorizer),

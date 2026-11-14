@@ -2071,6 +2071,94 @@
           }
         }
       }
+    },
+    "/queues": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the queues",
+        "description": "Open to `tickets:read` and to `queues:write`. Whoever holds `queues:write` reaches every queue and is shown every role's access; anybody else is shown only the queues their role reaches, with their own line of the access - a queue they do not reach is not found rather than refused.",
+        "responses": {
+          "200": {
+            "description": "Queues"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Create a queue",
+        "description": "Takes `queues:write`. Needs a `name`. `parentId` puts the queue under another for finding it; access is the queue's own and not its parent's. `access` lists `roleId` and `level` - `read` reaches the queue's tickets to read them, `write` to create and change them too - and a role with no line does not reach the queue. `followUp` is what an answer to a closed ticket does: `reopen`, the default, `reject` or `new-ticket`. `unlockMinutes` frees a ticket locked to an owner who does nothing with it, from 1 to 10080; 0, the default, never does.",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the queue cannot be stored with, or a parent that would put it under itself"
+          },
+          "409": {
+            "description": "Another queue already has the name"
+          }
+        }
+      }
+    },
+    "/queues/{id}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read a queue",
+        "description": "Open to `tickets:read` and to `queues:write`. Whoever holds `queues:write` reaches every queue and is shown every role's access; anybody else is shown only the queues their role reaches, with their own line of the access - a queue they do not reach is not found rather than refused.",
+        "responses": {
+          "200": {
+            "description": "Queue"
+          },
+          "404": {
+            "description": "Not found, or not reached"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change a queue",
+        "description": "Takes `queues:write`; a field left out stays as it was, and `access`, when sent, replaces every role's line. `clearParent` moves the queue to the top, because a `parentId` of null cannot be told apart from one that was not sent. Making a queue invalid stops tickets being put into it while those in it stay.",
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the queue cannot be stored with, or a parent that would put it under itself"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another queue already has the name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete a queue",
+        "description": "Takes `queues:write`. A queue that holds tickets is refused with how many it holds - make it invalid instead - and so is one that other queues sit under.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Tickets are in it, or queues sit under it"
+          }
+        }
+      }
     }
   },
   "components": {

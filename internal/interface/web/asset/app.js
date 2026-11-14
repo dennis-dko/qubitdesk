@@ -450,6 +450,7 @@ function errorMessage(body) {
  * arrangement as PERMISSION_TITLES, for the same reason.
  */
 const FIELD_NAMES = {
+  access: 'Access',
   banner: 'Banner text',
   baseDn: 'Base DN',
   code: 'Code',
@@ -464,6 +465,7 @@ const FIELD_NAMES = {
   description: 'Description',
   email: 'Email',
   expiresInDays: 'Valid for (days)',
+  followUp: 'Answer to a closed ticket',
   footerText: 'Footer',
   host: 'Host',
   id: 'ID',
@@ -473,6 +475,7 @@ const FIELD_NAMES = {
   level: 'Level',
   logLevel: 'Log level',
   name: 'Name',
+  parentId: 'Under',
   port: 'Port',
   region: 'State or region',
   rateLimit: 'Rate limit',
@@ -489,6 +492,7 @@ const FIELD_NAMES = {
   tracerRatio: 'Share of traces recorded',
   tracerUrl: 'Collector',
   type: 'Type',
+  unlockMinutes: 'Unlock after (minutes)',
   userFilter: 'User filter',
 };
 
@@ -6184,6 +6188,9 @@ const CHANGE_SENTENCES = {
   'role.updated': () => t('change.roleUpdated', 'Changed the role {0}'),
   'role.deleted': () => t('change.roleDeleted', 'Deleted the role {0}'),
   'roles.imported': () => t('change.rolesImported', 'Imported roles from a spreadsheet'),
+  'queue.created': () => t('change.queueCreated', 'Created the queue {0}'),
+  'queue.updated': () => t('change.queueUpdated', 'Changed the queue {0}'),
+  'queue.deleted': () => t('change.queueDeleted', 'Deleted the queue {0}'),
   'state.created': () => t('change.stateCreated', 'Created the ticket state {0}'),
   'state.updated': () => t('change.stateUpdated', 'Changed the ticket state {0}'),
   'state.deleted': () => t('change.stateDeleted', 'Deleted the ticket state {0}'),

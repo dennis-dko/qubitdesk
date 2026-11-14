@@ -12,6 +12,7 @@ type Handlers struct {
 	Users    *rest.UserHandler
 	Roles    *rest.RoleHandler
 	Catalog  *rest.TicketCatalogHandler
+	Queues   *rest.QueueHandler
 	Me       *rest.MeHandler
 	Settings *rest.SettingsHandler
 	Tokens   *rest.APITokenHandler
@@ -188,6 +189,13 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.PUT(base+"/roles/{id}", h.Roles.Update)
 	app.DELETE(base+"/roles/{id}", h.Roles.Delete)
 	app.GET(base+"/permissions", h.Roles.Permissions)
+
+	// Where tickets are sorted to, and which role reaches each queue.
+	app.GET(base+"/queues", h.Queues.List)
+	app.GET(base+"/queues/{id}", h.Queues.Get)
+	app.POST(base+"/queues", h.Queues.Create)
+	app.PUT(base+"/queues/{id}", h.Queues.Update)
+	app.DELETE(base+"/queues/{id}", h.Queues.Delete)
 
 	// What tickets are sorted by: the states, the priorities and the types, each
 	// shipped with values a service desk starts from.
