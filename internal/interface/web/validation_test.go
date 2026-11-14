@@ -191,6 +191,8 @@ var numberRules = map[string]numberRule{
 	"form-ldap/port":                          {"1", figure(model.MaxPort), "1"},
 	"form-priority/level":                     {"1", figure(model.MaxPriorityLevel), "1"},
 	"form-queue/unlockMinutes":                {"0", figure(model.MaxUnlockMinutes), "1"},
+	"form-ticket/minutes":                     {"0", figure(model.MaxArticleMinutes), "1"},
+	"form-article/minutes":                    {"0", figure(model.MaxArticleMinutes), "1"},
 	"form-datasource/port":                    {"1", figure(model.MaxPort), "1"},
 
 	// Zero switches the timeout off; between it and the floor the server refuses

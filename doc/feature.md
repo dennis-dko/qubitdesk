@@ -2,9 +2,9 @@
 
 What the application does, and the rules it keeps while doing it.
 
-The ticket system itself - queues, tickets, contacts, the knowledge base and the
-customer portal - is being built. What follows is what an installation already
-has, and what every part of the ticket system will stand on.
+The ticket system itself is being built: the queues and the tickets are here,
+and contacts, service levels, mail, the knowledge base and the customer portal
+come next. What follows is what an installation already has.
 
 ## What is included
 
@@ -19,6 +19,7 @@ has, and what every part of the ticket system will stand on.
 | Sign-in | Session cookies, optional passkeys and TOTP two-factor per user, a browser's Kerberos ticket where a keytab and a directory are configured, and an OpenID Connect provider - Keycloak, Authentik, Entra ID, Google - for the accounts their owners linked to it |
 | Live log | The process log, filterable and searchable, for whoever administers |
 | Administration log | Who created, changed or deleted an account, a role, a ticket state, priority or type, saved a setting, switched maintenance mode or restarted the application, kept across restarts and readable under *Settings* by whoever administers |
+| Tickets | Under *Tickets*, the tickets of the queues the reader's role reaches, what is still to do first, narrowed by queue, to the reader's own and by words in the title or number. A ticket is opened with a title, its queue and what was said, and starts new, normal and unclassified unless told otherwise; opened from the list by its number it shows what was written in it, takes a note or a call with the minutes worked, is corrected in the form that opened it, locked - which makes whoever locks a ticket nobody owns its owner - watched, and tells what happened to it by the names things had then. A ticket of a queue the role only reads is shown and not offered for change, and one of a queue the role does not reach is not there at all |
 | Ticket setup | The queues tickets are sorted to - a tree, each with the roles that reach it to read its tickets or to work in it, and nobody else - and the states, priorities and types tickets are sorted by, administered under *Ticket setup* by whoever holds *Set up queues*. Shipped with KIX18's values - seven states, one of each type, five priorities and three types - named in the reader's language; an installation adds its own, and retires a value tickets carry rather than deleting it. What the application moves tickets into by itself - the states new, open, closed and merged, the priority normal, the type unclassified - stays as it shipped |
 | Version | The running build in the footer of every page |
 | API access | Personal tokens, scoped by the owner's current role |

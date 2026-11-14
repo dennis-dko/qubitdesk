@@ -60,6 +60,10 @@
         <path d="M12 2.8 20 6v6.1c0 4.5-3.2 7.8-8 9.1-4.8-1.3-8-4.6-8-9.1V6z"/>
         <path d="m8.8 11.9 2.3 2.4 4.3-4.7"/>
       </symbol>
+      <symbol id="icon-tickets" viewBox="0 0 24 24">
+        <path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5z"/>
+        <path d="M14 5v14" stroke-dasharray="2 2"/>
+      </symbol>
       <symbol id="icon-ticketsetup" viewBox="0 0 24 24">
         <path d="M4 7h9M17 7h3M4 17h3M11 17h9"/>
         <circle cx="15" cy="7" r="2"/>
@@ -189,6 +193,7 @@
     </div>
 
     <nav id="tabs">
+      <button class="tab" data-view="tickets" data-perm="tickets:read" data-i18n="nav.tickets">Tickets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-tickets"/></svg></button>
       <button class="tab" data-view="users" data-perm="users:read" data-i18n="nav.users">Users<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-users"/></svg></button>
       <button class="tab" data-view="roles" data-perm="roles:read" data-i18n="nav.roles">Roles<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-roles"/></svg></button>
       <button class="tab" data-view="ticketsetup" data-perm="queues:write" data-i18n="nav.ticketSetup">Ticket setup<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-ticketsetup"/></svg></button>
@@ -509,6 +514,101 @@
     </section>
 
     <!-- Users -->
+    <!-- Tickets: the list of what the reader's queues hold, one ticket opened
+         from it, and the one form that opens a ticket or corrects the one that
+         is open - told apart by the hidden id, as every form here is. Writing in
+         a ticket is a job of its own, with a form of its own. -->
+    <section id="view-tickets" class="view" hidden>
+      <div class="card" id="ticket-list-card">
+        <h2 data-i18n="nav.tickets">Tickets</h2>
+        <!-- Narrows the list as it is changed; nothing here is sent anywhere but
+             the listing, and a submit only refreshes it. -->
+        <form method="post" id="form-ticket-filter" class="form">
+          <div class="grid">
+            <label data-i18n="field.queue">Queue<select name="queue"></select></label>
+            <label data-i18n="ticket.search">Search<input type="search" name="q" maxlength="255" data-i18n-placeholder="ticket.searchHint" placeholder="title or number"></label>
+          </div>
+          <label class="switch"><input type="checkbox" name="unfinished" checked><span class="switch-track"></span><span class="switch-label" data-i18n="ticket.unfinished">Only what is still to do</span></label>
+          <label class="switch"><input type="checkbox" name="mine"><span class="switch-track"></span><span class="switch-label" data-i18n="ticket.mine">Only my tickets</span></label>
+        </form>
+        <div class="table-wrap">
+          <table id="table-tickets">
+            <thead>
+              <tr>
+                <th data-i18n="ticket.number">Number</th>
+                <th data-i18n="field.title">Title</th>
+                <th data-i18n="field.queue">Queue</th>
+                <th data-i18n="field.state">State</th>
+                <th data-i18n="field.priority">Priority</th>
+                <th data-i18n="ticket.owner">Owner</th>
+                <th data-i18n="ticket.changed">Changed</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="row">
+          <button type="button" class="secondary" id="tickets-previous" data-i18n="ticket.previous">Previous</button>
+          <span class="muted" id="tickets-range"></span>
+          <button type="button" class="secondary" id="tickets-next" data-i18n="ticket.next">Next</button>
+        </div>
+      </div>
+
+      <div class="card" id="ticket-detail" hidden>
+        <h2 id="ticket-heading"></h2>
+        <dl class="ticket-facts" id="ticket-facts"></dl>
+        <div class="row">
+          <button type="button" class="secondary" id="ticket-lock" data-perm="tickets:write"></button>
+          <button type="button" class="secondary" id="ticket-watch"></button>
+          <span id="ticket-delete-slot" data-perm="tickets:delete"></span>
+          <button type="button" class="link" id="ticket-close" data-i18n="ticket.close">back to the list</button>
+        </div>
+        <h3 data-i18n="ticket.articles">What was written</h3>
+        <ol class="ticket-articles" id="ticket-articles"></ol>
+        <form method="post" id="form-article" class="form" data-perm="tickets:write">
+          <h3 data-i18n="ticket.write">Write in the ticket</h3>
+          <div class="grid">
+            <label data-i18n="field.channel">Channel<select name="channel" required></select></label>
+            <label data-i18n="field.minutes">Minutes<input type="number" name="minutes" min="0" max="1440" value="0"></label>
+            <label class="wide" data-i18n="field.subject">Subject<input type="text" name="subject" maxlength="255" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+            <label class="wide" data-i18n="field.body">Text<textarea name="body" rows="5" required></textarea></label>
+          </div>
+          <label class="switch"><input type="checkbox" name="customerVisible"><span class="switch-track"></span><span class="switch-label" data-i18n="ticket.customerVisible">The customer sees it</span></label>
+          <div class="row">
+            <button type="submit" data-i18n="ticket.writeSubmit">Write</button>
+          </div>
+        </form>
+        <details class="ticket-history" id="ticket-history">
+          <summary data-i18n="ticket.history">What happened</summary>
+          <ol id="ticket-history-list"></ol>
+        </details>
+      </div>
+
+      <form method="post" id="form-ticket" class="card form" data-perm="tickets:create,tickets:write">
+        <h2 id="ticket-form-title" data-i18n="ticket.create">Open a ticket</h2>
+        <input type="hidden" name="id">
+        <div class="grid">
+          <label class="wide" data-i18n="field.title">Title<input type="text" name="title" maxlength="255" required></label>
+          <label data-i18n="field.queue">Queue<select name="queueId" required></select></label>
+          <label data-i18n="field.type">Type<select name="typeId"></select></label>
+          <label data-i18n="field.priority">Priority<select name="priorityId"></select></label>
+          <label class="ticket-edit-only" data-i18n="field.state" hidden>State<select name="stateId"></select></label>
+          <label class="ticket-edit-only" data-i18n="field.pendingUntil" hidden>Pending until<input type="date" name="pendingDay"></label>
+          <label class="ticket-edit-only" data-i18n="ticket.pendingTime" hidden>at<input type="time" name="pendingTime"></label>
+          <label class="ticket-edit-only" data-i18n="ticket.owner" hidden>Owner<select name="ownerId"></select></label>
+          <label class="ticket-edit-only" data-i18n="field.responsibleId" hidden>Responsible<select name="responsibleId"></select></label>
+          <label class="ticket-new-only" data-i18n="field.channel">Channel<select name="channel"></select></label>
+          <label class="ticket-new-only" data-i18n="field.minutes">Minutes<input type="number" name="minutes" min="0" max="1440" value="0"></label>
+          <label class="wide ticket-new-only" data-i18n="field.body">Text<textarea name="body" rows="5" required></textarea></label>
+        </div>
+        <label class="switch ticket-new-only"><input type="checkbox" name="customerVisible"><span class="switch-track"></span><span class="switch-label" data-i18n="ticket.customerVisible">The customer sees it</span></label>
+        <div class="row">
+          <button type="submit" id="ticket-submit" data-i18n="ticket.open">Open the ticket</button>
+          <button type="button" class="link" id="ticket-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+        </div>
+      </form>
+    </section>
+
     <section id="view-users" class="view" hidden>
       <!-- One form for adding somebody and for correcting them, told apart by the
            id: the same arrangement the role form uses.

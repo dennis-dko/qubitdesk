@@ -144,6 +144,15 @@ const (
 	HistoryTime        HistoryEvent = "time"
 )
 
+// HistoryEvents lists every kind of thing that happens to a ticket, which is
+// what the interface has a sentence for.
+func HistoryEvents() []HistoryEvent {
+	return []HistoryEvent{
+		HistoryCreated, HistoryTitle, HistoryQueue, HistoryState, HistoryPriority, HistoryType,
+		HistoryOwner, HistoryResponsible, HistoryLock, HistoryPending, HistoryArticle, HistoryTime,
+	}
+}
+
 // MaxTicketTitleLength covers tickets.title, VARCHAR(255).
 const MaxTicketTitleLength = 255
 

@@ -114,45 +114,59 @@ func sorted(set map[string]bool) []string {
 // somebody type a title, press Save and be told the title is invalid; one below
 // it is a limit nobody can reach, which is the kind of number that stays wrong
 // because nothing ever trips over it.
+//
+// Each field is named by its form as well as its name, because a name is not
+// unique on the page. This read the first field of each name in the document
+// until the tickets put a title of 255 characters in front of the header's
+// title of 80 - at which point the header's was no longer checked at all, and
+// nothing said so.
 func TestTheFormLimitsAreTheOnesTheServerEnforces(t *testing.T) {
-	html := asset(t, "/")
+	fields := map[string]markupField{}
+	for _, field := range markupFields(t) {
+		if field.inForm {
+			fields[field.form+"/"+field.attributes["name"]] = field
+		}
+	}
 
-	for field, limit := range map[string]int{
-		"title":       model.MaxTitleLength,
-		"tabTitle":    model.MaxTabTitleLength,
-		"banner":      model.MaxBannerLength,
-		"footerText":  model.MaxFooterTextLength,
-		"legalNotice": model.MaxLegalNoticeLength,
-		"companyName": model.MaxCompanyNameLength,
-		"message":     model.MaintenanceMessageLimit,
+	for key, limit := range map[string]int{
+		"form-branding/title":       model.MaxTitleLength,
+		"form-branding/tabTitle":    model.MaxTabTitleLength,
+		"form-branding/banner":      model.MaxBannerLength,
+		"form-branding/footerText":  model.MaxFooterTextLength,
+		"form-branding/legalNotice": model.MaxLegalNoticeLength,
+		"form-branding/companyName": model.MaxCompanyNameLength,
+		"form-maintenance/message":  model.MaintenanceMessageLimit,
 
 		// The account form bounded the name and not the address beside it, and
 		// the server bounds both - so a long name was caught while typing and a
 		// long address only on pressing Save.
-		"email": model.MaxEmailLength,
+		"form-user/email": model.MaxEmailLength,
 
 		// The form took 120 characters and the server any number, while an
 		// expression listing every minute of an hour is about 170.
-		"syncSchedule": model.MaxScheduleLength,
-	} {
-		t.Run(field, func(t *testing.T) {
-			pattern := regexp.MustCompile(
-				`name="` + regexp.QuoteMeta(field) + `"[^>]*maxlength="(\d+)"`)
+		"form-sync-schedule/syncSchedule": model.MaxScheduleLength,
 
-			match := pattern.FindStringSubmatch(html)
-			if match == nil {
-				t.Fatalf("the %s field has no maxlength, so the form offers to type "+
-					"what the server will refuse", field)
+		"form-ticket/title":    model.MaxTicketTitleLength,
+		"form-article/subject": model.MaxTicketTitleLength,
+	} {
+		t.Run(key, func(t *testing.T) {
+			field, found := fields[key]
+			if !found {
+				t.Fatalf("there is no field %s; this case is checking nothing", key)
 			}
 
-			written, err := strconv.Atoi(match[1])
+			raw, bounded := field.attributes["maxlength"]
+			if !bounded {
+				t.Fatalf("%s has no maxlength, so the form offers to type what the server will refuse", key)
+			}
+
+			written, err := strconv.Atoi(raw)
 			if err != nil {
-				t.Fatalf("maxlength %q is not a number", match[1])
+				t.Fatalf("maxlength %q is not a number", raw)
 			}
 
 			if written != limit {
-				t.Errorf("the form allows %d characters and the server allows %d",
-					written, limit)
+				t.Errorf("the form allows %d characters and the server allows %d", written, limit)
 			}
 		})
 	}

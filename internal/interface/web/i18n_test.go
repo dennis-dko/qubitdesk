@@ -333,6 +333,12 @@ func TestNoTranslationIsUnused(t *testing.T) {
 				}
 			}
 
+			if channel, isChannel := strings.CutPrefix(key, "channel."); isChannel {
+				if slices.Contains(model.AgentChannels(), model.Channel(channel)) {
+					continue
+				}
+			}
+
 			// What a kind of record is called, looked up as t(`entity.${entity}`)
 			// from the first value of a "not found".
 			// TestARefusalWritesItsValuesTheWayTheScreenDoes checks that every kind

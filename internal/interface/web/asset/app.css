@@ -866,10 +866,27 @@ tbody tr.rejected td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 
 .empty { color: var(--muted); font-style: italic; }
 
-/* A ticket's state, worn by statusBadge. The colours of the states come with the
-   ticket list that shows them: a colour nothing can wear is a colour nobody
-   maintains. */
+/* A ticket's state, worn by statusBadge, coloured by the state's type: an
+   installation names its own states, and a rule written for a name would know
+   none of them. */
 .status { border-radius: 999px; font-size: 12px; padding: 2px 9px; border: 1px solid var(--border); }
+.status-new { border-color: var(--log-notice); color: var(--log-notice); }
+.status-open { border-color: var(--accent); color: var(--accent); }
+.status-pending-reminder, .status-pending-auto { border-color: var(--log-warn); color: var(--log-warn); }
+.status-closed, .status-merged { color: var(--muted); }
+.status-removed { border-color: var(--danger); color: var(--danger); }
+
+/* One ticket: what it is as pairs of a word and its value, and what was written
+   in it as it was written - its own line breaks kept, and a long word broken
+   rather than pushing the card wider than the screen. */
+.ticket-facts { display: grid; gap: 4px 16px; grid-template-columns: max-content 1fr; margin: 0 0 12px; }
+.ticket-facts dt { color: var(--muted); }
+.ticket-facts dd { margin: 0; }
+.ticket-articles { list-style: none; margin: 0 0 16px; padding: 0; }
+.ticket-articles > li { border-top: 1px solid var(--border); padding: 10px 0; }
+.ticket-articles > li > p { margin: 0 0 4px; }
+.ticket-article-body { overflow-wrap: anywhere; white-space: pre-wrap; }
+.ticket-history ol { margin: 8px 0 0; padding-left: 20px; }
 
 /* Notices at the foot of the window, the newest nearest the edge: on the right
  * of a wide screen and across a telephone.

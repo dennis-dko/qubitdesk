@@ -118,6 +118,11 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		levels[string(level)] = struct{}{}
 	}
 
+	channels := map[string]struct{}{}
+	for _, channel := range model.AgentChannels() {
+		channels[string(channel)] = struct{}{}
+	}
+
 	for _, family := range []struct {
 		prefix, titles string
 		shipped        map[string]struct{}
@@ -128,6 +133,7 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		{"statetype.", "STATE_TYPE_TITLES", stateTypes},
 		{"followup.", "FOLLOW_UP_TITLES", followUps},
 		{"queueaccess.", "ACCESS_TITLES", levels},
+		{"channel.", "CHANNEL_TITLES", channels},
 	} {
 		english := scriptTitles(t, family.titles)
 

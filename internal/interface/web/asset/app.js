@@ -13,7 +13,10 @@
 const API = '/api/v1';
 
 /** Cached lookups so tables can show names instead of raw ids. */
-const cache = { users: [], roles: [], permissions: [], queues: [] };
+const cache = {
+  users: [], roles: [], permissions: [], queues: [],
+  ticketQueues: [], states: [], priorities: [], types: [],
+};
 
 /**
  * The branding as it was last read.
@@ -1670,10 +1673,13 @@ function entityName(entity) {
   return t(`entity.${entity}`, entity);
 }
 
-function statusBadge(status) {
-  // The class keeps the raw status so the colour rules still match; only the
-  // label is translated.
-  return el('span', { class: `status status-${status}`, text: statusName(status) });
+/**
+ * A ticket's state as a badge: named in the reader's language, coloured by its
+ * type - an installation names its own states, and a colour rule written for a
+ * name would know none of them.
+ */
+function statusBadge(name, type) {
+  return el('span', { class: `status status-${type}`, text: statusName(name) });
 }
 
 /**
@@ -4795,6 +4801,582 @@ function swapTheLabel(node, key, english) {
   setLeadingText(node, t(key, english));
 }
 
+// ----------------------------------------------------------------- tickets
+
+/** The English for how a ticket or an article arrived, which are the server's model.AgentChannels. */
+const CHANNEL_TITLES = {
+  note: 'note',
+  phone: 'phone call',
+};
+
+/** How an article or a ticket arrived, in the reader's language. */
+function channelName(channel) {
+  return t(`channel.${channel}`, CHANNEL_TITLES[channel] ?? channel);
+}
+
+/**
+ * What each kind of history line says, by the server's model.HistoryEvents. The
+ * values are filled in by describeHistory, in the reader's words for each.
+ */
+const HISTORY_SENTENCES = {
+  created: () => t('history.created', 'Opened the ticket'),
+  title: () => t('history.title', 'Changed the title from "{0}" to "{1}"'),
+  queue: () => t('history.queue', 'Moved it from {0} to {1}'),
+  state: () => t('history.state', 'Changed the state from {0} to {1}'),
+  priority: () => t('history.priority', 'Changed the priority from {0} to {1}'),
+  type: () => t('history.type', 'Changed the type from {0} to {1}'),
+  owner: () => t('history.owner', 'Changed the owner from {0} to {1}'),
+  responsible: () => t('history.responsible', 'Changed who is responsible from {0} to {1}'),
+  lock: () => t('history.lock', 'Locked it: {1}'),
+  pending: () => t('history.pending', 'Changed how long it waits from {0} to {1}'),
+  article: () => t('history.article', 'Wrote a {1}'),
+  time: () => t('history.time', 'Noted {1} minutes'),
+};
+
+/** How the ticket list stands: which page, how many to a page, how many in all. */
+const ticketPaging = { page: 1, limit: 25, total: 0 };
+
+/** The ticket that is open, as the server last answered it, or nobody. */
+let openTicketShown = null;
+
+/** The zone a moment is read and written in: the account's, or the browser's before it has one. */
+function readerZone() {
+  return me.user?.effectiveTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/**
+ * A day and a time of day in a zone, as the moment they name.
+ *
+ * Intl reads a moment in a zone but cannot write one, so the offset is found by
+ * reading back: the wall clock taken as UTC, read in the zone, says how far off it
+ * is, and reading once more at the corrected moment settles a day the zone moves
+ * its clocks on.
+ */
+function momentIn(day, time, zone) {
+  const [y, m, d] = day.split('-').map(Number);
+  const [h, mi] = (time || '00:00').split(':').map(Number);
+  const wall = Date.UTC(y, m - 1, d, h, mi);
+
+  const offset = (at) => {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+      timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    }).formatToParts(new Date(at)).map((part) => [part.type, part.value]));
+
+    return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+      Number(parts.hour), Number(parts.minute)) - at;
+  };
+
+  const first = wall - offset(wall);
+
+  return new Date(wall - offset(first)).toISOString();
+}
+
+/** A moment as the day and the time of day it is in a zone, as date and time fields hold them. */
+function dayAndTimeIn(iso, zone) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }).formatToParts(new Date(iso)).map((part) => [part.type, part.value]));
+
+  return { day: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
+/**
+ * Fills the ticket screens, for whoever may read tickets: the lists a ticket is
+ * described by, the page of tickets, and the one that is open, read again.
+ */
+async function loadTickets() {
+  if (!can('tickets:read')) return;
+
+  const [queues, states, priorities, types] = await Promise.all(
+    ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path].map((path) => api(path)),
+  );
+
+  cache.ticketQueues = queues?.items ?? [];
+  cache.states = states?.items ?? [];
+  cache.priorities = priorities?.items ?? [];
+  cache.types = types?.items ?? [];
+
+  const filter = $('#form-ticket-filter');
+  if (filter && !beingEdited(filter)) {
+    fillSelect(filter.elements.queue, queueChoices(cache.ticketQueues),
+      { placeholder: t('ticket.allQueues', 'every queue'), labelKey: 'label', valueKey: 'value' });
+  }
+
+  const form = $('#form-ticket');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillTicketForm(form, null, []);
+
+  await loadTicketPage();
+
+  if (openTicketShown) await openTicket(openTicketShown.id, { keepPlace: true });
+}
+
+/** Queues as choices, by their place in the tree. */
+function queueChoices(queues) {
+  const byId = new Map(cache.ticketQueues.map((queue) => [queue.id, queue]));
+
+  return queues
+    .map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Reads the page of tickets the filter asks for, and draws it. */
+async function loadTicketPage() {
+  const tbody = $('#table-tickets tbody');
+  const filter = $('#form-ticket-filter');
+  if (!tbody || !filter) return;
+
+  const query = new URLSearchParams({ limit: String(ticketPaging.limit), page: String(ticketPaging.page) });
+
+  if (filter.elements.queue.value) query.set('queue', filter.elements.queue.value);
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+  if (filter.elements.unfinished.checked) query.set('unfinished', 'true');
+  if (filter.elements.mine.checked) query.set('owner', 'me');
+
+  const page = await api(`/tickets?${query}`);
+  ticketPaging.total = page?.totalCount ?? 0;
+
+  const byId = new Map(cache.ticketQueues.map((queue) => [queue.id, queue]));
+
+  fillTable(tbody, (page?.items ?? []).map((ticket) => ticketRow(ticket, byId)), 7,
+    t('ticket.empty', 'No tickets.'));
+
+  drawTicketPager();
+}
+
+/** One ticket as a row of the list. */
+function ticketRow(ticket, byId) {
+  const state = cache.states.find((candidate) => candidate.id === ticket.stateId);
+  const priority = cache.priorities.find((candidate) => candidate.id === ticket.priorityId);
+  const queue = byId.get(ticket.queueId);
+
+  return el('tr', {},
+    el('td', { class: 'text' },
+      el('button', { class: 'link', text: ticket.number, onclick: () => openTicket(ticket.id) })),
+    el('td', { class: 'text', text: ticket.title }),
+    el('td', { class: 'text', text: queue ? queuePath(queue, byId) : `#${ticket.queueId}` }),
+    el('td', {}, state ? statusBadge(state.name, state.type) : el('span', { text: `#${ticket.stateId}` })),
+    el('td', { class: 'text', text: priority ? priorityName(priority.name) : '' }),
+    el('td', { class: 'text', text: ticket.ownerName || '–' }),
+    el('td', { text: fmtMoment(ticket.updatedAt) }),
+  );
+}
+
+/** Where the list stands, and the way to the pages either side. */
+function drawTicketPager() {
+  const { page, limit, total } = ticketPaging;
+  const from = total === 0 ? 0 : (page - 1) * limit + 1;
+  const to = Math.min(page * limit, total);
+
+  $('#tickets-range').textContent = fillIn(t('ticket.range', '{0}–{1} of {2}'), [from, to, total]);
+  $('#tickets-previous').disabled = page <= 1;
+  $('#tickets-next').disabled = to >= total;
+}
+
+/**
+ * Opens a ticket: what it is, what was written in it and what happened to it,
+ * and the form holding it for correction.
+ *
+ * A ticket this reader cannot reach any more - moved, or the role changed - is
+ * said to be gone, which is what the server answers, and the list is read again.
+ */
+async function openTicket(id, { keepPlace = false } = {}) {
+  let ticket;
+  let articles;
+  let history;
+  let assignees;
+
+  try {
+    [ticket, articles, history] = await Promise.all([
+      api(`/tickets/${id}`), api(`/tickets/${id}/articles`), api(`/tickets/${id}/history`),
+    ]);
+
+    assignees = (await api(`/tickets/assignees?queue=${ticket.queueId}`))?.items ?? [];
+  } catch (err) {
+    toastFailure(err);
+    closeTicket();
+    await loadTicketPage();
+
+    return;
+  }
+
+  openTicketShown = ticket;
+  drawTicketDetail(ticket, articles?.items ?? [], history?.items ?? []);
+
+  // Corrected only where the reader's role works in its queue: the server
+  // answers any change to a ticket of a queue only read as not found, and a form
+  // that offers what the server refuses teaches somebody the screen is broken.
+  const form = $('#form-ticket');
+  if (form && worksIn(ticket.queueId)) {
+    if (!beingEdited(form) || Number(form.elements.id.value) !== ticket.id) editTicket(form, ticket, assignees);
+  } else if (form?.elements.id.value) {
+    resetTicketForm();
+  }
+
+  const detail = $('#ticket-detail');
+  detail.hidden = false;
+
+  if (!keepPlace) detail.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+/** Whether the reader's role works in the queue - creates and changes its tickets. */
+function worksIn(queueID) {
+  return cache.ticketQueues.find((queue) => queue.id === queueID)?.reach === 'write';
+}
+
+/**
+ * Shows a control of the open ticket where the reader works in its queue and
+ * holds the right the control names, and hides it otherwise.
+ */
+function showWhereWorked(node, works) {
+  node.hidden = !works || (node.dataset.perm ? !can(...node.dataset.perm.split(',')) : false);
+}
+
+/** Closes the ticket that is open and puts the form back to opening one. */
+function closeTicket() {
+  openTicketShown = null;
+  $('#ticket-detail').hidden = true;
+  resetTicketForm();
+}
+
+/** What a ticket is, what was written in it and what happened to it. */
+function drawTicketDetail(ticket, articles, history) {
+  const byId = new Map(cache.ticketQueues.map((queue) => [queue.id, queue]));
+  const state = cache.states.find((candidate) => candidate.id === ticket.stateId);
+  const priority = cache.priorities.find((candidate) => candidate.id === ticket.priorityId);
+  const type = cache.types.find((candidate) => candidate.id === ticket.typeId);
+  const queue = byId.get(ticket.queueId);
+
+  $('#ticket-heading').textContent = `${ticket.number} – ${ticket.title}`;
+
+  const fact = (term, ...description) => [el('dt', { text: term }), el('dd', {}, ...description)];
+  const facts = [
+    ...fact(t('field.queue', 'Queue'), queue ? queuePath(queue, byId) : `#${ticket.queueId}`),
+    ...fact(t('field.state', 'State'), state ? statusBadge(state.name, state.type) : `#${ticket.stateId}`),
+    ...fact(t('field.priority', 'Priority'), priority ? priorityName(priority.name) : ''),
+    ...fact(t('field.type', 'Type'), type ? ticketTypeName(type.name) : ''),
+    ...fact(t('ticket.owner', 'Owner'), ticket.ownerName || t('ticket.nobody', 'nobody')),
+    ...fact(t('field.responsibleId', 'Responsible'), ticket.responsibleName || t('ticket.nobody', 'nobody')),
+    ...fact(t('ticket.locked', 'Locked'), ticket.locked ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no')),
+    ...(ticket.pendingUntil ? fact(t('field.pendingUntil', 'Pending until'), fmtMoment(ticket.pendingUntil)) : []),
+    ...fact(t('ticket.opened', 'Opened'),
+      `${fmtMoment(ticket.createdAt)}${ticket.createdByName ? ` – ${ticket.createdByName}` : ''}`),
+    ...fact(t('ticket.accounted', 'Time noted'),
+      fillIn(t('ticket.minutes', '{0} minutes'), [ticket.accountedMinutes ?? 0])),
+  ];
+
+  $('#ticket-facts').replaceChildren(...facts);
+
+  const works = worksIn(ticket.queueId);
+
+  for (const node of [$('#ticket-lock'), $('#form-article'), $('#ticket-delete-slot')]) {
+    showWhereWorked(node, works);
+  }
+
+  const lock = $('#ticket-lock');
+  lock.textContent = ticket.locked ? t('ticket.unlock', 'Unlock') : t('ticket.lockIt', 'Lock');
+  lock.onclick = () => changeOpenTicket({ locked: !ticket.locked });
+
+  const watch = $('#ticket-watch');
+  watch.textContent = ticket.watching ? t('ticket.unwatch', 'Stop watching') : t('ticket.watchIt', 'Watch');
+  watch.onclick = () => mutate(
+    () => api(`/tickets/${ticket.id}/watch`, { method: ticket.watching ? 'DELETE' : 'PUT' }),
+    ticket.watching ? t('msg.ticketUnwatched', 'No longer watching') : t('msg.ticketWatched', 'Watching'),
+    () => openTicket(ticket.id, { keepPlace: true }),
+  );
+
+  $('#ticket-delete-slot').replaceChildren(deleteButton({
+    label: `${t('field.ticket', 'Ticket')} ${ticket.number}`,
+    path: `/tickets/${ticket.id}`,
+    message: t('msg.ticketDeleted', 'Ticket deleted'),
+    after: async () => { closeTicket(); await refreshAll(); },
+  }));
+
+  $('#ticket-articles').replaceChildren(...articles.map((article) => el('li', {},
+    el('p', { class: 'muted', text: [
+      article.authorName || '–',
+      channelName(article.channel),
+      fmtMoment(article.createdAt),
+      article.customerVisible ? t('ticket.seenByCustomer', 'the customer sees it') : t('ticket.internal', 'internal'),
+    ].join(' · ') }),
+    article.subject ? el('strong', { text: article.subject }) : null,
+    el('div', { class: 'ticket-article-body', text: article.body }),
+  )));
+
+  $('#ticket-history-list').replaceChildren(...history.map((entry) => el('li', {
+    text: `${fmtMoment(entry.at)} ${entry.actorName || '–'}: ${describeHistory(entry)}`,
+  })));
+}
+
+/** One line of a ticket's history, in the reader's words. */
+function describeHistory(entry) {
+  const word = {
+    state: (name) => (name ? statusName(name) : ''),
+    priority: (name) => (name ? priorityName(name) : ''),
+    type: (name) => (name ? ticketTypeName(name) : ''),
+    owner: (name) => name || t('ticket.nobody', 'nobody'),
+    responsible: (name) => name || t('ticket.nobody', 'nobody'),
+    lock: (value) => (value === 'true' ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no')),
+    pending: (value) => (value ? fmtMoment(value) : t('ticket.notWaiting', 'not waiting')),
+    article: (value) => channelName(value),
+  }[entry.event] ?? ((value) => value);
+
+  const sentence = HISTORY_SENTENCES[entry.event];
+
+  return sentence ? fillIn(sentence(), [word(entry.oldValue), word(entry.newValue)]) : entry.event;
+}
+
+/** Changes what the request says about the ticket that is open, and reads it again. */
+function changeOpenTicket(change) {
+  if (!openTicketShown) return;
+
+  const id = openTicketShown.id;
+
+  mutate(
+    () => api(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(change) }),
+    t('msg.ticketSaved', 'Ticket saved'),
+    async () => { await openTicket(id, { keepPlace: true }); await loadTicketPage(); },
+  );
+}
+
+/**
+ * Fills the ticket form's choices. Opening a ticket is offered the queues the
+ * reader works in and the values still offered; correcting one keeps what the
+ * ticket already carries among them, retired or not, because it may stay.
+ */
+function fillTicketForm(form, ticket, assignees) {
+  const offered = (items, current) => items.filter((item) => item.valid || item.id === current);
+  const working = cache.ticketQueues.filter((queue) =>
+    (queue.reach === 'write' && queue.valid) || queue.id === ticket?.queueId);
+
+  fillSelect(form.elements.queueId, queueChoices(working), { labelKey: 'label', valueKey: 'value' });
+
+  fillSelect(form.elements.typeId,
+    offered(cache.types, ticket?.typeId).map((type) => ({ value: String(type.id), label: ticketTypeName(type.name) })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  fillSelect(form.elements.priorityId,
+    offered(cache.priorities, ticket?.priorityId)
+      .map((priority) => ({ value: String(priority.id), label: priorityName(priority.name) })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  fillSelect(form.elements.stateId,
+    offered(cache.states, ticket?.stateId)
+      .filter((state) => state.type !== 'merged' || state.id === ticket?.stateId)
+      .map((state) => ({ value: String(state.id), label: statusName(state.name) })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  fillSelect(form.elements.channel,
+    Object.keys(CHANNEL_TITLES).map((channel) => ({ value: channel, label: channelName(channel) })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  for (const [field, current, name] of [
+    ['ownerId', ticket?.ownerId, ticket?.ownerName],
+    ['responsibleId', ticket?.responsibleId, ticket?.responsibleName],
+  ]) {
+    const people = assignees.map((person) => ({ value: String(person.id), label: person.name }));
+    if (current && !people.some((person) => person.value === String(current))) {
+      people.push({ value: String(current), label: name || `#${current}` });
+    }
+
+    fillSelect(form.elements[field], people,
+      { placeholder: t('ticket.nobody', 'nobody'), labelKey: 'label', valueKey: 'value' });
+  }
+
+  if (!ticket) {
+    const shipped = (items, name) => items.find((item) => item.name === name)?.id;
+
+    form.elements.typeId.value = String(shipped(cache.types, 'unclassified') ?? form.elements.typeId.value);
+    form.elements.priorityId.value = String(shipped(cache.priorities, 'normal') ?? form.elements.priorityId.value);
+  }
+}
+
+/**
+ * Shows the fields of one of the form's two jobs. The text a ticket is opened
+ * with goes with the opening: a hidden control that is still required cannot be
+ * submitted past and cannot be scrolled to, so it stops being required with it.
+ */
+function showTicketJob(form, correcting) {
+  for (const label of $$('.ticket-new-only', form)) label.hidden = correcting;
+  for (const label of $$('.ticket-edit-only', form)) label.hidden = !correcting;
+
+  form.elements.body.required = !correcting;
+}
+
+/** Puts a ticket into the form, to correct it. */
+function editTicket(form, ticket, assignees) {
+  fillTicketForm(form, ticket, assignees);
+  showTicketJob(form, true);
+
+  form.elements.id.value = String(ticket.id);
+  form.elements.title.value = ticket.title;
+  form.elements.queueId.value = String(ticket.queueId);
+  form.elements.typeId.value = String(ticket.typeId);
+  form.elements.priorityId.value = String(ticket.priorityId);
+  form.elements.stateId.value = String(ticket.stateId);
+  form.elements.ownerId.value = ticket.ownerId ? String(ticket.ownerId) : '';
+  form.elements.responsibleId.value = ticket.responsibleId ? String(ticket.responsibleId) : '';
+
+  const waiting = ticket.pendingUntil ? dayAndTimeIn(ticket.pendingUntil, readerZone()) : { day: '', time: '' };
+  setDateField(form.elements.pendingDay, waiting.day);
+  form.elements.pendingTime.value = waiting.time;
+
+  // Drawn rather than declared with a key, because it carries the ticket's
+  // number; see editRole for why the key has to come off.
+  const heading = $('#ticket-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('ticketFormTitle', () => {
+    heading.textContent = t('ticket.edit', 'Correct ticket {0}').replace('{0}', ticket.number);
+  });
+
+  swapTheLabel($('#ticket-submit'), 'action.save', 'Save');
+  $('#ticket-cancel').hidden = false;
+}
+
+/** Puts the form back to opening a ticket. */
+function resetTicketForm() {
+  const form = $('#form-ticket');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  setDateField(form.elements.pendingDay, '');
+
+  fillTicketForm(form, null, []);
+  showTicketJob(form, false);
+
+  stopRedrawing('ticketFormTitle');
+  swapTheLabel($('#ticket-form-title'), 'ticket.create', 'Open a ticket');
+  swapTheLabel($('#ticket-submit'), 'ticket.open', 'Open the ticket');
+  $('#ticket-cancel').hidden = true;
+}
+
+/**
+ * Sends the ticket form: a new ticket with the text it starts from, or the
+ * correction of the one that is open.
+ *
+ * A correction says nobody out loud, with clearOwner and clearResponsible, since
+ * an id sent as nothing cannot be told apart from one not sent. A moment to wait
+ * for goes only with a state that waits: the server refuses one for any other,
+ * rather than quietly dropping it.
+ */
+function saveTicket(form) {
+  const id = form.elements.id.value;
+  const value = (name) => (form.elements[name].value ? Number(form.elements[name].value) : undefined);
+
+  if (!id) {
+    const body = JSON.stringify({
+      title: form.elements.title.value.trim(),
+      queueId: value('queueId'),
+      typeId: value('typeId'),
+      priorityId: value('priorityId'),
+      channel: form.elements.channel.value,
+      customerVisible: form.elements.customerVisible.checked,
+      body: form.elements.body.value,
+      minutes: Number(form.elements.minutes.value) || 0,
+    });
+
+    mutate(() => api('/tickets', { method: 'POST', body }), t('msg.ticketOpened', 'Ticket opened'),
+      async (opened) => {
+        resetTicketForm();
+        await loadTicketPage();
+        if (opened?.id) await openTicket(opened.id);
+      });
+
+    return;
+  }
+
+  const state = cache.states.find((candidate) => candidate.id === value('stateId'));
+  const waits = state && (state.type === 'pending-reminder' || state.type === 'pending-auto');
+  const day = form.elements.pendingDay.value;
+
+  const change = {
+    title: form.elements.title.value.trim(),
+    queueId: value('queueId'),
+    typeId: value('typeId'),
+    priorityId: value('priorityId'),
+    stateId: value('stateId'),
+    ...(value('ownerId') ? { ownerId: value('ownerId') } : { clearOwner: true }),
+    ...(value('responsibleId') ? { responsibleId: value('responsibleId') } : { clearResponsible: true }),
+    ...(waits && day ? { pendingUntil: momentIn(day, form.elements.pendingTime.value, readerZone()) } : {}),
+  };
+
+  mutate(() => api(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(change) }),
+    t('msg.ticketSaved', 'Ticket saved'),
+    async () => { await openTicket(Number(id), { keepPlace: true }); await loadTicketPage(); });
+}
+
+/** Writes the article form's text in the ticket that is open. */
+function saveArticle(form) {
+  if (!openTicketShown) return;
+
+  const id = openTicketShown.id;
+  const body = JSON.stringify({
+    channel: form.elements.channel.value,
+    customerVisible: form.elements.customerVisible.checked,
+    subject: form.elements.subject.value.trim(),
+    body: form.elements.body.value,
+    minutes: Number(form.elements.minutes.value) || 0,
+  });
+
+  mutate(() => api(`/tickets/${id}/articles`, { method: 'POST', body }), t('msg.articleWritten', 'Written'),
+    async () => { form.reset(); await openTicket(id, { keepPlace: true }); await loadTicketPage(); });
+}
+
+/** Wires the ticket screens' forms and buttons. */
+function wireTickets() {
+  const filter = $('#form-ticket-filter');
+
+  const refilter = () => {
+    ticketPaging.page = 1;
+    loadTicketPage();
+  };
+
+  filter.addEventListener('submit', (e) => { e.preventDefault(); refilter(); });
+  filter.addEventListener('change', refilter);
+
+  let typing;
+  filter.elements.q.addEventListener('input', () => {
+    clearTimeout(typing);
+    typing = setTimeout(refilter, 300);
+  });
+
+  $('#tickets-previous').addEventListener('click', () => {
+    ticketPaging.page = Math.max(1, ticketPaging.page - 1);
+    loadTicketPage();
+  });
+
+  $('#tickets-next').addEventListener('click', () => {
+    ticketPaging.page += 1;
+    loadTicketPage();
+  });
+
+  $('#ticket-close').addEventListener('click', closeTicket);
+  // Back to what the open ticket says: the form is reset first, which ends its
+  // being edited, so that reading the ticket again is allowed to fill it.
+  $('#ticket-cancel').addEventListener('click', () => {
+    if (!openTicketShown) {
+      resetTicketForm();
+
+      return;
+    }
+
+    $('#form-ticket').reset();
+    openTicket(openTicketShown.id, { keepPlace: true });
+  });
+
+  $('#form-ticket').addEventListener('submit', (e) => { e.preventDefault(); saveTicket(e.target); });
+
+  const article = $('#form-article');
+  fillSelect(article.elements.channel,
+    Object.keys(CHANNEL_TITLES).map((channel) => ({ value: channel, label: channelName(channel) })),
+    { labelKey: 'label', valueKey: 'value' });
+  article.addEventListener('submit', (e) => { e.preventDefault(); saveArticle(e.target); });
+}
+
 // ------------------------------------------------- what tickets are sorted by
 
 /** The English for the states a ticket ships with, by the identifier each is stored under. */
@@ -7766,6 +8348,10 @@ function forgetTheLastAccount() {
   cache.roles = [];
   cache.permissions = [];
   cache.queues = [];
+  cache.ticketQueues = [];
+  cache.states = [];
+  cache.priorities = [];
+  cache.types = [];
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -8178,6 +8764,24 @@ const TOUR_STEPS = [
     text: () => t('tour.roles.text',
       'A role is a set of rights, and each one is enforced by real code rather than by a '
       + 'hidden button. Tick what the role may do; every account holding it changes with it.'),
+  },
+  {
+    target: '#ticket-list-card',
+    view: 'tickets',
+    permission: 'tickets:read',
+    title: () => t('tour.tickets.title', 'The tickets of your queues'),
+    text: () => t('tour.tickets.text',
+      'Every ticket in a queue your role reaches, what is still to do first. Open one by its number '
+      + 'to read what was written in it, write in it, and see what happened to it.'),
+  },
+  {
+    target: '#form-ticket',
+    view: 'tickets',
+    permission: 'tickets:create',
+    title: () => t('tour.openTicket.title', 'Opening a ticket'),
+    text: () => t('tour.openTicket.text',
+      'A title, the queue it goes to and what was said - the rest starts as the installation '
+      + 'ships it, and can be corrected here once the ticket is open.'),
   },
   {
     target: '#queue-card',
@@ -12676,6 +13280,7 @@ async function refreshAll() {
   // Roles first: the user table renders a role picker from them.
   await loadRoles();
   await loadTicketSetup();
+  await loadTickets();
   await loadUsers();
   await loadAdmin();
   await loadTokens();
@@ -12741,6 +13346,8 @@ function wireForms() {
   });
 
   $('#role-reset').addEventListener('click', resetRoleForm);
+
+  wireTickets();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();
