@@ -620,11 +620,24 @@ func main() {
 
 	users := appservice.NewUserApplicationService(userRepo, roleRepo, userRepo, userRepo)
 	roles := appservice.NewRoleApplicationService(roleRepo)
-	queues := appservice.NewQueueApplicationService(sqldb.NewQueueRepository(db, cfg.Dialect), roleRepo)
+	queueRepo := sqldb.NewQueueRepository(db, cfg.Dialect)
+	catalogRepos := appservice.TicketCatalogRepositories{
+		States:     sqldb.NewTicketStateRepository(db, cfg.Dialect),
+		Priorities: sqldb.NewTicketPriorityRepository(db, cfg.Dialect),
+		Types:      sqldb.NewTicketTypeRepository(db, cfg.Dialect),
+	}
+	queues := appservice.NewQueueApplicationService(queueRepo, roleRepo)
 	ticketCatalog := appservice.NewTicketCatalogApplicationService(
-		sqldb.NewTicketStateRepository(db, cfg.Dialect),
-		sqldb.NewTicketPriorityRepository(db, cfg.Dialect),
-		sqldb.NewTicketTypeRepository(db, cfg.Dialect))
+		catalogRepos.States, catalogRepos.Priorities, catalogRepos.Types)
+	tickets := appservice.NewTicketApplicationService(sqldb.NewTicketRepository(db, cfg.Dialect), queueRepo,
+		catalogRepos, userRepo, roleRepo, func(ctx context.Context) string {
+			name, err := settingsService.Timezone(ctx)
+			if err != nil {
+				return model.DefaultTimezone
+			}
+
+			return name
+		}).WithMetrics(app.Metrics())
 
 	// What this installation is called in a language, wherever it has to name
 	// itself: the prompt a passkey device shows.
@@ -952,6 +965,7 @@ func main() {
 		Roles:    rest.NewRoleHandler(roles, authorizer),
 		Catalog:  rest.NewTicketCatalogHandler(ticketCatalog, authorizer),
 		Queues:   rest.NewQueueHandler(queues, authorizer),
+		Tickets:  rest.NewTicketHandler(tickets, authorizer),
 		Me:       rest.NewMeHandler(auth, sessions, authorizer, instanceTimezone),
 		Push:     rest.NewPushHandler(push, authorizer),
 		Tokens:   rest.NewAPITokenHandler(apiTokens, authorizer),
@@ -1087,6 +1101,8 @@ func registerBusinessMetrics(app *gofr.App) {
 		"Accounts the directory synchronisation created or deleted.")
 	m.NewCounter(appservice.MetricDirectoryRuns,
 		"Scheduled directory synchronisations, by what each came to.")
+	m.NewCounter(appservice.MetricTicketsOpened,
+		"Tickets opened, by how they arrived.")
 }
 
 // tlsShutdownGrace bounds how long the HTTPS listener is given to drain.

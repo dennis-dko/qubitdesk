@@ -8,7 +8,7 @@ import "context"
 // milliseconds while nobody has been able to sign in since the directory changed,
 // and app_http_response looks the same either way.
 //
-// So these three measure the work rather than the plumbing, and each one is here
+// So these measure the work rather than the plumbing, and each one is here
 // because somebody would act on it:
 //
 //   - refused sign-ins, which is either a directory that has stopped answering
@@ -17,7 +17,9 @@ import "context"
 //     one operation here that removes people, leaving their tickets without an
 //     owner;
 //   - what each scheduled synchronisation came to, because GoFr counts a job
-//     that returned as a success, and a refused run returns like one that worked.
+//     that returned as a success, and a refused run returns like one that worked;
+//   - tickets opened, by how they arrived, which is the desk's load - and, once
+//     mail arrives by itself, the first sign that it has stopped arriving.
 //
 // Deliberately absent: anything labelled with a user, an address or a queue
 // name. A label is a time series, and one per person is both a memory leak in
@@ -35,6 +37,9 @@ const (
 	// MetricDirectoryRuns counts what each scheduled synchronisation came to,
 	// labelled "outcome" with one of the DirectoryRun values.
 	MetricDirectoryRuns = "gts_directory_scheduled_runs_total"
+	// MetricTicketsOpened counts the tickets opened, labelled "channel" with how
+	// each arrived: a closed set, the model's channels.
+	MetricTicketsOpened = "gts_tickets_opened_total"
 )
 
 // What a scheduled synchronisation came to. A closed set, because it is a label.

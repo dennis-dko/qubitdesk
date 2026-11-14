@@ -10,6 +10,10 @@ import (
 type TicketStateRepository interface {
 	GetAll(ctx context.Context) ([]*model.TicketState, error)
 	GetByID(ctx context.Context, id uint) (*model.TicketState, error)
+
+	// GetByName finds a state by its name, which is how the code finds the ones
+	// it moves tickets into by itself.
+	GetByName(ctx context.Context, name string) (*model.TicketState, error)
 	Save(ctx context.Context, state *model.TicketState) (*model.TicketState, error)
 	Update(ctx context.Context, state *model.TicketState) (*model.TicketState, error)
 	Delete(ctx context.Context, id uint) error
@@ -24,6 +28,7 @@ type TicketStateRepository interface {
 type TicketPriorityRepository interface {
 	GetAll(ctx context.Context) ([]*model.TicketPriority, error)
 	GetByID(ctx context.Context, id uint) (*model.TicketPriority, error)
+	GetByName(ctx context.Context, name string) (*model.TicketPriority, error)
 	Save(ctx context.Context, priority *model.TicketPriority) (*model.TicketPriority, error)
 	Update(ctx context.Context, priority *model.TicketPriority) (*model.TicketPriority, error)
 	Delete(ctx context.Context, id uint) error
@@ -37,6 +42,7 @@ type TicketPriorityRepository interface {
 type TicketTypeRepository interface {
 	GetAll(ctx context.Context) ([]*model.TicketType, error)
 	GetByID(ctx context.Context, id uint) (*model.TicketType, error)
+	GetByName(ctx context.Context, name string) (*model.TicketType, error)
 	Save(ctx context.Context, kind *model.TicketType) (*model.TicketType, error)
 	Update(ctx context.Context, kind *model.TicketType) (*model.TicketType, error)
 	Delete(ctx context.Context, id uint) error

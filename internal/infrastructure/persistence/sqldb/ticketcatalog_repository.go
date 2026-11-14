@@ -45,7 +45,7 @@ type catalog[T any] struct {
 
 // catalogStatements are one table's statements.
 type catalogStatements struct {
-	all, byID, insert, update, delete, countTickets string
+	all, byID, byName, insert, update, delete, countTickets string
 }
 
 func (c *catalog[T]) GetAll(ctx context.Context) ([]*T, error) {
@@ -77,6 +77,19 @@ func (c *catalog[T]) GetByID(ctx context.Context, id uint) (*T, error) {
 	item, err := c.scan(c.db.QueryRowContext(ctx, c.rebind(c.stmts.byID), id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, c.missing(strconv.FormatUint(uint64(id), 10))
+	}
+
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+
+	return item, nil
+}
+
+func (c *catalog[T]) GetByName(ctx context.Context, name string) (*T, error) {
+	item, err := c.scan(c.db.QueryRowContext(ctx, c.rebind(c.stmts.byName), name))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, c.missing(name)
 	}
 
 	if err != nil {
@@ -157,6 +170,7 @@ func NewTicketStateRepository(db DB, dialect string) *TicketStateRepository {
 		stmts: catalogStatements{
 			all:          "SELECT id, name, state_type, description, valid, is_system FROM ticket_states ORDER BY id",
 			byID:         "SELECT id, name, state_type, description, valid, is_system FROM ticket_states WHERE id = ?",
+			byName:       "SELECT id, name, state_type, description, valid, is_system FROM ticket_states WHERE name = ?",
 			insert:       "INSERT INTO ticket_states (name, state_type, description, valid) VALUES (?, ?, ?, ?)",
 			update:       "UPDATE ticket_states SET name = ?, state_type = ?, description = ?, valid = ? WHERE id = ?",
 			delete:       "DELETE FROM ticket_states WHERE id = ?",
@@ -206,6 +220,7 @@ func NewTicketPriorityRepository(db DB, dialect string) *TicketPriorityRepositor
 			all: "SELECT id, name, level, description, valid, is_system FROM ticket_priorities " +
 				"ORDER BY level, id",
 			byID:         "SELECT id, name, level, description, valid, is_system FROM ticket_priorities WHERE id = ?",
+			byName:       "SELECT id, name, level, description, valid, is_system FROM ticket_priorities WHERE name = ?",
 			insert:       "INSERT INTO ticket_priorities (name, level, description, valid) VALUES (?, ?, ?, ?)",
 			update:       "UPDATE ticket_priorities SET name = ?, level = ?, description = ?, valid = ? WHERE id = ?",
 			delete:       "DELETE FROM ticket_priorities WHERE id = ?",
@@ -249,6 +264,7 @@ func NewTicketTypeRepository(db DB, dialect string) *TicketTypeRepository {
 		stmts: catalogStatements{
 			all:          "SELECT id, name, description, valid, is_system FROM ticket_types ORDER BY id",
 			byID:         "SELECT id, name, description, valid, is_system FROM ticket_types WHERE id = ?",
+			byName:       "SELECT id, name, description, valid, is_system FROM ticket_types WHERE name = ?",
 			insert:       "INSERT INTO ticket_types (name, description, valid) VALUES (?, ?, ?)",
 			update:       "UPDATE ticket_types SET name = ?, description = ?, valid = ? WHERE id = ?",
 			delete:       "DELETE FROM ticket_types WHERE id = ?",

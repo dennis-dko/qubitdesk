@@ -13,6 +13,7 @@ type Handlers struct {
 	Roles    *rest.RoleHandler
 	Catalog  *rest.TicketCatalogHandler
 	Queues   *rest.QueueHandler
+	Tickets  *rest.TicketHandler
 	Me       *rest.MeHandler
 	Settings *rest.SettingsHandler
 	Tokens   *rest.APITokenHandler
@@ -189,6 +190,21 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.PUT(base+"/roles/{id}", h.Roles.Update)
 	app.DELETE(base+"/roles/{id}", h.Roles.Delete)
 	app.GET(base+"/permissions", h.Roles.Permissions)
+
+	// The tickets, reached through their queues. assignees is read before
+	// {id}, as the export routes are: the router matches the first pattern that
+	// fits, and "assignees" read as an id is the failure to avoid.
+	app.GET(base+"/tickets", h.Tickets.List)
+	app.GET(base+"/tickets/assignees", h.Tickets.Assignees)
+	app.POST(base+"/tickets", h.Tickets.Create)
+	app.GET(base+"/tickets/{id}", h.Tickets.Get)
+	app.PUT(base+"/tickets/{id}", h.Tickets.Update)
+	app.DELETE(base+"/tickets/{id}", h.Tickets.Delete)
+	app.GET(base+"/tickets/{id}/articles", h.Tickets.Articles)
+	app.POST(base+"/tickets/{id}/articles", h.Tickets.AddArticle)
+	app.GET(base+"/tickets/{id}/history", h.Tickets.History)
+	app.PUT(base+"/tickets/{id}/watch", h.Tickets.Watch)
+	app.DELETE(base+"/tickets/{id}/watch", h.Tickets.Unwatch)
 
 	// Where tickets are sorted to, and which role reaches each queue.
 	app.GET(base+"/queues", h.Queues.List)

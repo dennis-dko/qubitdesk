@@ -98,6 +98,11 @@ running instance.
 | `PUT` | `/api/v1/users/{id}/role` | Role |
 | `GET/POST/PUT/DELETE` | `/api/v1/roles`, `/roles/{id}` | Roles |
 | `GET` | `/api/v1/permissions` | Every enforced permission |
+| `GET/POST/PUT/DELETE` | `/api/v1/tickets`, `/tickets/{id}` | The tickets, reached through their queues: reading takes `tickets:read` and a queue the caller's role reaches, opening and changing take `tickets:create` or `tickets:write` and a queue it works in, deleting `tickets:delete`; a ticket out of reach is not found. Listing is paged - `limit` at most 200, refused above - and filters by `queue`, `state`, `unfinished`, `owner` (an id or `me`) and `q` |
+| `GET/POST` | `/api/v1/tickets/{id}/articles` | What is written in a ticket - a note or a call, with the minutes worked |
+| `GET` | `/api/v1/tickets/{id}/history` | What happened to a ticket, by the names things had then |
+| `PUT/DELETE` | `/api/v1/tickets/{id}/watch` | Watching a ticket |
+| `GET` | `/api/v1/tickets/assignees?queue=` | Who a ticket in a queue can be given to |
 | `GET/POST/PUT/DELETE` | `/api/v1/queues`, `/queues/{id}` | Where tickets are sorted to and which role reaches each; anybody without `queues:write` is shown only the queues their role reaches, and one it does not reach is not found |
 | `GET/POST/PUT/DELETE` | `/api/v1/ticket-states`, `/ticket-priorities`, `/ticket-types` and each `/{id}` | What tickets are sorted by; reading takes `tickets:read` or `queues:write`, changing takes `queues:write`, and what the code relies on stays as it shipped |
 | `GET/PUT` | `/api/v1/settings/...` | Branding, database, LDAP, sign-in provider, public holidays, metrics and tracing |
@@ -120,6 +125,7 @@ somebody would act on it:
 | `gts_signin_failures_total` | refused sign-ins, by reason — `credentials` is somebody guessing, `totp` a second factor that did not take, `directory` a directory that stopped answering, `database` this installation's own database that did |
 | `gts_directory_accounts_total` | accounts the synchronisation created or deleted — the one operation that removes people |
 | `gts_directory_scheduled_runs_total` | what each scheduled synchronisation came to — `completed`, `refused` by a guard, or `failed`; GoFr's own `app_cron_job_success` counts all three as a success |
+| `gts_tickets_opened_total` | tickets opened, by how they arrived — `note` or `phone` while agents open them by hand; the desk's load, and once mail arrives by itself the first sign that it has stopped |
 
 None of them carries a user, an address or a ticket as a label. A label is
 a time series: one per person is both a memory leak in the collector and a list

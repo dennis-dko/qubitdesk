@@ -2159,6 +2159,198 @@
           }
         }
       }
+    },
+    "/tickets": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List tickets",
+        "description": "Takes `tickets:read`. One page of the tickets in the queues the caller reaches, the most recently changed first, and `totalCount` saying how many there are altogether. `queue` narrows to one queue, `state` to a comma-separated list of state ids, `unfinished=true` to tickets somebody still has to do something about, `owner` to an agent's id or `me`, and `q` to a title or number holding the words. `limit` is 50 unless given and at most 200 - more is refused rather than quietly lowered - and `page` counts from 1.",
+        "responses": {
+          "200": {
+            "description": "A page of tickets"
+          },
+          "400": {
+            "description": "A limit above 200, or a filter that is not a number"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Open a ticket",
+        "description": "Takes `tickets:create` and a queue the caller's role works in and that still takes tickets. Needs a `title`, a `queueId` and the `body` of the article it starts from, written as a `note` or a `phone` call (`channel`, a note unless said) and shown to the customer only when `customerVisible`; `minutes` notes the time worked for it. `stateId`, `priorityId` and `typeId` default to new, normal and unclassified; a pending state needs `pendingUntil` in the future, and merged is reached by merging and never chosen. The number is the day in the installation's zone and the id.",
+        "responses": {
+          "201": {
+            "description": "Opened"
+          },
+          "400": {
+            "description": "A field the ticket cannot be opened with"
+          },
+          "404": {
+            "description": "The queue is not reached"
+          },
+          "409": {
+            "description": "The queue is only read, or something chosen is no longer offered"
+          }
+        }
+      }
+    },
+    "/tickets/assignees": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Who a ticket in a queue can be given to",
+        "description": "Takes `tickets:read` and a `queue` the caller reaches: the accounts on the staff side whose role works tickets there.",
+        "responses": {
+          "200": {
+            "description": "Accounts"
+          },
+          "404": {
+            "description": "The queue is not reached"
+          }
+        }
+      }
+    },
+    "/tickets/{id}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read a ticket",
+        "description": "Takes `tickets:read`. With the minutes noted on it and whether the caller watches it. A ticket is reached through its queue, and one in a queue the caller's role does not reach is not found rather than refused.",
+        "responses": {
+          "200": {
+            "description": "Ticket"
+          },
+          "404": {
+            "description": "Not found, or not reached"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change a ticket",
+        "description": "Takes `tickets:write`; a field left out stays as it was, and every change is written to the ticket's history by the names things had then. Moving it takes working in the queue it goes to. `clearOwner` and `clearResponsible` take the person off, because an id sent as null cannot be told apart from one not sent. `locked` keeps it to its owner, and locking a ticket nobody owns makes the caller its owner. A pending state needs `pendingUntil` in the future unless the ticket already waits for one; leaving it drops the moment. Changing it takes the caller's role working in its queue, or `queues:write`. A ticket is reached through its queue, and one in a queue the caller's role does not reach is not found rather than refused.",
+        "responses": {
+          "200": {
+            "description": "Changed"
+          },
+          "400": {
+            "description": "A field the ticket cannot be stored with"
+          },
+          "404": {
+            "description": "Not found, or not worked in"
+          },
+          "409": {
+            "description": "Something chosen is no longer offered"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete a ticket",
+        "description": "Takes `tickets:delete`, for what should never have been a ticket - a finished one is closed. Takes everything written in it along. Changing it takes the caller's role working in its queue, or `queues:write`. A ticket is reached through its queue, and one in a queue the caller's role does not reach is not found rather than refused.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found, or not worked in"
+          }
+        }
+      }
+    },
+    "/tickets/{id}/articles": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read a ticket's articles",
+        "description": "Takes `tickets:read`, oldest first. A ticket is reached through its queue, and one in a queue the caller's role does not reach is not found rather than refused.",
+        "responses": {
+          "200": {
+            "description": "Articles"
+          },
+          "404": {
+            "description": "Not found, or not reached"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Write in a ticket",
+        "description": "Takes `tickets:write`. A `note` or a `phone` call with a `body`, shown to the customer only when `customerVisible`, with `minutes` for the time worked. Changing it takes the caller's role working in its queue, or `queues:write`. A ticket is reached through its queue, and one in a queue the caller's role does not reach is not found rather than refused.",
+        "responses": {
+          "201": {
+            "description": "Written"
+          },
+          "400": {
+            "description": "A field the article cannot be stored with"
+          },
+          "404": {
+            "description": "Not found, or not worked in"
+          }
+        }
+      }
+    },
+    "/tickets/{id}/history": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read a ticket's history",
+        "description": "Takes `tickets:read`: who did what to the ticket, oldest first, with what it was and what it became, by the names things had then. A ticket is reached through its queue, and one in a queue the caller's role does not reach is not found rather than refused.",
+        "responses": {
+          "200": {
+            "description": "History"
+          },
+          "404": {
+            "description": "Not found, or not reached"
+          }
+        }
+      }
+    },
+    "/tickets/{id}/watch": {
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Watch a ticket",
+        "description": "Takes `tickets:read`; watching twice is watching once. A ticket is reached through its queue, and one in a queue the caller's role does not reach is not found rather than refused.",
+        "responses": {
+          "200": {
+            "description": "Watching"
+          },
+          "404": {
+            "description": "Not found, or not reached"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Stop watching a ticket",
+        "description": "Takes `tickets:read`. A ticket is reached through its queue, and one in a queue the caller's role does not reach is not found rather than refused.",
+        "responses": {
+          "204": {
+            "description": "No longer watching"
+          },
+          "404": {
+            "description": "Not found, or not reached"
+          }
+        }
+      }
     }
   },
   "components": {

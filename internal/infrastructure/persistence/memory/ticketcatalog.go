@@ -56,6 +56,16 @@ func (c *catalog[T]) GetByID(_ context.Context, id uint) (*T, error) {
 	return c.items.get(id)
 }
 
+func (c *catalog[T]) GetByName(_ context.Context, name string) (*T, error) {
+	for _, item := range c.items.all() {
+		if c.name(item) == name {
+			return item, nil
+		}
+	}
+
+	return nil, apperror.NotFound(c.items.entity, name)
+}
+
 func (c *catalog[T]) Save(_ context.Context, item *T) (*T, error) {
 	if c.nameTaken(item) {
 		return nil, c.taken(c.name(item))
