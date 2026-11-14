@@ -146,7 +146,7 @@ func TestNonGetRequestsPassThrough(t *testing.T) {
 // A deep link must render the app rather than 404, so a browser reload on a
 // client-side route still works.
 func TestUnknownUIPathFallsBackToIndex(t *testing.T) {
-	rec := get(t, http.MethodGet, "/projects/42")
+	rec := get(t, http.MethodGet, "/tickets/42")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)

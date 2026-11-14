@@ -28,8 +28,9 @@ func saysItRemoved(log, email string) bool {
 // A run started from the screen leaves a line naming each account it removed.
 //
 // That line is the only record there is. The account is gone, and with it every
-// row that named it - the entries, the projects, the sessions - so afterwards
-// nothing in the database says there was ever such a person. The handler wrote
+// row that was its own - its tokens, its sessions, its watch on tickets - while
+// the tickets it owned keep no name, so afterwards nothing in the database says
+// who there was. The handler wrote
 // the line and nothing checked that it did.
 func TestADirectoryRunFromTheScreenSaysWhomItRemoved(t *testing.T) {
 	t.Parallel()

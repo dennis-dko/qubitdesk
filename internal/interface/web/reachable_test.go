@@ -365,8 +365,9 @@ func shippedRoleTitles(t *testing.T) map[string]string {
 
 // Nothing on screen asks which person.
 //
-// Four controls used to: the booking form, the entry filter, the calendar and the
-// overtime form each offered a dropdown of colleagues. They were built when a role
+// Four controls did in the time recording this was cloned from: the booking form,
+// the entry filter, the calendar and the overtime form each offered a dropdown of
+// colleagues. They were built when a role
 // could hold timesheets:read:all, and they never worked as they read even then - the
 // account that administers colleagues does not read what they recorded, so it was
 // offered every name and every choice but its own came back 403. The filter was worse:

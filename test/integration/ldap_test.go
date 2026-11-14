@@ -176,7 +176,7 @@ func TestADirectoryAccountCanSignInAndIsCreatedLocally(t *testing.T) {
 		t.Errorf("the address came back as %q", me.User.Email)
 	}
 
-	if me.User.Role != "user" {
+	if me.User.Role != "agent" {
 		t.Errorf("the account got the role %q, want the configured default", me.User.Role)
 	}
 
@@ -206,8 +206,8 @@ func TestADirectoryAccountStartsWithTheConfiguredDefaultRole(t *testing.T) {
 
 	admin.must(admin.api(http.MethodPost, "/roles", map[string]any{
 		"name":        "contractor",
-		"description": "Keeps their own time",
-		"permissions": []string{"timesheets:read:own", "timesheets:write:own"},
+		"description": "Works tickets for a while",
+		"permissions": []string{"tickets:read", "tickets:write"},
 	}), http.StatusCreated)
 
 	settings := ldapSettings(host, port, ldapBaseDN)
@@ -279,7 +279,8 @@ func TestAWrongDirectoryPasswordIsRefused(t *testing.T) {
 //
 // Measured with a probe before this was refused: Alice's sign-in landed on the
 // account under her address that recorded another entry, and wrote her identifier
-// over its own - the predecessor's hours and projects were hers from then on. The
+// over its own - the predecessor's account and everything it had done were hers
+// from then on. The
 // answer stays as vague as any refused sign-in, so the line in the log is all an
 // administrator has to go on when somebody says their password is not taken.
 func TestADirectorySignInIsRefusedTheAccountOfAnotherEntry(t *testing.T) {
@@ -457,10 +458,10 @@ type SyncPreview struct {
 	AbortValues    []any  `json:"abortValues"`
 
 	// Candidates are the accounts a real run would delete, with the number of
-	// time entries that would go with each.
+	// unfinished tickets each owns, which would lose their owner.
 	Candidates []struct {
-		Email      string `json:"email"`
-		Timesheets int    `json:"timesheets"`
+		Email   string `json:"email"`
+		Tickets int    `json:"tickets"`
 	} `json:"candidates"`
 
 	// Deleted are the accounts a run removed; empty for a preview.
@@ -630,8 +631,8 @@ func TestAnAccountThatCanSignInIsNeverProposedForDeletion(t *testing.T) {
 	}
 
 	for _, candidate := range preview.Candidates {
-		t.Errorf("%q signed in from the directory and the next synchronisation would delete it "+
-			"together with %d time entries", candidate.Email, candidate.Timesheets)
+		t.Errorf("%q signed in from the directory and the next synchronisation would delete it, "+
+			"leaving %d unfinished ticket(s) without an owner", candidate.Email, candidate.Tickets)
 	}
 }
 

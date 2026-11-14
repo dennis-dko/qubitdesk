@@ -76,9 +76,9 @@ func TestEveryErrorTheAPICanGiveIsNamed(t *testing.T) {
 			want:   "bodyNotJSON",
 			status: http.StatusBadRequest,
 			do: func() response {
-				// An endpoint this account may actually post to: the built-in
-				// administrator records no time and owns no projects, so a
-				// malformed body sent there is refused for the wrong reason.
+				// An endpoint this account may actually post to, so that the
+				// malformed body is refused for being malformed and for nothing
+				// else.
 				return admin.raw(http.MethodPost, "/api/v1/users", []byte("{not json"))
 			},
 		},

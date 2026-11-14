@@ -393,7 +393,8 @@ func TestSignInAfterARenameKeepsTheSameAccount(t *testing.T) {
 // The address found an account recording another entry's identifier, and the
 // sign-in took it over and wrote the newcomer's identifier into it: measured with
 // a probe against a real directory, the successor landed in the predecessor's
-// hours and projects. A run reads the same pair as a departure and an arrival.
+// account and everything it had done. A run reads the same pair as a departure
+// and an arrival.
 // The refusal covers anybody who can write an entry with somebody else's address
 // into the directory as well, which is the same act done on purpose.
 func TestAMailboxPassedOnDoesNotPassTheAccountOnWithIt(t *testing.T) {

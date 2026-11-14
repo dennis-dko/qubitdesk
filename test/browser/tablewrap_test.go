@@ -145,9 +145,8 @@ func TestATableWithOrdinaryDataFitsItsCard(t *testing.T) {
 //
 // A table too wide for a telephone scrolls inside its card, and every table with
 // actions was: edit, delete and reset a password lay past the right-hand edge of
-// the tables of entries, projects, accounts and roles at 360 and 430 pixels,
-// and of the accounts on a tablet held upright, reached only by a swipe nothing
-// announced. The actions now stay at the card's right-hand edge while the other
+// the tables at 360 and 430 pixels, and of the accounts on a tablet held
+// upright, reached only by a swipe nothing announced. The actions now stay at the card's right-hand edge while the other
 // columns pass beneath them, and text keeps a width of its own rather than
 // folding to its longest word - a name had stood as a column of single words
 // beside actions that were out of sight anyway. Decided on 2026-10-19.
