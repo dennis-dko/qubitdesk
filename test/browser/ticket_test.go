@@ -3,6 +3,7 @@
 package browser
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -156,5 +157,91 @@ func TestATicketInAQueueOnlyReadIsShownAndNotOfferedForChange(t *testing.T) {
 
 	if got := p.text("#ticket-form-title"); strings.Contains(got, "An invoice") || strings.Contains(got, "Correct") {
 		t.Errorf("the form holds a ticket of a queue the agents only read: %q", got)
+	}
+}
+
+// A correction that has been saved leaves the form free to follow the ticket.
+//
+// The form is protected while somebody fills it in, so that reading the ticket
+// again does not write over their work - and the correction's save did not end
+// that, so a saved form stayed protected. Locking the ticket next made the one
+// who locked it its owner on the server and left the form saying nobody, and
+// the next correction sent that nobody back: the owner the lock had just set
+// was taken off again.
+func TestASavedCorrectionLetsTheFormFollowTheTicket(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+
+	var made struct {
+		Ticket uint `json:"ticket"`
+		Me     uint `json:"me"`
+	}
+
+	p.awaitJSON(`(async () => {
+		const queue = (await api('/queues')).items[0];
+		const ticket = await api('/tickets', { method: 'POST', body: JSON.stringify(
+			{ title: 'Scanner', queueId: queue.id, body: 'It scans blank pages.' }) });
+		await refreshAll();
+		return { ticket: ticket.id, me: me.user.id };
+	})()`, &made)
+
+	p.run("open the tickets", p.click(`.tab[data-view="tickets"]`),
+		chromedp.WaitVisible("#table-tickets", chromedp.ByID))
+	p.waitForText("#table-tickets tbody", "Scanner")
+	p.run("open the scanner", chromedp.Evaluate(`[...document.querySelectorAll('#table-tickets tbody tr')]
+		.find((row) => row.textContent.includes('Scanner')).querySelector('button.link').click()`, nil),
+		chromedp.WaitVisible("#ticket-detail", chromedp.ByID))
+	p.waitForValue(`#form-ticket [name="id"]`)
+
+	p.run("correct its title",
+		chromedp.SetValue(`#form-ticket [name="title"]`, "Scanner scans blank pages", chromedp.ByQuery),
+		p.click("#ticket-submit"))
+	p.waitForText("#ticket-heading", "Scanner scans blank pages")
+
+	p.run("lock it", p.click("#ticket-lock"))
+	p.waitForText("#ticket-lock", "Unlock")
+
+	var owner string
+
+	for deadline := time.Now().Add(waitPatience); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		if owner = p.value(`#form-ticket [name="ownerId"]`); owner != "" {
+			break
+		}
+	}
+
+	if owner == "" {
+		t.Error("the form went on saying nobody owns the ticket after locking it made its locker the owner")
+	}
+
+	var priority string
+
+	p.run("correct its priority", chromedp.Evaluate(`(() => {
+		const select = document.querySelector('#form-ticket [name="priorityId"]');
+		select.value = [...select.options].find((option) => option.value !== select.value).value;
+		select.dispatchEvent(new Event('change', { bubbles: true }));
+		return select.value;
+	})()`, &priority), p.click("#ticket-submit"))
+
+	var saved struct {
+		PriorityID uint  `json:"priorityId"`
+		OwnerID    *uint `json:"ownerId"`
+	}
+
+	for deadline := time.Now().Add(waitPatience); ; time.Sleep(300 * time.Millisecond) {
+		p.awaitJSON(`api('/tickets/`+fmt.Sprint(made.Ticket)+`')`, &saved)
+
+		if fmt.Sprint(saved.PriorityID) == priority || time.Now().After(deadline) {
+			break
+		}
+	}
+
+	if fmt.Sprint(saved.PriorityID) != priority {
+		t.Fatalf("the corrected priority never reached the server: it reads %d, want %s", saved.PriorityID, priority)
+	}
+
+	if saved.OwnerID == nil || *saved.OwnerID != made.Me {
+		t.Errorf("correcting the priority after locking left the owner %v, want %d", saved.OwnerID, made.Me)
 	}
 }

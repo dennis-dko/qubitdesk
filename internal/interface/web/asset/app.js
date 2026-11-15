@@ -5735,7 +5735,11 @@ function saveTicket(form) {
     ...(can('customers:read') ? customerChange(form, openTicketShown) : {}),
   };
 
-  mutate(() => api(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(change) }),
+  // saveForm rather than mutate: a corrected ticket stays in the form, unlike a
+  // record any other form saves, so nothing resets the form after the save - and
+  // a form still protected went on showing what it was saved with while locking
+  // the ticket made somebody its owner.
+  saveForm(form, () => api(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(change) }),
     t('msg.ticketSaved', 'Ticket saved'),
     async () => { await openTicket(Number(id), { keepPlace: true }); await loadTicketPage(); });
 }
