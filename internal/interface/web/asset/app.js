@@ -16,6 +16,7 @@ const API = '/api/v1';
 const cache = {
   users: [], roles: [], permissions: [], queues: [],
   ticketQueues: [], states: [], priorities: [], types: [],
+  found: {},
 };
 
 /**
@@ -4808,6 +4809,382 @@ function swapTheLabel(node, key, english) {
   setLeadingText(node, t(key, english));
 }
 
+// -------------------------------------------------------- searched choices
+
+/**
+ * What a searched choice can name, and how a choice reads.
+ *
+ * Contacts and organisations run to thousands where accounts and queues run to
+ * dozens, and a listing answers two hundred at most - so a select filled from
+ * one cannot hold them all, and a select missing the entry a record names
+ * saves the record as naming nobody: filled that way, the organisation came off
+ * every contact and every ticket of an organisation past the two hundredth the
+ * moment either was saved. Each such choice is therefore a select with a search
+ * box beside it.
+ */
+const SEARCHED_KINDS = {
+  contact: {
+    path: '/contacts',
+    describe: (contact) => (contact.email ? `${contact.name} <${contact.email}>` : contact.name),
+  },
+  organisation: {
+    path: '/organisations',
+    describe: (organisation) => (organisation.number
+      ? `${organisation.name} (${organisation.number})` : organisation.name),
+  },
+};
+
+/**
+ * Every searched choice: its form, its search box, its select, what it names,
+ * and what it says while it names nothing. A filter finds retired entries as
+ * well, because their contacts are still there to be found; a form offers only
+ * what may still be chosen.
+ */
+const SEARCHED = {
+  contactFilterOrganisation: {
+    form: '#form-contact-filter', search: 'organisationSearch', select: 'organisation', kind: 'organisation',
+    retired: true, none: () => t('customer.everyOrganisation', 'every organisation'),
+  },
+  contactOrganisation: {
+    form: '#form-contact', search: 'organisationSearch', select: 'organisationId', kind: 'organisation',
+    none: () => t('ticket.nobody', 'nobody'),
+  },
+  ticketContact: {
+    form: '#form-ticket', search: 'contactSearch', select: 'contactId', kind: 'contact',
+    none: () => t('ticket.nobody', 'nobody'),
+  },
+  ticketOrganisation: {
+    form: '#form-ticket', search: 'organisationSearch', select: 'organisationId', kind: 'organisation',
+    none: () => t('ticket.nobody', 'nobody'),
+  },
+};
+
+/** How many entries a search offers: more wants better words, not scrolling. */
+const SEARCH_OFFERS = 20;
+
+/** A record's own entry, kept by its choice whatever a search finds, or none. */
+function keptEntry(id, name) {
+  return id ? { value: String(id), label: name || `#${id}` } : null;
+}
+
+/**
+ * Fills a searched choice with what its search last found, and keeps the entry
+ * given - a record's own, or null for a new record - or, given nothing, the one
+ * it names now. The kept entry stays among the options, retired or not, so no
+ * search can take away what the form was going to keep.
+ */
+function offerFound(name, keep) {
+  const choice = SEARCHED[name];
+  const select = $(choice.form)?.elements[choice.select];
+  if (!select) return;
+
+  const named = select.value
+    ? { value: select.value, label: select.selectedOptions[0]?.textContent ?? `#${select.value}` }
+    : null;
+  const kept = keep === undefined ? named : keep;
+  const choices = (cache.found[name]?.entries ?? []).map((entry) => ({
+    value: String(entry.id), label: SEARCHED_KINDS[choice.kind].describe(entry),
+  }));
+
+  if (kept && !choices.some((offered) => offered.value === kept.value)) choices.unshift(kept);
+
+  fillSelect(select, choices, { placeholder: choice.none(), labelKey: 'label', valueKey: 'value' });
+  select.value = kept?.value ?? '';
+}
+
+/**
+ * Searches what a choice may name for the words in its search box, and offers
+ * the first of them. An answer that arrives after a later search was sent, or
+ * after a sign-out, is dropped: it would offer what the box no longer says, or
+ * somebody else's customers.
+ */
+async function searchChoices(name) {
+  const choice = SEARCHED[name];
+  const form = $(choice.form);
+  if (!form) return;
+
+  const search = { entries: cache.found[name]?.entries ?? [] };
+  cache.found[name] = search;
+
+  const query = new URLSearchParams({ limit: String(SEARCH_OFFERS) });
+  if (!choice.retired) query.set('valid', 'true');
+
+  const words = form.elements[choice.search].value.trim();
+  if (words) query.set('q', words);
+
+  const entries = (await api(`${SEARCHED_KINDS[choice.kind].path}?${query}`))?.items ?? [];
+  if (cache.found[name] !== search) return;
+
+  search.entries = entries;
+  offerFound(name);
+}
+
+/** Has every search box fill its choice as somebody types. */
+function wireSearches() {
+  for (const [name, choice] of Object.entries(SEARCHED)) {
+    let typing;
+
+    $(choice.form).elements[choice.search].addEventListener('input', () => {
+      clearTimeout(typing);
+      typing = setTimeout(() => searchChoices(name).catch((err) => toastFailure(err)), 300);
+    });
+  }
+}
+
+// --------------------------------------------------------------- customers
+
+/**
+ * The two cards of the customer screen - organisations and contacts - each a
+ * table and one form that makes an entry or corrects one, told apart by the
+ * hidden id as every form here is.
+ */
+const CUSTOMER_FORMS = {
+  organisation: {
+    path: '/organisations',
+    fields: ['name', 'number', 'url', 'address', 'note'],
+    create: ['customer.organisationCreate', 'Add an organisation'],
+    editing: (entry) => t('customer.organisationEdit', 'Edit the organisation {0}').replace('{0}', entry.name),
+    created: () => t('msg.organisationCreated', 'Organisation created'),
+    saved: () => t('msg.organisationSaved', 'Organisation saved'),
+  },
+  contact: {
+    path: '/contacts',
+    fields: ['name', 'email', 'phone', 'note'],
+    create: ['customer.contactCreate', 'Add a contact'],
+    editing: (entry) => t('customer.contactEdit', 'Edit the contact {0}').replace('{0}', entry.name),
+    created: () => t('msg.contactCreated', 'Contact created'),
+    saved: () => t('msg.contactSaved', 'Contact saved'),
+  },
+};
+
+/** How many entries a customer card lists before it asks for a narrower search. */
+const CUSTOMER_PAGE = 50;
+
+/**
+ * Fills the customer screen, for whoever may read customers, and its choices of
+ * organisation where nobody is filling them in.
+ */
+async function loadCustomers() {
+  if (!can('customers:read')) return;
+
+  await Promise.all([
+    loadOrganisationPage(),
+    loadContactPage(),
+    beingEdited($('#form-contact-filter')) ? null : searchChoices('contactFilterOrganisation'),
+    beingEdited($('#form-contact')) ? null : searchChoices('contactOrganisation'),
+  ]);
+}
+
+/** Says, under a card's table, when the search found more than it lists. */
+function customerOverflow(line, shown, total) {
+  if (!line) return;
+
+  line.textContent = total > shown
+    ? fillIn(t('customer.more', 'Showing {0} of {1} - narrow the search to find the rest.'), [shown, total])
+    : '';
+}
+
+/** Reads the organisations the search asks for, and draws them. */
+async function loadOrganisationPage() {
+  const tbody = $('#table-organisation tbody');
+  const filter = $('#form-organisation-filter');
+  if (!tbody || !filter) return;
+
+  const query = new URLSearchParams({ limit: String(CUSTOMER_PAGE) });
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+
+  const page = await api(`/organisations?${query}`);
+  const items = page?.items ?? [];
+
+  fillTable(tbody, items.map(organisationRow), 5, t('customer.organisationsEmpty', 'No organisations.'));
+  customerOverflow($('#organisation-overflow'), items.length, page?.totalCount ?? 0);
+}
+
+/** One organisation as a row of its table. */
+function organisationRow(organisation) {
+  return el('tr', {},
+    el('td', { class: 'text', text: organisation.name }),
+    el('td', { class: 'text', text: organisation.number || '–' }),
+    el('td', { class: 'text' }, organisation.url
+      ? el('a', { href: organisation.url, text: organisation.url, target: '_blank', rel: 'noopener noreferrer' })
+      : '–'),
+    el('td', { text: organisation.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editCustomer('organisation', organisation) }),
+      deleteButton({
+        label: `${t('field.organisationId', 'Organisation')} "${organisation.name}"`,
+        path: `/organisations/${organisation.id}`,
+        message: t('msg.organisationDeleted', 'Organisation deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/** Reads the contacts the search asks for, and draws them. */
+async function loadContactPage() {
+  const tbody = $('#table-contact tbody');
+  const filter = $('#form-contact-filter');
+  if (!tbody || !filter) return;
+
+  const query = new URLSearchParams({ limit: String(CUSTOMER_PAGE) });
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+  if (filter.elements.organisation.value) query.set('organisation', filter.elements.organisation.value);
+
+  const page = await api(`/contacts?${query}`);
+  const items = page?.items ?? [];
+
+  fillTable(tbody, items.map(contactRow), 6, t('customer.contactsEmpty', 'No contacts.'));
+  customerOverflow($('#contact-overflow'), items.length, page?.totalCount ?? 0);
+}
+
+/** One contact as a row of its table. */
+function contactRow(contact) {
+  return el('tr', {},
+    el('td', { class: 'text', text: contact.name }),
+    el('td', { class: 'text', text: contact.email || '–' }),
+    el('td', { class: 'text', text: contact.phone || '–' }),
+    el('td', { class: 'text', text: contact.organisationName || '–' }),
+    el('td', { text: contact.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editCustomer('contact', contact) }),
+      deleteButton({
+        label: `${t('field.contactId', 'Contact')} "${contact.name}"`,
+        path: `/contacts/${contact.id}`,
+        message: t('msg.contactDeleted', 'Contact deleted'),
+        after: refreshAll,
+        ask: () => deleteContact(contact),
+      })),
+  );
+}
+
+/**
+ * Deletes a contact, asking first when tickets are for it.
+ *
+ * The server refuses that deletion rather than performing it, and its refusal
+ * carries how many tickets would keep no contact, so the question has the real
+ * number in it - as deleting an account that owns tickets does. A contact no
+ * ticket is for is asked about once, as any deletion is.
+ */
+async function deleteContact(contact) {
+  if (!await confirmDelete(`${t('field.contactId', 'Contact')} "${contact.name}"`)) return;
+
+  const done = t('msg.contactDeleted', 'Contact deleted');
+
+  try {
+    await api(`/contacts/${contact.id}`, { method: 'DELETE' });
+    toast(done, 'ok');
+    await refreshAll();
+
+    return;
+  } catch (err) {
+    if (err.status !== 409) {
+      toastFailure(err);
+
+      return;
+    }
+
+    const proceed = await confirmDialog({
+      title: t('confirm.deleteTitle', 'Delete for good?'),
+      text: t('customer.contactDeleteConfirm', 'Delete anyway? The tickets for this contact stay, for nobody.'),
+      detail: err.message,
+      confirmLabel: t('action.delete', 'delete'),
+    });
+
+    if (!proceed) return;
+  }
+
+  mutate(() => api(`/contacts/${contact.id}?confirm=true`, { method: 'DELETE' }), done, refreshAll);
+}
+
+/** Opens an organisation or a contact in its card's form, to correct it. */
+function editCustomer(kind, entry) {
+  const form = $(`#form-${kind}`);
+  const card = CUSTOMER_FORMS[kind];
+
+  form.elements.id.value = String(entry.id);
+  for (const field of card.fields) form.elements[field].value = entry[field] ?? '';
+  form.elements.valid.checked = entry.valid;
+
+  if (kind === 'contact') offerFound('contactOrganisation', keptEntry(entry.organisationId, entry.organisationName));
+
+  // Drawn rather than declared with a key, because it carries the entry's name;
+  // see editRole for why the key has to come off.
+  const heading = $(`#${kind}-form-title`);
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable(`${kind}FormTitle`, () => { heading.textContent = card.editing(entry); });
+
+  swapTheLabel($(`#${kind}-submit`), 'action.save', 'Save');
+  $(`#${kind}-cancel`).hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts a customer card's form back to making a new entry. */
+function resetCustomerForm(kind) {
+  const form = $(`#form-${kind}`);
+  const card = CUSTOMER_FORMS[kind];
+
+  form.reset();
+  form.elements.id.value = '';
+
+  if (kind === 'contact') offerFound('contactOrganisation', null);
+
+  stopRedrawing(`${kind}FormTitle`);
+  swapTheLabel($(`#${kind}-form-title`), ...card.create);
+  swapTheLabel($(`#${kind}-submit`), 'action.create', 'Create');
+  $(`#${kind}-cancel`).hidden = true;
+}
+
+/**
+ * Sends a customer card's form. A contact's organisation is taken off by saying
+ * so, because an id sent as nothing cannot be told apart from one not sent.
+ */
+function saveCustomer(kind, form) {
+  const card = CUSTOMER_FORMS[kind];
+  const id = form.elements.id.value;
+  const sent = { valid: form.elements.valid.checked };
+
+  for (const field of card.fields) sent[field] = form.elements[field].value.trim();
+
+  if (kind === 'contact') {
+    const organisation = form.elements.organisationId.value;
+
+    if (organisation) sent.organisationId = Number(organisation);
+    else if (id) sent.clearOrganisation = true;
+  }
+
+  const body = JSON.stringify(sent);
+
+  mutate(
+    () => (id ? api(`${card.path}/${id}`, { method: 'PUT', body }) : api(card.path, { method: 'POST', body })),
+    id ? card.saved() : card.created(),
+    async () => { resetCustomerForm(kind); await refreshAll(); },
+  );
+}
+
+/** Wires the customer screen's forms. */
+function wireCustomers() {
+  for (const kind of Object.keys(CUSTOMER_FORMS)) {
+    $(`#form-${kind}`).addEventListener('submit', (e) => { e.preventDefault(); saveCustomer(kind, e.target); });
+    $(`#${kind}-cancel`).addEventListener('click', () => resetCustomerForm(kind));
+  }
+
+  for (const [filter, load] of [['#form-organisation-filter', loadOrganisationPage], ['#form-contact-filter', loadContactPage]]) {
+    const form = $(filter);
+    let typing;
+
+    form.addEventListener('submit', (e) => { e.preventDefault(); load(); });
+    form.addEventListener('change', () => load());
+    form.elements.q.addEventListener('input', () => {
+      clearTimeout(typing);
+      typing = setTimeout(load, 300);
+    });
+  }
+
+  wireSearches();
+}
+
 // ----------------------------------------------------------------- tickets
 
 /** The English for how a ticket or an article arrived, which are the server's model.AgentChannels. */
@@ -4914,7 +5291,14 @@ async function loadTickets() {
   }
 
   const form = $('#form-ticket');
-  if (form && !beingEdited(form) && !form.elements.id.value) fillTicketForm(form, null, []);
+  if (form && !beingEdited(form) && !form.elements.id.value) {
+    fillTicketForm(form, null, []);
+    showTicketJob(form, false);
+  }
+
+  if (form && !beingEdited(form) && can('customers:read')) {
+    await Promise.all([searchChoices('ticketContact'), searchChoices('ticketOrganisation')]);
+  }
 
   await loadTicketPage();
 
@@ -4948,7 +5332,7 @@ async function loadTicketPage() {
 
   const byId = new Map(cache.ticketQueues.map((queue) => [queue.id, queue]));
 
-  fillTable(tbody, (page?.items ?? []).map((ticket) => ticketRow(ticket, byId)), 7,
+  fillTable(tbody, (page?.items ?? []).map((ticket) => ticketRow(ticket, byId)), 8,
     t('ticket.empty', 'No tickets.'));
 
   drawTicketPager();
@@ -4964,6 +5348,7 @@ function ticketRow(ticket, byId) {
     el('td', { class: 'text' },
       el('button', { class: 'link', text: ticket.number, onclick: () => openTicket(ticket.id) })),
     el('td', { class: 'text', text: ticket.title }),
+    el('td', { class: 'text', text: ticket.contactName || ticket.organisationName || '–' }),
     el('td', { class: 'text', text: queue ? queuePath(queue, byId) : `#${ticket.queueId}` }),
     el('td', {}, state ? statusBadge(state.name, state.type) : el('span', { text: `#${ticket.stateId}` })),
     el('td', { class: 'text', text: priority ? priorityName(priority.name) : '' }),
@@ -5067,6 +5452,8 @@ function drawTicketDetail(ticket, articles, history) {
     ...fact(t('field.type', 'Type'), type ? ticketTypeName(type.name) : ''),
     ...fact(t('ticket.owner', 'Owner'), ticket.ownerName || t('ticket.nobody', 'nobody')),
     ...fact(t('field.responsibleId', 'Responsible'), ticket.responsibleName || t('ticket.nobody', 'nobody')),
+    ...fact(t('field.contactId', 'Contact'), ticket.contactName || t('ticket.nobody', 'nobody')),
+    ...fact(t('field.organisationId', 'Organisation'), ticket.organisationName || t('ticket.nobody', 'nobody')),
     ...fact(t('ticket.locked', 'Locked'), ticket.locked ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no')),
     ...(ticket.pendingUntil ? fact(t('field.pendingUntil', 'Pending until'), fmtMoment(ticket.pendingUntil)) : []),
     ...fact(t('ticket.opened', 'Opened'),
@@ -5195,6 +5582,9 @@ function fillTicketForm(form, ticket, assignees) {
       { placeholder: t('ticket.nobody', 'nobody'), labelKey: 'label', valueKey: 'value' });
   }
 
+  offerFound('ticketContact', keptEntry(ticket?.contactId, ticket?.contactName));
+  offerFound('ticketOrganisation', keptEntry(ticket?.organisationId, ticket?.organisationName));
+
   if (!ticket) {
     const shipped = (items, name) => items.find((item) => item.name === name)?.id;
 
@@ -5209,8 +5599,17 @@ function fillTicketForm(form, ticket, assignees) {
  * submitted past and cannot be scrolled to, so it stops being required with it.
  */
 function showTicketJob(form, correcting) {
+  const customers = can('customers:read');
+
   for (const label of $$('.ticket-new-only', form)) label.hidden = correcting;
   for (const label of $$('.ticket-edit-only', form)) label.hidden = !correcting;
+
+  // Who a ticket is for, where the reader may read customers - decided here
+  // with the job rather than by data-perm, which would show the organisation
+  // again on every reload whichever job the form is doing.
+  for (const label of $$('.ticket-customer', form)) {
+    label.hidden = !customers || (label.classList.contains('ticket-edit-only') && !correcting);
+  }
 
   form.elements.body.required = !correcting;
 }
@@ -5288,6 +5687,7 @@ function saveTicket(form) {
       customerVisible: form.elements.customerVisible.checked,
       body: form.elements.body.value,
       minutes: Number(form.elements.minutes.value) || 0,
+      ...(can('customers:read') && value('contactId') ? { contactId: value('contactId') } : {}),
     });
 
     mutate(() => api('/tickets', { method: 'POST', body }), t('msg.ticketOpened', 'Ticket opened'),
@@ -5313,11 +5713,35 @@ function saveTicket(form) {
     ...(value('ownerId') ? { ownerId: value('ownerId') } : { clearOwner: true }),
     ...(value('responsibleId') ? { responsibleId: value('responsibleId') } : { clearResponsible: true }),
     ...(waits && day ? { pendingUntil: momentIn(day, form.elements.pendingTime.value, readerZone()) } : {}),
+    ...(can('customers:read') ? customerChange(form, openTicketShown) : {}),
   };
 
   mutate(() => api(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(change) }),
     t('msg.ticketSaved', 'Ticket saved'),
     async () => { await openTicket(Number(id), { keepPlace: true }); await loadTicketPage(); });
+}
+
+/**
+ * What a correction says about who the ticket is for: only what changed, so a
+ * contact newly chosen brings its organisation along - the organisation is sent
+ * only when it was changed itself - and nobody said out loud.
+ */
+function customerChange(form, ticket) {
+  const change = {};
+  const contact = form.elements.contactId.value ? Number(form.elements.contactId.value) : null;
+  const organisation = form.elements.organisationId.value ? Number(form.elements.organisationId.value) : null;
+
+  if (contact !== (ticket?.contactId ?? null)) {
+    if (contact) change.contactId = contact;
+    else change.clearContact = true;
+  }
+
+  if (organisation !== (ticket?.organisationId ?? null)) {
+    if (organisation) change.organisationId = organisation;
+    else change.clearOrganisation = true;
+  }
+
+  return change;
 }
 
 /** Writes the article form's text in the ticket that is open. */
@@ -8363,6 +8787,7 @@ function forgetTheLastAccount() {
   cache.states = [];
   cache.priorities = [];
   cache.types = [];
+  cache.found = {};
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -8793,6 +9218,24 @@ const TOUR_STEPS = [
     text: () => t('tour.openTicket.text',
       'A title, the queue it goes to and what was said - the rest starts as the installation '
       + 'ships it, and can be corrected here once the ticket is open.'),
+  },
+  {
+    target: '#organisation-card',
+    view: 'customers',
+    permission: 'customers:read',
+    title: () => t('tour.organisations.title', 'Who tickets come from'),
+    text: () => t('tour.organisations.text',
+      'The companies your customers work for, each with its customer number where it has one. An '
+      + 'organisation that contacts or tickets belong to is made invalid rather than deleted.'),
+  },
+  {
+    target: '#contact-card',
+    view: 'customers',
+    permission: 'customers:read',
+    title: () => t('tour.contacts.title', 'The people behind the tickets'),
+    text: () => t('tour.contacts.text',
+      'A ticket is for a contact, and for the organisation the contact belongs to unless it says otherwise. '
+      + 'Deleting a contact keeps the tickets for them, for nobody.'),
   },
   {
     target: '#queue-card',
@@ -13291,6 +13734,7 @@ async function refreshAll() {
   // Roles first: the user table renders a role picker from them.
   await loadRoles();
   await loadTicketSetup();
+  await loadCustomers();
   await loadTickets();
   await loadUsers();
   await loadAdmin();
@@ -13359,6 +13803,7 @@ function wireForms() {
   $('#role-reset').addEventListener('click', resetRoleForm);
 
   wireTickets();
+  wireCustomers();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();
