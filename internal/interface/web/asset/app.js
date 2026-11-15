@@ -8101,9 +8101,6 @@ async function mutate(fn, successMessage, after) {
   }
 }
 
-const post = (path, body, msg, after) => mutate(
-  () => api(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }), msg, after);
-
 const patch = (path, body, msg, after) => mutate(
   () => api(path, { method: 'PUT', body: JSON.stringify(body) }), msg, after);
 
