@@ -160,6 +160,7 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		"form-organisation": `#table-organisation tbody td.actions button.link:not(.danger)`,
 		"form-contact":      `#table-contact tbody td.actions button.link:not(.danger)`,
 		"form-ticket":       `#table-tickets tbody button.link`,
+		"form-sysconfig":    `#table-sysconfig tbody td.actions button.link`,
 	}
 
 	for form, opener := range openers {

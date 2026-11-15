@@ -16,7 +16,7 @@ const API = '/api/v1';
 const cache = {
   users: [], roles: [], permissions: [], queues: [],
   ticketQueues: [], states: [], priorities: [], types: [],
-  found: {},
+  found: {}, sysconfig: [],
 };
 
 /**
@@ -4810,6 +4810,149 @@ function swapTheLabel(node, key, english) {
   setLeadingText(node, t(key, english));
 }
 
+// ---------------------------------------------------- system configuration
+
+/**
+ * The value an option of the system configuration has, as the server last said.
+ * Every account signed in is handed the external options, which are the ones a
+ * screen needs; whoever administers is handed all of them.
+ */
+function configValue(name) {
+  return cache.sysconfig.find((option) => option.name === name)?.value;
+}
+
+/**
+ * A ticket's number as the installation writes it, KIX18's way: after the word
+ * it calls a ticket and the divider, Ticket::Hook and Ticket::HookDivider.
+ */
+function ticketName(number) {
+  return `${configValue('Ticket::Hook') ?? ''}${configValue('Ticket::HookDivider') ?? ''}${number}`;
+}
+
+/** What an option does, in the reader's language; the English is the server's. */
+function configDescription(option) {
+  return t(`sysconfig.${option.name}`, option.description);
+}
+
+/** A value of an option as the card shows it: a switch as on or off, nothing as a word. */
+function configShown(option, value) {
+  if (option.type === 'bool') return value ? t('change.on', 'on') : t('change.off', 'off');
+
+  return value === '' ? t('sysconfig.nothing', 'nothing') : value;
+}
+
+/** Reads the system configuration, and draws its card for whoever administers. */
+async function loadSysConfig() {
+  cache.sysconfig = (await api('/settings/sysconfig'))?.items ?? [];
+
+  const tbody = $('#table-sysconfig tbody');
+  if (!tbody || !can('settings:manage')) return;
+
+  fillTable(tbody, cache.sysconfig.map(sysconfigRow), 4, t('sysconfig.none', 'No options.'));
+}
+
+/** One option as a row of the card's table. */
+function sysconfigRow(option) {
+  const value = configShown(option, option.value);
+
+  return el('tr', {},
+    el('td', { class: 'text' },
+      el('strong', { text: configDescription(option) }),
+      el('br', {}),
+      el('code', { class: 'muted', text: option.name })),
+    el('td', { class: 'text', text: option.modified ? `${value} · ${t('sysconfig.changed', 'changed')}` : value }),
+    el('td', { class: 'text', text: configShown(option, option.default) }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editSysConfig(option) })),
+  );
+}
+
+/**
+ * Opens an option in the card's form, to change it: a line of text bounded as
+ * the server bounds it, or a switch.
+ */
+function editSysConfig(option) {
+  const form = $('#form-sysconfig');
+  const text = option.type === 'string';
+
+  form.hidden = false;
+  form.elements.id.value = option.name;
+  $('.sysconfig-text', form).hidden = !text;
+  $('.sysconfig-switch', form).hidden = text;
+  form.elements.text.maxLength = option.maxLength || 255;
+  form.elements.text.value = text ? option.value : '';
+  form.elements.enabled.checked = option.value === true;
+  $('#sysconfig-default').hidden = !option.modified;
+  $('#sysconfig-cancel').hidden = false;
+
+  // Drawn rather than declared with a key, because it carries the option; see
+  // editRole for why the key has to come off.
+  const heading = $('#sysconfig-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('sysconfigForm', () => {
+    heading.textContent = option.name;
+    $('#sysconfig-description').textContent = configDescription(option);
+  });
+
+  form.elements[text ? 'text' : 'enabled'].focus();
+}
+
+/** Puts the card's form away, holding no option. */
+function resetSysConfigForm() {
+  const form = $('#form-sysconfig');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  form.hidden = true;
+
+  stopRedrawing('sysconfigForm');
+  swapTheLabel($('#sysconfig-form-title'), 'sysconfig.formTitle', 'Change an option');
+  $('#sysconfig-description').textContent = '';
+  $('#sysconfig-default').hidden = true;
+  $('#sysconfig-cancel').hidden = true;
+}
+
+/**
+ * Sends the option in the card's form. Text goes as it was typed, not trimmed:
+ * a colon and a space can be the point.
+ */
+function saveSysConfig(form) {
+  const option = cache.sysconfig.find((candidate) => candidate.name === form.elements.id.value);
+  if (!option) return;
+
+  const value = option.type === 'bool' ? form.elements.enabled.checked : form.elements.text.value;
+
+  mutate(
+    () => api(`/settings/sysconfig/${encodeURIComponent(option.name)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+    t('msg.sysconfigSaved', 'Option saved'),
+    async () => { resetSysConfigForm(); await refreshAll(); },
+  );
+}
+
+/** Puts the option in the card's form back to its default. */
+function putSysConfigBack(form) {
+  const name = form.elements.id.value;
+  if (!name) return;
+
+  mutate(
+    () => api(`/settings/sysconfig/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+    t('msg.sysconfigReset', 'Option put back to its default'),
+    async () => { resetSysConfigForm(); await refreshAll(); },
+  );
+}
+
+/** Wires the system configuration's form. */
+function wireSysConfig() {
+  const form = $('#form-sysconfig');
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveSysConfig(form); });
+  $('#sysconfig-default').addEventListener('click', () => putSysConfigBack(form));
+  $('#sysconfig-cancel').addEventListener('click', resetSysConfigForm);
+}
+
 // -------------------------------------------------------- searched choices
 
 /**
@@ -5462,7 +5605,7 @@ function drawTicketDetail(ticket, articles, history) {
   const type = cache.types.find((candidate) => candidate.id === ticket.typeId);
   const queue = byId.get(ticket.queueId);
 
-  $('#ticket-heading').textContent = `${ticket.number} – ${ticket.title}`;
+  $('#ticket-heading').textContent = `${ticketName(ticket.number)} – ${ticket.title}`;
 
   const fact = (term, ...description) => [el('dt', { text: term }), el('dd', {}, ...description)];
   const facts = [
@@ -5503,7 +5646,7 @@ function drawTicketDetail(ticket, articles, history) {
   );
 
   $('#ticket-delete-slot').replaceChildren(deleteButton({
-    label: `${t('field.ticket', 'Ticket')} ${ticket.number}`,
+    label: ticketName(ticket.number),
     path: `/tickets/${ticket.id}`,
     message: t('msg.ticketDeleted', 'Ticket deleted'),
     after: async () => { closeTicket(); await refreshAll(); },
@@ -5659,7 +5802,7 @@ function editTicket(form, ticket, assignees) {
   delete heading.dataset.i18nSource;
 
   redrawable('ticketFormTitle', () => {
-    heading.textContent = t('ticket.edit', 'Correct ticket {0}').replace('{0}', ticket.number);
+    heading.textContent = t('ticket.edit', 'Correct {0}').replace('{0}', ticketName(ticket.number));
   });
 
   swapTheLabel($('#ticket-submit'), 'action.save', 'Save');
@@ -8811,6 +8954,7 @@ function forgetTheLastAccount() {
   cache.priorities = [];
   cache.types = [];
   cache.found = {};
+  cache.sysconfig = [];
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -8887,6 +9031,7 @@ function forgetTheLastAccount() {
   resetQueueForm();
   for (const kind of Object.keys(CATALOGS)) resetCatalogForm(kind);
   for (const kind of Object.keys(CUSTOMER_FORMS)) resetCustomerForm(kind);
+  resetSysConfigForm();
   resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
@@ -9492,6 +9637,15 @@ const TOUR_STEPS = [
       'People can sign in through your organisation\'s provider instead of with a password, '
       + 'once each has linked their account to it. Nobody gets an account just because the '
       + 'provider knows them.'),
+  },
+  {
+    target: '#sysconfig-card',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.sysconfig.title', 'How the installation behaves'),
+    text: () => t('tour.sysconfig.text',
+      'The options of the system configuration with their defaults, under the names KIX18 gives them. '
+      + 'Only what was changed is kept, and putting an option back to its default forgets it again.'),
   },
   {
     target: '#changes-card',
@@ -13764,6 +13918,7 @@ async function refreshAll() {
 
   // Roles first: the user table renders a role picker from them.
   await loadRoles();
+  await loadSysConfig();
   await loadTicketSetup();
   await loadCustomers();
   await loadTickets();
@@ -13835,6 +13990,7 @@ function wireForms() {
 
   wireTickets();
   wireCustomers();
+  wireSysConfig();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();

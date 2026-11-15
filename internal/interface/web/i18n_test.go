@@ -339,6 +339,15 @@ func TestNoTranslationIsUnused(t *testing.T) {
 				}
 			}
 
+			// What an option of the system configuration does, looked up as
+			// t(`sysconfig.${option.name}`) from the listing the server sent.
+			// TestEveryConfigOptionIsDescribedInGerman holds them to the options.
+			if name, isOption := strings.CutPrefix(key, "sysconfig."); isOption {
+				if _, known := model.ConfigOptionNamed(name); known {
+					continue
+				}
+			}
+
 			// What a kind of record is called, looked up as t(`entity.${entity}`)
 			// from the first value of a "not found".
 			// TestARefusalWritesItsValuesTheWayTheScreenDoes checks that every kind

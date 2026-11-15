@@ -1586,6 +1586,40 @@
         <p class="muted" id="openid-test-result"></p>
       </form>
 
+      <!-- The system configuration: options with their defaults, under KIX18's
+           names. A table of every option, and a form under it that changes the one
+           picked, told apart by the hidden id as every form here is - the option's
+           name standing in for a number. Put away while it holds no option. -->
+      <div class="card" id="sysconfig-card" data-perm="settings:manage">
+        <h2 data-i18n="sysconfig.title">System configuration</h2>
+        <p class="muted" data-i18n="sysconfig.hint">How the installation behaves, option by option. An option nobody changed follows its default, a new default after an update included. A change takes effect at once.</p>
+        <div class="table-wrap">
+          <table id="table-sysconfig">
+            <thead>
+              <tr>
+                <th data-i18n="sysconfig.option">Option</th>
+                <th data-i18n="field.value">Value</th>
+                <th data-i18n="sysconfig.default">Default</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-sysconfig" class="form" hidden>
+          <h3 id="sysconfig-form-title" data-i18n="sysconfig.formTitle">Change an option</h3>
+          <input type="hidden" name="id">
+          <p class="muted" id="sysconfig-description"></p>
+          <label class="sysconfig-text" data-i18n="field.value">Value<input type="text" name="text" maxlength="255"></label>
+          <label class="switch sysconfig-switch" hidden><input type="checkbox" name="enabled"><span class="switch-track"></span><span class="switch-label" data-i18n="sysconfig.on">On</span></label>
+          <div class="row">
+            <button type="submit" id="sysconfig-submit" data-i18n="action.save">Save</button>
+            <button type="button" class="secondary" id="sysconfig-default" data-i18n="sysconfig.putBack" hidden>Put back to the default</button>
+            <button type="button" class="link" id="sysconfig-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
+
       <!-- Who changed how the installation is run, and when. Kept, unlike the
            live log below, which goes with the process; ids are kept and names read
            when shown, so an erased account appears by its number alone. -->

@@ -162,3 +162,32 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		}
 	}
 }
+
+// Every option of the system configuration is described in German, and the
+// dictionary describes no option there is not.
+//
+// The card draws an option as t(`sysconfig.${name}`, description) from the
+// listing the server sends, the English being the model's own, so no literal key
+// appears in the source and the coverage tests cannot see these: an option added
+// without its German would stand in English in an otherwise German card, and a
+// sentence left behind by an option that went describes nothing.
+func TestEveryConfigOptionIsDescribedInGerman(t *testing.T) {
+	dict, ok := dictionaries(t)["de"]
+	if !ok {
+		t.Fatal("there is no German dictionary")
+	}
+
+	for _, option := range model.ConfigOptions() {
+		if _, found := dict["sysconfig."+option.Name]; !found {
+			t.Errorf("sysconfig.%s has no German description", option.Name)
+		}
+	}
+
+	for key := range dict {
+		if name, isOption := strings.CutPrefix(key, "sysconfig."); isOption && strings.Contains(name, "::") {
+			if _, known := model.ConfigOptionNamed(name); !known {
+				t.Errorf("the dictionary describes %s, and there is no such option", name)
+			}
+		}
+	}
+}
