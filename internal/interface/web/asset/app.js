@@ -5662,6 +5662,13 @@ function drawTicketDetail(ticket, articles, history) {
     ].join(' · ') }),
     article.subject ? el('strong', { text: article.subject }) : null,
     el('div', { class: 'ticket-article-body', text: article.body }),
+    article.attachments?.length ? el('ul', { class: 'ticket-attachments' }, ...article.attachments.map((file) => el('li', {},
+      el('button', {
+        type: 'button',
+        class: 'link',
+        text: `${file.filename} (${fileSize(file.size)})`,
+        onclick: () => downloadAttachment(ticket.id, file).catch((err) => toastFailure(err)),
+      })))) : null,
   )));
 
   $('#ticket-history-list').replaceChildren(...history.map((entry) => el('li', {
@@ -5917,6 +5924,7 @@ function saveArticle(form) {
   if (!openTicketShown) return;
 
   const id = openTicketShown.id;
+  const files = [...(form.elements.files.files ?? [])];
   const body = JSON.stringify({
     channel: form.elements.channel.value,
     customerVisible: form.elements.customerVisible.checked,
@@ -5925,8 +5933,79 @@ function saveArticle(form) {
     minutes: Number(form.elements.minutes.value) || 0,
   });
 
+  // The files go once the article is written, after the form is emptied: a file
+  // refused then cannot leave the text behind for a second press to write again.
   mutate(() => api(`/tickets/${id}/articles`, { method: 'POST', body }), t('msg.articleWritten', 'Written'),
-    async () => { form.reset(); await openTicket(id, { keepPlace: true }); await loadTicketPage(); });
+    async (article) => {
+      form.reset();
+      await attachFiles(id, article?.id, files);
+      await openTicket(id, { keepPlace: true });
+      await loadTicketPage();
+    });
+}
+
+/**
+ * Attaches the files chosen with an article that has been written, one after
+ * another: each is a request bounded on its own, and a file refused is named,
+ * while the rest still go.
+ */
+async function attachFiles(ticketID, articleID, files) {
+  if (!articleID) return;
+
+  for (const file of files) {
+    try {
+      await uploadAttachment(ticketID, articleID, file);
+    } catch (err) {
+      toastFailure(err, fillIn(t('ticket.fileRefused', '{0} was not attached.'), [file.name]));
+    }
+  }
+}
+
+/**
+ * Sends one file for an article. Not api(), which sends JSON: only the browser
+ * knows the multipart boundary it generated, so the request carries no
+ * Content-Type of its own.
+ */
+async function uploadAttachment(ticketID, articleID, file) {
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await reach(`${API}/tickets/${ticketID}/articles/${articleID}/attachments`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'X-CSRF-Token': readCookie('gts_csrf') },
+    body: form,
+  });
+
+  noticePermissionChange(res.headers.get('X-Permissions-Revision'));
+
+  if (res.ok) return;
+
+  let refusal = null;
+  try {
+    refusal = await res.json();
+  } catch {
+    // An error page rather than JSON; the status carries the meaning.
+  }
+
+  throw refusalFrom(res, refusal);
+}
+
+/** Fetches a file of a ticket and saves it under the name it came with. */
+function downloadAttachment(ticketID, file) {
+  return saveDownload(`${API}/tickets/${ticketID}/attachments/${file.id}`, file.filename);
+}
+
+/**
+ * A file's size the way the reader writes a number: in kilobytes, and in
+ * megabytes from one upwards.
+ */
+function fileSize(bytes) {
+  const mega = bytes >= 1024 * 1024;
+
+  return new Intl.NumberFormat(activeLocale(), {
+    style: 'unit', unit: mega ? 'megabyte' : 'kilobyte', maximumFractionDigits: 1,
+  }).format(bytes / (mega ? 1024 * 1024 : 1024));
 }
 
 /** Wires the ticket screens' forms and buttons. */
@@ -5978,6 +6057,14 @@ function wireTickets() {
     Object.keys(CHANNEL_TITLES).map((channel) => ({ value: channel, label: channelName(channel) })),
     { labelKey: 'label', valueKey: 'value' });
   article.addEventListener('submit', (e) => { e.preventDefault(); saveArticle(e.target); });
+
+  // What was chosen, beside the chooser that hides the browser's own words.
+  const chosen = () => {
+    $('#article-files').textContent = [...article.elements.files.files].map((file) => file.name).join(', ');
+  };
+
+  article.elements.files.addEventListener('change', chosen);
+  article.addEventListener('reset', () => setTimeout(chosen));
 }
 
 // ------------------------------------------------- what tickets are sorted by
@@ -11709,6 +11796,15 @@ function wirePasswordReveal(root = document) {
  * check, save - and the two callers below differ only in how they ask.
  */
 async function downloadFile(url, name, extension, request = {}) {
+  await saveDownload(url, `${name}-${todayISO()}.${extension}`, request);
+}
+
+/**
+ * Fetches a file and saves it under exactly this name - a ticket's attachment
+ * keeps the name it came with. The server sends every attachment as plain
+ * bytes, and the name is what tells the reader's computer what it is.
+ */
+async function saveDownload(url, filename, request = {}) {
   const res = await reach(url, { credentials: 'same-origin', ...request });
 
   // Everything api() reads off an answer that is not its body. Only the body is
@@ -11730,7 +11826,7 @@ async function downloadFile(url, name, extension, request = {}) {
   const blob = await res.blob();
   const objectURL = URL.createObjectURL(blob);
 
-  const link = el('a', { href: objectURL, download: `${name}-${todayISO()}.${extension}` });
+  const link = el('a', { href: objectURL, download: filename });
   document.body.append(link);
   link.click();
   link.remove();

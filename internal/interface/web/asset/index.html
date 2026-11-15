@@ -579,6 +579,13 @@
             <label data-i18n="field.minutes">Minutes<input type="number" name="minutes" min="0" max="1440" value="0"></label>
             <label class="wide" data-i18n="field.subject">Subject<input type="text" name="subject" maxlength="255" data-i18n-placeholder="field.optional" placeholder="optional"></label>
             <label class="wide" data-i18n="field.body">Text<textarea name="body" rows="5" required></textarea></label>
+            <div class="wide row">
+              <label class="file-pick">
+                <span data-i18n="ticket.chooseFiles">Attach files…</span>
+                <input type="file" name="files" multiple>
+              </label>
+              <span class="muted" id="article-files"></span>
+            </div>
           </div>
           <label class="switch"><input type="checkbox" name="customerVisible"><span class="switch-track"></span><span class="switch-label" data-i18n="ticket.customerVisible">The customer sees it</span></label>
           <div class="row">
