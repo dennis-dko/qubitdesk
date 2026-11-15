@@ -5429,9 +5429,28 @@ function showWhereWorked(node, works) {
 
 /** Closes the ticket that is open and puts the form back to opening one. */
 function closeTicket() {
-  openTicketShown = null;
-  $('#ticket-detail').hidden = true;
+  forgetTheOpenTicket();
   resetTicketForm();
+}
+
+/**
+ * Forgets which ticket is open and empties its card - what was written in it,
+ * what happened to it and the button that deletes it - rather than only hiding
+ * the card. The card is not a table and the memory is not a form, so nothing
+ * else on the way out of a session reaches either: a sign-out left the ticket in
+ * the document under the sign-in screen, and opened it again for whoever signed
+ * in next.
+ */
+function forgetTheOpenTicket() {
+  openTicketShown = null;
+
+  const card = $('#ticket-detail');
+  if (!card) return;
+
+  card.hidden = true;
+  for (const part of ['#ticket-heading', '#ticket-facts', '#ticket-delete-slot', '#ticket-articles', '#ticket-history-list']) {
+    $(part)?.replaceChildren();
+  }
 }
 
 /** What a ticket is, what was written in it and what happened to it. */
@@ -8816,6 +8835,9 @@ function forgetTheLastAccount() {
   // The selection bars belong to those rows and would otherwise stand over an
   // empty table offering to delete three things.
   for (const bar of $$('.bulk-bar')) bar.remove();
+
+  // And the ticket that was open, which is neither.
+  forgetTheOpenTicket();
 
   // And an enrolment somebody was half way through. The panel holds a shared
   // secret, the otpauth URI that carries it together with the account's address,

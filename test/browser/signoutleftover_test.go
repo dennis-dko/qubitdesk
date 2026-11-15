@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -220,6 +221,61 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 
 	for _, what := range left {
 		t.Errorf("after the sign-out %s", what)
+	}
+}
+
+// The ticket an account had open goes with it.
+//
+// Opening a ticket draws it into a card of its own and remembers which ticket it
+// is, so that reading the list again can draw it again. The card is not a table
+// and the memory is not a form, and the sign-out cleared neither: the ticket's
+// heading, its facts, every article and its history stayed in the document under
+// the sign-in screen, and whoever signed in next had the ticket opened for them -
+// on the last person's screen rather than their own.
+func TestASignOutTakesTheOpenTicketWithIt(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+	p.createOrdinaryAccount(t, workerEmail, workerPassword)
+
+	var made bool
+
+	p.awaitJSON(`(async () => {
+		const queue = (await api('/queues')).items[0];
+		await api('/tickets', { method: 'POST', body: JSON.stringify(
+			{ title: 'Printer', queueId: queue.id, body: 'It jams on page two.' }) });
+		await refreshAll();
+		return true;
+	})()`, &made)
+
+	p.run("open the tickets", p.click(`.tab[data-view="tickets"]`),
+		chromedp.WaitVisible("#table-tickets", chromedp.ByID))
+	p.waitForText("#table-tickets tbody", "Printer")
+	p.run("open the printer", chromedp.Evaluate(`[...document.querySelectorAll('#table-tickets tbody tr')]
+		.find((row) => row.textContent.includes('Printer')).querySelector('button.link').click()`, nil),
+		chromedp.WaitVisible("#ticket-detail", chromedp.ByID))
+	p.waitForText("#ticket-articles", "It jams on page two.")
+
+	p.run("sign out", p.click("#logout"), chromedp.WaitVisible("#form-login", chromedp.ByID))
+
+	if left := p.text("#ticket-detail"); strings.Contains(left, "Printer") || strings.Contains(left, "It jams") {
+		t.Errorf("the open ticket is still in the document under the sign-in screen: %q", left)
+	}
+
+	// Agents work in the shipped queue, so a ticket remembered across the
+	// sign-out is opened for this one rather than refused.
+	p.signIn(workerEmail, workerPassword)
+	p.waitGone("#login-screen")
+	p.settled()
+	p.settleWelcome()
+
+	var shown bool
+
+	p.run("is a ticket open", chromedp.Evaluate(`!document.querySelector('#ticket-detail').hidden`, &shown))
+
+	if shown {
+		t.Errorf("the last account's open ticket was opened for the next: %q", p.text("#ticket-heading"))
 	}
 }
 
