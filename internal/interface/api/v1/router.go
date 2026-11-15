@@ -32,6 +32,7 @@ type Handlers struct {
 	Push     *rest.PushHandler
 
 	SysConfig *rest.SysConfigHandler
+	Calendars *rest.CalendarHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -250,6 +251,12 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.POST(base+"/ticket-priorities", h.Catalog.CreatePriority)
 	app.PUT(base+"/ticket-priorities/{id}", h.Catalog.UpdatePriority)
 	app.DELETE(base+"/ticket-priorities/{id}", h.Catalog.DeletePriority)
+	app.GET(base+"/calendars", h.Calendars.List)
+	app.GET(base+"/calendars/{id}", h.Calendars.Get)
+	app.POST(base+"/calendars", h.Calendars.Create)
+	app.PUT(base+"/calendars/{id}", h.Calendars.Update)
+	app.DELETE(base+"/calendars/{id}", h.Calendars.Delete)
+
 	app.GET(base+"/ticket-types", h.Catalog.ListTypes)
 	app.GET(base+"/ticket-types/{id}", h.Catalog.GetType)
 	app.POST(base+"/ticket-types", h.Catalog.CreateType)

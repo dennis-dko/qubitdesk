@@ -2714,6 +2714,228 @@
           }
         }
       }
+    },
+    "/calendars": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the calendars",
+        "description": "When a service is given - the hours of each weekday, less public holidays and free days - which a service level's minutes are counted in, by name. Takes `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "The calendars"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Create a calendar",
+        "description": "Needs a `name`. Stretches lie within their day, run forwards and overlap no other of their weekday; \"24:00\" ends one at midnight. Takes `queues:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "zone": {
+                    "type": "string",
+                    "description": "An IANA zone; empty follows the installation's"
+                  },
+                  "holidayPlace": {
+                    "type": "string",
+                    "description": "An ISO 3166-2 place such as DE-BY, none, or empty to follow the installation's"
+                  },
+                  "hours": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "weekday": {
+                          "type": "integer",
+                          "description": "0 is Sunday"
+                        },
+                        "from": {
+                          "type": "string",
+                          "example": "08:00"
+                        },
+                        "to": {
+                          "type": "string",
+                          "example": "12:00"
+                        }
+                      }
+                    }
+                  },
+                  "freeDays": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "day": {
+                          "type": "string",
+                          "example": "2026-12-24"
+                        },
+                        "recurring": {
+                          "type": "boolean"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the calendar cannot be stored with"
+          },
+          "409": {
+            "description": "Another calendar has that name"
+          }
+        }
+      }
+    },
+    "/calendars/{id}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read a calendar",
+        "description": "Takes `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "The calendar"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change a calendar",
+        "description": "A field left out stays as it was; hours or freeDays that are sent replace the old ones. Takes `queues:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "zone": {
+                    "type": "string",
+                    "description": "An IANA zone; empty follows the installation's"
+                  },
+                  "holidayPlace": {
+                    "type": "string",
+                    "description": "An ISO 3166-2 place such as DE-BY, none, or empty to follow the installation's"
+                  },
+                  "hours": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "weekday": {
+                          "type": "integer",
+                          "description": "0 is Sunday"
+                        },
+                        "from": {
+                          "type": "string",
+                          "example": "08:00"
+                        },
+                        "to": {
+                          "type": "string",
+                          "example": "12:00"
+                        }
+                      }
+                    }
+                  },
+                  "freeDays": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "day": {
+                          "type": "string",
+                          "example": "2026-12-24"
+                        },
+                        "recurring": {
+                          "type": "boolean"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the calendar cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another calendar has that name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete a calendar",
+        "description": "Takes `queues:write`.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     }
   },
   "components": {

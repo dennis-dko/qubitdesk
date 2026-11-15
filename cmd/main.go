@@ -1011,6 +1011,8 @@ func main() {
 			WithOpenIDCheck(openIDSignIn.Check),
 
 		SysConfig: rest.NewSysConfigHandler(sysConfig, authorizer),
+		Calendars: rest.NewCalendarHandler(
+			appservice.NewCalendarApplicationService(sqldb.NewCalendarRepository(db, cfg.Dialect)), authorizer),
 	})
 
 	// Expired sessions would otherwise accumulate forever.

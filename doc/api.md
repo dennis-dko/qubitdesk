@@ -109,6 +109,7 @@ running instance.
 | `GET/POST/PUT/DELETE` | `/api/v1/contacts`, `/contacts/{id}` | The people tickets come from; deleting one that tickets are for needs `?confirm=true`, and the tickets stay without it |
 | `GET/POST/PUT/DELETE` | `/api/v1/queues`, `/queues/{id}` | Where tickets are sorted to and which role reaches each; anybody without `queues:write` is shown only the queues their role reaches, and one it does not reach is not found |
 | `GET/POST/PUT/DELETE` | `/api/v1/ticket-states`, `/ticket-priorities`, `/ticket-types` and each `/{id}` | What tickets are sorted by; reading takes `tickets:read` or `queues:write`, changing takes `queues:write`, and what the code relies on stays as it shipped |
+| `GET/POST/PUT/DELETE` | `/api/v1/calendars`, `/calendars/{id}` | When a service is given - the hours of each weekday, less public holidays and free days of its own - which a service level's minutes are counted in; takes `queues:write`, and an empty zone or place follows the installation's |
 | `GET/PUT` | `/api/v1/settings/...` | Branding, database, LDAP, sign-in provider, public holidays, metrics and tracing |
 | `GET/PUT/DELETE` | `/api/v1/settings/sysconfig`, `/settings/sysconfig/{name}` | The system configuration: options with their defaults, under KIX18's names; every account signed in reads the external ones, `settings:manage` reads and changes all of them, and `DELETE` puts one back to its default |
 

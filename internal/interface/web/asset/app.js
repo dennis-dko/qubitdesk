@@ -520,6 +520,10 @@ const FIELD_NAMES = {
   url: 'Website',
   userFilter: 'User filter',
   value: 'Value',
+  zone: 'Timezone',
+  holidayPlace: 'Public holidays',
+  hours: 'Working hours',
+  freeDays: 'Free days',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -7748,6 +7752,9 @@ const CHANGE_SENTENCES = {
   'installation.restart': () => t('change.restart', 'Restarted the application'),
   'installation.update': () => t('change.update', 'Started an update'),
   'installation.setup': () => t('change.setup', 'Completed the setup'),
+  'calendar.created': () => t('change.calendarCreated', 'Created the calendar {0}'),
+  'calendar.updated': () => t('change.calendarUpdated', 'Changed the calendar {0}'),
+  'calendar.deleted': () => t('change.calendarDeleted', 'Deleted the calendar {0}'),
   'sysconfig.set': () => t('change.sysconfigSet', 'Changed the option {1}'),
   'sysconfig.reset': () => t('change.sysconfigReset', 'Put the option {1} back to its default'),
 };

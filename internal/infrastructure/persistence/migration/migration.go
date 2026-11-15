@@ -136,7 +136,56 @@ func All(dialect string) map[int64]migration.Migrate {
 		20261112015600: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_faq_articles_category", "faq_articles", "category_id")
 		}},
+
+		// When a service is given, which a service level's minutes are counted in.
+		20261116010000: {UP: func(d migration.Datasource) error { return createCalendars(d, dialect) }},
+		20261116010100: {UP: func(d migration.Datasource) error { return createCalendarHours(d, dialect) }},
+		20261116010200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_calendar_hours_calendar", "calendar_hours", "calendar_id")
+		}},
+		20261116010300: {UP: func(d migration.Datasource) error { return createCalendarFreeDays(d, dialect) }},
+		20261116010400: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_calendar_free_days_calendar", "calendar_free_days", "calendar_id")
+		}},
 	}
+}
+
+// createCalendars keeps when a service is given, as KIX18 keeps it. An empty
+// zone or place for public holidays follows the installation's own.
+func createCalendars(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE calendars (
+		%[1]s,
+		name VARCHAR(255) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		zone VARCHAR(64) NOT NULL DEFAULT '',
+		holiday_place VARCHAR(16) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect)))
+}
+
+// createCalendarHours keeps the stretches of a weekday a calendar's service is
+// given in, in minutes after midnight in its zone - two for a day with a break.
+func createCalendarHours(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE calendar_hours (
+		%[1]s,
+		calendar_id %[2]s NOT NULL REFERENCES calendars(id),
+		weekday INT NOT NULL,
+		from_minute INT NOT NULL,
+		to_minute INT NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect)))
+}
+
+// createCalendarFreeDays keeps the days a calendar's service is not given
+// beyond the public holidays, once or every year on that date; a day is
+// midnight UTC of the calendar day, as every stored date is.
+func createCalendarFreeDays(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE calendar_free_days (
+		%[1]s,
+		calendar_id %[2]s NOT NULL REFERENCES calendars(id),
+		day %[3]s NOT NULL,
+		recurring %[4]s NOT NULL DEFAULT %[5]s,
+		name VARCHAR(255) NOT NULL DEFAULT ''
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), boolean(dialect), falseLiteral(dialect)))
 }
 
 // createRoles keeps the named sets of rights. A role is a row because an
