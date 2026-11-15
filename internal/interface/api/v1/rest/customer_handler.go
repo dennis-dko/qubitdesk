@@ -46,12 +46,14 @@ type OrganisationRequest struct {
 	Valid   *bool   `json:"valid"`
 }
 
-// ContactResponse is a contact as the API hands it out. HasPortalAccount says
-// whether the contact signs in to the portal, without saying which account that
-// is, which is the account's own business.
+// ContactResponse is a contact as the API hands it out, naming its organisation
+// as well as numbering it. HasPortalAccount says whether the contact signs in to
+// the portal, without saying which account that is, which is the account's own
+// business.
 type ContactResponse struct {
 	ID               uint      `json:"id"`
 	OrganisationID   *uint     `json:"organisationId"`
+	OrganisationName string    `json:"organisationName"`
 	Name             string    `json:"name"`
 	Email            string    `json:"email"`
 	Phone            string    `json:"phone"`
@@ -81,11 +83,22 @@ func newOrganisationResponse(o *model.Organisation) OrganisationResponse {
 	}
 }
 
-func newContactResponse(c *model.Contact) ContactResponse {
+func newContactResponse(c *model.Contact, organisations map[uint]string) ContactResponse {
 	return ContactResponse{
-		ID: c.ID, OrganisationID: c.OrganisationID, Name: c.Name, Email: c.Email, Phone: c.Phone, Note: c.Note,
+		ID: c.ID, OrganisationID: c.OrganisationID, OrganisationName: nameIn(organisations, c.OrganisationID),
+		Name: c.Name, Email: c.Email, Phone: c.Phone, Note: c.Note,
 		Valid: c.Valid, HasPortalAccount: c.UserID != nil, CreatedAt: c.CreatedAt,
 	}
+}
+
+// contactResponse answers with one contact, naming its organisation.
+func (h *CustomerHandler) contactResponse(c *gofr.Context, contact *model.Contact) (any, error) {
+	names, err := h.customers.OrganisationNames(c, []*model.Contact{contact})
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return newContactResponse(contact, names), nil
 }
 
 // ListOrganisations handles GET /api/v1/organisations.
@@ -206,7 +219,12 @@ func (h *CustomerHandler) ListContacts(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	page := listOf(contacts, newContactResponse)
+	names, err := h.customers.OrganisationNames(c, contacts)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	page := listOf(contacts, func(contact *model.Contact) ContactResponse { return newContactResponse(contact, names) })
 	page.TotalCount = total
 
 	return page, nil
@@ -228,7 +246,7 @@ func (h *CustomerHandler) GetContact(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	return newContactResponse(contact), nil
+	return h.contactResponse(c, contact)
 }
 
 // CreateContact handles POST /api/v1/contacts.
@@ -247,7 +265,7 @@ func (h *CustomerHandler) CreateContact(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	return newContactResponse(contact), nil
+	return h.contactResponse(c, contact)
 }
 
 // UpdateContact handles PUT /api/v1/contacts/{id}.
@@ -271,7 +289,7 @@ func (h *CustomerHandler) UpdateContact(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	return newContactResponse(contact), nil
+	return h.contactResponse(c, contact)
 }
 
 // DeleteContact handles DELETE /api/v1/contacts/{id}. ?confirm=true says that

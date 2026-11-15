@@ -2452,7 +2452,7 @@
           "customers"
         ],
         "summary": "List contacts",
-        "description": "One page of them by name and `totalCount` saying how many there are altogether: `q` narrows to a name or an address holding the words, `valid=true` to what is still offered, `organisation` to one organisation's; `limit` is 50 unless given and at most 200, more refused rather than quietly lowered, and `page` counts from 1.",
+        "description": "One page of them by name, each naming its organisation in `organisationName`, and `totalCount` saying how many there are altogether: `q` narrows to a name or an address holding the words, `valid=true` to what is still offered, `organisation` to one organisation's; `limit` is 50 unless given and at most 200, more refused rather than quietly lowered, and `page` counts from 1.",
         "responses": {
           "200": {
             "description": "A page of contacts"

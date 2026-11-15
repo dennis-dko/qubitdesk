@@ -15,11 +15,12 @@ type organisationResponse struct {
 }
 
 type contactResponse struct {
-	ID             uint   `json:"id"`
-	Name           string `json:"name"`
-	Email          string `json:"email"`
-	Phone          string `json:"phone"`
-	OrganisationID *uint  `json:"organisationId"`
+	ID               uint   `json:"id"`
+	Name             string `json:"name"`
+	Email            string `json:"email"`
+	Phone            string `json:"phone"`
+	OrganisationID   *uint  `json:"organisationId"`
+	OrganisationName string `json:"organisationName"`
 }
 
 func organisationPath(id uint) string { return "/organisations/" + strconv.FormatUint(uint64(id), 10) }
@@ -53,7 +54,8 @@ func TestCustomersAreAdministeredOverHTTP(t *testing.T) {
 		"name": "Ann Anders", "email": "Ann@Example.com", "organisationId": acme.ID,
 	}), http.StatusCreated).Data(t, &ann)
 
-	if ann.Email != "ann@example.com" || ann.OrganisationID == nil || *ann.OrganisationID != acme.ID {
+	if ann.Email != "ann@example.com" || ann.OrganisationID == nil || *ann.OrganisationID != acme.ID ||
+		ann.OrganisationName != "Acme" {
 		t.Errorf("the new contact reads as %+v", ann)
 	}
 
@@ -65,7 +67,10 @@ func TestCustomersAreAdministeredOverHTTP(t *testing.T) {
 	admin.must(admin.api(http.MethodGet, "/contacts?organisation="+strconv.FormatUint(uint64(acme.ID), 10), nil),
 		http.StatusOK).Data(t, &ofAcme)
 
-	if ofAcme.TotalCount != 1 || ofAcme.Items[0].ID != ann.ID {
+	// Named by the listing itself: a screen reading the organisations to name
+	// them gets two hundred at most, and named a contact of the next one as
+	// working nowhere.
+	if ofAcme.TotalCount != 1 || ofAcme.Items[0].ID != ann.ID || ofAcme.Items[0].OrganisationName != "Acme" {
 		t.Errorf("Acme's contacts read as %+v", ofAcme)
 	}
 

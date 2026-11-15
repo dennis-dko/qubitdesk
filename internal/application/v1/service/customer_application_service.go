@@ -22,6 +22,7 @@ type CustomerService interface {
 	DeleteOrganisation(ctx context.Context, id uint) error
 
 	ListContacts(ctx context.Context, filter CustomerListFilter) ([]*model.Contact, uint, error)
+	OrganisationNames(ctx context.Context, contacts []*model.Contact) (map[uint]string, error)
 	GetContact(ctx context.Context, id uint) (*model.Contact, error)
 	CreateContact(ctx context.Context, cmd command.ContactCommand) (*model.Contact, error)
 	UpdateContact(ctx context.Context, id uint, cmd command.ContactCommand) (*model.Contact, error)
@@ -154,6 +155,39 @@ func (s *CustomerApplicationService) GetContact(ctx context.Context, id uint) (*
 	}
 
 	return s.contacts.GetByID(ctx, id)
+}
+
+// OrganisationNames are the names of the organisations the contacts belong to,
+// so a contact says where it works by itself: a screen that read the
+// organisations to name them got two hundred at most, and named a contact of
+// the next one as working nowhere. One that is gone has none.
+func (s *CustomerApplicationService) OrganisationNames(
+	ctx context.Context,
+	contacts []*model.Contact,
+) (map[uint]string, error) {
+	names := map[uint]string{}
+
+	for _, contact := range contacts {
+		if contact.OrganisationID == nil {
+			continue
+		}
+
+		if _, known := names[*contact.OrganisationID]; known {
+			continue
+		}
+
+		organisation, err := s.organisations.GetByID(ctx, *contact.OrganisationID)
+		if err != nil && apperror.KindOf(err) != apperror.KindNotFound {
+			return nil, err
+		}
+
+		names[*contact.OrganisationID] = ""
+		if organisation != nil {
+			names[*contact.OrganisationID] = organisation.Name
+		}
+	}
+
+	return names, nil
 }
 
 func (s *CustomerApplicationService) CreateContact(ctx context.Context, cmd command.ContactCommand) (*model.Contact, error) {
