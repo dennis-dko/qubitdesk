@@ -30,6 +30,8 @@ type Handlers struct {
 	Exports  *rest.ExportHandler
 	AdminLog *rest.AdminLogHandler
 	Push     *rest.PushHandler
+
+	SysConfig *rest.SysConfigHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -113,6 +115,14 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	// every push leaves through the push service of the browser's maker.
 	app.GET(base+"/settings/push", h.Push.Switch)
 	app.PUT(base+"/settings/push", h.Push.SaveSwitch)
+
+	// The system configuration: options with defaults, an installation storing
+	// only what it changed. Under /settings/ because its card is on that screen,
+	// which maintenance mode leaves reachable; the list is read by every account
+	// signed in, which is handed the external options alone.
+	app.GET(base+"/settings/sysconfig", h.SysConfig.List)
+	app.PUT(base+"/settings/sysconfig/{name}", h.SysConfig.Set)
+	app.DELETE(base+"/settings/sysconfig/{name}", h.SysConfig.Reset)
 
 	// What is waiting for a restart, and the restart itself. Under /settings/
 	// like the rest, which also keeps it reachable during maintenance mode - the

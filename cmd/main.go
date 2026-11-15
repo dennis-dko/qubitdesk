@@ -1008,6 +1008,8 @@ func main() {
 			WithRunningConnection(ds).
 			WithFileTelemetry(fileTelemetry).
 			WithOpenIDCheck(openIDSignIn.Check),
+
+		SysConfig: rest.NewSysConfigHandler(appservice.NewSysConfigService(settingsRepo), authorizer),
 	})
 
 	// Expired sessions would otherwise accumulate forever.

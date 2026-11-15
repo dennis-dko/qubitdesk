@@ -1,0 +1,100 @@
+//go:build integration
+
+package integration
+
+import (
+	"net/http"
+	"testing"
+)
+
+type configList struct {
+	Items []struct {
+		Name     string `json:"name"`
+		Access   string `json:"access"`
+		Default  any    `json:"default"`
+		Value    any    `json:"value"`
+		Modified bool   `json:"modified"`
+	} `json:"items"`
+}
+
+// valueOf is what the listing says an option is set to, and whether it lists it.
+func (l configList) valueOf(name string) (any, bool, bool) {
+	for _, item := range l.Items {
+		if item.Name == name {
+			return item.Value, item.Modified, true
+		}
+	}
+
+	return nil, false, false
+}
+
+// An option is changed, read back by an agent, refused a value it cannot hold,
+// and put back to its default, over HTTP with its name in the path - the colons
+// written plainly and escaped - and the administration log names the option.
+func TestTheSystemConfigurationIsChangedAndPutBackOverHTTP(t *testing.T) {
+	t.Parallel()
+
+	_, admin, worker := startWithWorker(t)
+
+	var before configList
+
+	admin.must(admin.api(http.MethodGet, "/settings/sysconfig", nil), http.StatusOK).Data(t, &before)
+
+	if value, modified, listed := before.valueOf("Ticket::Hook"); !listed || value != "Ticket#" || modified {
+		t.Fatalf("Ticket::Hook reads as %v, modified %t, listed %t; want its default", value, modified, listed)
+	}
+
+	admin.must(admin.api(http.MethodPut, "/settings/sysconfig/Ticket::Hook", map[string]any{"value": "Call#"}),
+		http.StatusOK)
+
+	for _, refused := range []struct {
+		path  string
+		value any
+		want  int
+	}{
+		{"/settings/sysconfig/Ticket::Hook", 5, http.StatusBadRequest},
+		{"/settings/sysconfig/Ticket::Hook", "a hook far longer than twenty", http.StatusBadRequest},
+		{"/settings/sysconfig/Ticket::Nothing", "x", http.StatusNotFound},
+	} {
+		if got := admin.api(http.MethodPut, refused.path, map[string]any{"value": refused.value}); got.Status != refused.want {
+			t.Errorf("%s with %v was answered %d, want %d", refused.path, refused.value, got.Status, refused.want)
+		}
+	}
+
+	var seen configList
+
+	worker.must(worker.api(http.MethodGet, "/settings/sysconfig", nil), http.StatusOK).Data(t, &seen)
+
+	if value, modified, _ := seen.valueOf("Ticket::Hook"); value != "Call#" || !modified {
+		t.Errorf("an agent reads Ticket::Hook as %v, modified %t; want the value the administrator chose", value, modified)
+	}
+
+	for _, item := range seen.Items {
+		if item.Access != "external" {
+			t.Errorf("an agent was handed %s, which is %s", item.Name, item.Access)
+		}
+	}
+
+	if refused := worker.api(http.MethodPut, "/settings/sysconfig/Ticket::Hook", map[string]any{"value": "Mine#"}); refused.Status != http.StatusForbidden {
+		t.Errorf("an agent changing an option was answered %d, want 403", refused.Status)
+	}
+
+	admin.must(admin.api(http.MethodDelete, "/settings/sysconfig/Ticket%3A%3AHook", nil), http.StatusNoContent, http.StatusOK)
+
+	var after configList
+
+	admin.must(admin.api(http.MethodGet, "/settings/sysconfig", nil), http.StatusOK).Data(t, &after)
+
+	if value, modified, _ := after.valueOf("Ticket::Hook"); value != "Ticket#" || modified {
+		t.Errorf("after the reset Ticket::Hook reads as %v, modified %t; want its default", value, modified)
+	}
+
+	var log adminChanges
+
+	admin.must(admin.api(http.MethodGet, "/admin/changes", nil), http.StatusOK).Data(t, &log)
+
+	if len(log.Entries) < 2 || log.Entries[0].Action != "sysconfig.reset" || log.Entries[0].Detail != "Ticket::Hook" ||
+		log.Entries[1].Action != "sysconfig.set" || log.Entries[1].Detail != "Ticket::Hook" {
+		t.Errorf("the administration log reads %+v; want the reset and the change, each naming Ticket::Hook", log.Entries)
+	}
+}

@@ -64,23 +64,32 @@ var administrativeChanges = []struct {
 	{http.MethodPost, "/api/v1/settings/restart", "installation.restart", ""},
 	{http.MethodPost, "/api/v1/settings/update", "installation.update", ""},
 	{http.MethodPost, "/api/v1/setup/complete", "installation.setup", ""},
+	{http.MethodPut, "/api/v1/settings/sysconfig/{name}", "sysconfig.set", ""},
+	{http.MethodDelete, "/api/v1/settings/sysconfig/{name}", "sysconfig.reset", ""},
 }
 
-// loggedRoute is one of administrativeChanges, ready to be matched.
+// loggedRoute is one of administrativeChanges, ready to be matched. A named
+// route is one whose path names what it changes rather than numbering it - an
+// option of the system configuration - and the name is what the log keeps.
 type loggedRoute struct {
 	method, action, keeps string
 	path                  *regexp.Regexp
+	named                 bool
 }
 
-// loggedRoutes compiles the table once: "{id}" becomes the number it stands for.
+// loggedRoutes compiles the table once: "{id}" becomes the number it stands
+// for, "{name}" a name.
 func loggedRoutes() []loggedRoute {
 	routes := make([]loggedRoute, 0, len(administrativeChanges))
 
 	for _, change := range administrativeChanges {
-		pattern := "^" + strings.ReplaceAll(regexp.QuoteMeta(change.route), `\{id\}`, `(\d+)`) + "$"
+		pattern := regexp.QuoteMeta(change.route)
+		pattern = strings.ReplaceAll(pattern, `\{id\}`, `(\d+)`)
+		pattern = strings.ReplaceAll(pattern, `\{name\}`, `([^/]+)`)
+
 		routes = append(routes, loggedRoute{
 			method: change.method, action: change.action, keeps: change.keeps,
-			path: regexp.MustCompile(pattern),
+			path: regexp.MustCompile("^" + pattern + "$"), named: strings.Contains(change.route, "{name}"),
 		})
 	}
 
@@ -105,7 +114,7 @@ func AdministrationLog(log *service.AdminLogService, logger errorLogger) func(ht
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			route, target, logged := matchLogged(routes, r)
+			route, target, name, logged := matchLogged(routes, r)
 			principal, signedIn := principalFromContext(r.Context())
 
 			if !logged || !signedIn || principal.User == nil {
@@ -142,7 +151,12 @@ func AdministrationLog(log *service.AdminLogService, logger errorLogger) func(ht
 				target = createdID(answer.body.Bytes())
 			}
 
-			err := log.Record(r.Context(), principal.User.ID, route.action, target, keptValue(sent, route.keeps))
+			kept := keptValue(sent, route.keeps)
+			if route.named {
+				kept = name
+			}
+
+			err := log.Record(r.Context(), principal.User.ID, route.action, target, kept)
 			if err != nil {
 				logger.Errorf("the administration log could not keep %s by account %d: %v",
 					route.action, principal.User.ID, err)
@@ -168,8 +182,9 @@ func changedNothing(c *gofr.Context) {
 	}
 }
 
-// matchLogged finds the logged route a request arrived on, and the id in its path.
-func matchLogged(routes []loggedRoute, r *http.Request) (loggedRoute, uint, bool) {
+// matchLogged finds the logged route a request arrived on, and the id or the
+// name in its path.
+func matchLogged(routes []loggedRoute, r *http.Request) (loggedRoute, uint, string, bool) {
 	for _, route := range routes {
 		if route.method != r.Method {
 			continue
@@ -180,6 +195,10 @@ func matchLogged(routes []loggedRoute, r *http.Request) (loggedRoute, uint, bool
 			continue
 		}
 
+		if route.named {
+			return route, 0, found[1], true
+		}
+
 		var target uint
 
 		// Read by the package's own reader, at the destination's width - see
@@ -187,16 +206,16 @@ func matchLogged(routes []loggedRoute, r *http.Request) (loggedRoute, uint, bool
 		if len(found) > 1 {
 			id, err := parseUint(found[1], "id")
 			if err != nil {
-				return route, 0, false
+				return route, 0, "", false
 			}
 
 			target = id
 		}
 
-		return route, target, true
+		return route, target, "", true
 	}
 
-	return loggedRoute{}, 0, false
+	return loggedRoute{}, 0, "", false
 }
 
 // answerRecorder notes the status a handler answered with, and keeps the body of

@@ -2536,6 +2536,104 @@
           }
         }
       }
+    },
+    "/settings/sysconfig": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "List the system configuration",
+        "description": "Every option with its `value`, its `default` and whether the installation changed it (`modified`), the value in the option's own `type` - text or a switch. Whoever holds `settings:manage` is answered every option; any other account signed in the `external` ones, which the screens show.",
+        "responses": {
+          "200": {
+            "description": "The options"
+          },
+          "401": {
+            "description": "Not signed in"
+          }
+        }
+      }
+    },
+    "/settings/sysconfig/{name}": {
+      "put": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Change an option",
+        "description": "Takes {\"value\": ...} in the option's own type; text is not trimmed and may not run across lines or past `maxLength`. A value equal to the default makes the option the default again rather than a stored copy of it. Needs `settings:manage`.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The option's name, as KIX18 names it - `Ticket::Hook`."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "description": "Text or true/false, as the option holds"
+                  }
+                },
+                "required": [
+                  "value"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The option as it is now"
+          },
+          "400": {
+            "description": "A value the option cannot hold"
+          },
+          "403": {
+            "description": "Missing permission"
+          },
+          "404": {
+            "description": "No option of that name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Put an option back to its default",
+        "description": "Forgets what the installation chose, so the option follows its default again. Needs `settings:manage`.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The option's name, as KIX18 names it - `Ticket::Hook`."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Back to its default"
+          },
+          "403": {
+            "description": "Missing permission"
+          },
+          "404": {
+            "description": "No option of that name"
+          }
+        }
+      }
     }
   },
   "components": {

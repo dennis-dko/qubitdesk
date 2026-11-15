@@ -519,6 +519,7 @@ const FIELD_NAMES = {
   unlockMinutes: 'Unlock after (minutes)',
   url: 'Website',
   userFilter: 'User filter',
+  value: 'Value',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -7516,6 +7517,8 @@ const CHANGE_SENTENCES = {
   'installation.restart': () => t('change.restart', 'Restarted the application'),
   'installation.update': () => t('change.update', 'Started an update'),
   'installation.setup': () => t('change.setup', 'Completed the setup'),
+  'sysconfig.set': () => t('change.sysconfigSet', 'Changed the option {1}'),
+  'sysconfig.reset': () => t('change.sysconfigReset', 'Put the option {1} back to its default'),
 };
 
 /** One change as a sentence: what was done, to whom, and the value it kept. */
