@@ -23,14 +23,16 @@ type TicketRepository struct {
 	time     []model.TimeEntry
 	watchers map[uint]map[uint]bool
 
-	nextTicket, nextArticle, nextHistory uint
+	attachments []model.Attachment
+
+	nextTicket, nextArticle, nextHistory, nextAttachment uint
 }
 
 // NewTicketRepository creates an empty ticket repository.
 func NewTicketRepository() *TicketRepository {
 	return &TicketRepository{
 		tickets: map[uint]model.Ticket{}, watchers: map[uint]map[uint]bool{},
-		nextTicket: 1, nextArticle: 1, nextHistory: 1,
+		nextTicket: 1, nextArticle: 1, nextHistory: 1, nextAttachment: 1,
 	}
 }
 
@@ -223,6 +225,7 @@ func (r *TicketRepository) Delete(_ context.Context, id uint) error {
 	r.articles = slices.DeleteFunc(r.articles, func(a model.Article) bool { return a.TicketID == id })
 	r.history = slices.DeleteFunc(r.history, func(h model.HistoryEntry) bool { return h.TicketID == id })
 	r.time = slices.DeleteFunc(r.time, func(e model.TimeEntry) bool { return e.TicketID == id })
+	r.attachments = slices.DeleteFunc(r.attachments, func(a model.Attachment) bool { return a.TicketID == id })
 
 	return nil
 }

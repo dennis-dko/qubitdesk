@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
@@ -405,6 +406,10 @@ func (l *RateLimiter) clientKey(r *http.Request) string {
 const (
 	maxRequestBody = 2 << 20
 	maxImportBody  = 32 << 20
+
+	// maxAttachmentBody is one file and the few lines of the form around it;
+	// the bound on the file itself is the domain's, model.MaxAttachmentBytes.
+	maxAttachmentBody = model.MaxAttachmentBytes + 64<<10
 )
 
 // LimitRequestBody refuses a body larger than the endpoint has any use for.
@@ -422,6 +427,10 @@ func LimitRequestBody() func(http.Handler) http.Handler {
 			allowed := int64(maxRequestBody)
 			if strings.HasSuffix(r.URL.Path, "/import") {
 				allowed = maxImportBody
+			}
+
+			if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/attachments") {
+				allowed = maxAttachmentBody
 			}
 
 			if r.ContentLength > allowed {

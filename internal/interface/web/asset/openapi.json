@@ -2634,6 +2634,86 @@
           }
         }
       }
+    },
+    "/tickets/{id}/articles/{article}/attachments": {
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Attach a file to an article",
+        "description": "One file as multipart/form-data in the field `file`, at most 20 MB; its name is kept without a folder and its type only where it reads as a media type. Takes `tickets:write` and a queue the caller works in, and writes the attachment into the ticket's history.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The ticket"
+          },
+          {
+            "name": "article",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "An article of that ticket"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The file, without its content"
+          },
+          "400": {
+            "description": "No file, an empty one, one larger than 20 MB, or an upload that cannot be read"
+          },
+          "404": {
+            "description": "A ticket the caller does not work on, or an article not in it"
+          },
+          "413": {
+            "description": "A request larger than one file of 20 MB"
+          }
+        }
+      }
+    },
+    "/tickets/{id}/attachments/{attachment}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Download a file",
+        "description": "Always as application/octet-stream, whatever type the file was sent under: a page or a script served from this origin under its own type would run as the application. The article listing names each file, its type and its size. Takes `tickets:read` and a queue the caller reaches.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The ticket"
+          },
+          {
+            "name": "attachment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A file of that ticket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file's bytes"
+          },
+          "404": {
+            "description": "A ticket the caller does not reach, or a file not in it"
+          }
+        }
+      }
     }
   },
   "components": {

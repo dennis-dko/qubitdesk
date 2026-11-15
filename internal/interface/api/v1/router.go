@@ -206,6 +206,8 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	// {id}, as the export routes are: the router matches the first pattern that
 	// fits, and "assignees" read as an id is the failure to avoid.
 	app.GET(base+"/tickets", h.Tickets.List)
+	app.POST(base+"/tickets/{id}/articles/{article}/attachments", h.Tickets.UploadAttachment)
+	app.GET(base+"/tickets/{id}/attachments/{attachment}", h.Tickets.DownloadAttachment)
 	app.GET(base+"/tickets/assignees", h.Tickets.Assignees)
 	app.POST(base+"/tickets", h.Tickets.Create)
 	app.GET(base+"/tickets/{id}", h.Tickets.Get)

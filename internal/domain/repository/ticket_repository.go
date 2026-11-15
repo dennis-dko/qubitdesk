@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 )
@@ -33,6 +34,17 @@ type TicketRepository interface {
 		history []model.HistoryEntry) (*model.Article, error)
 
 	Articles(ctx context.Context, ticketID uint) ([]*model.Article, error)
+
+	// AddAttachment stores a file with an article and the history saying so,
+	// and marks the ticket changed at that moment.
+	AddAttachment(ctx context.Context, attachment *model.Attachment, at time.Time,
+		history []model.HistoryEntry) (*model.Attachment, error)
+
+	// Attachments lists the files of a ticket's articles, without their content.
+	Attachments(ctx context.Context, ticketID uint) ([]*model.Attachment, error)
+
+	// Attachment reads one file with its content and the ticket it belongs to.
+	Attachment(ctx context.Context, id uint) (*model.Attachment, error)
 	History(ctx context.Context, ticketID uint) ([]model.HistoryEntry, error)
 
 	// AccountedMinutes is the time noted on the ticket altogether.

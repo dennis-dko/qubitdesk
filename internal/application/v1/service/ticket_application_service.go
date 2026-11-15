@@ -26,6 +26,11 @@ type TicketService interface {
 	AddArticle(ctx context.Context, caller *Principal, id uint, cmd command.AddArticleCommand) (*model.Article, error)
 	Articles(ctx context.Context, caller *Principal, id uint) ([]*model.Article, error)
 	History(ctx context.Context, caller *Principal, id uint) ([]model.HistoryEntry, error)
+
+	AddAttachment(ctx context.Context, caller *Principal, ticketID, articleID uint,
+		file AttachedFile) (*model.Attachment, error)
+	Attachments(ctx context.Context, caller *Principal, ticketID uint) ([]*model.Attachment, error)
+	Attachment(ctx context.Context, caller *Principal, ticketID, attachmentID uint) (*model.Attachment, error)
 	AccountedMinutes(ctx context.Context, caller *Principal, id uint) (int, error)
 
 	SetWatching(ctx context.Context, caller *Principal, id uint, watching bool) error

@@ -5361,6 +5361,7 @@ const HISTORY_SENTENCES = {
   pending: () => t('history.pending', 'Changed how long it waits from {0} to {1}'),
   article: () => t('history.article', 'Wrote a {1}'),
   time: () => t('history.time', 'Noted {1} minutes'),
+  attachment: () => t('history.attachment', 'Attached {1}'),
 };
 
 /** How the ticket list stands: which page, how many to a page, how many in all. */

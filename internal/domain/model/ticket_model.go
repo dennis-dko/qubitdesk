@@ -150,6 +150,7 @@ const (
 	HistoryPending      HistoryEvent = "pending"
 	HistoryArticle      HistoryEvent = "article"
 	HistoryTime         HistoryEvent = "time"
+	HistoryAttachment   HistoryEvent = "attachment"
 )
 
 // HistoryEvents lists every kind of thing that happens to a ticket, which is
@@ -158,7 +159,7 @@ func HistoryEvents() []HistoryEvent {
 	return []HistoryEvent{
 		HistoryCreated, HistoryTitle, HistoryQueue, HistoryState, HistoryPriority, HistoryType,
 		HistoryOwner, HistoryResponsible, HistoryContact, HistoryOrganisation, HistoryLock, HistoryPending,
-		HistoryArticle, HistoryTime,
+		HistoryArticle, HistoryTime, HistoryAttachment,
 	}
 }
 

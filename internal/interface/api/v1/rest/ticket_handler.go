@@ -129,6 +129,9 @@ type ArticleResponse struct {
 	AuthorID        *uint     `json:"authorId"`
 	AuthorName      string    `json:"authorName"`
 	CreatedAt       time.Time `json:"createdAt"`
+
+	// Attachments are the files that came with the article, never null.
+	Attachments []AttachmentResponse `json:"attachments"`
 }
 
 // HistoryResponse is one line of a ticket's history.
@@ -297,8 +300,20 @@ func (h *TicketHandler) Articles(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
+	attachments, err := h.tickets.Attachments(c, caller, id)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	byArticle := attachmentsByArticle(attachments)
+
 	return listOf(articles, func(article *model.Article) ArticleResponse {
-		return newArticleResponse(article, names)
+		response := newArticleResponse(article, names)
+		if files, ok := byArticle[article.ID]; ok {
+			response.Attachments = files
+		}
+
+		return response
 	}), nil
 }
 
@@ -582,6 +597,7 @@ func newArticleResponse(article *model.Article, names map[uint]string) ArticleRe
 		ID: article.ID, Sender: string(article.Sender), Channel: string(article.Channel),
 		CustomerVisible: article.CustomerVisible, Subject: article.Subject, Body: article.Body,
 		AuthorID: article.AuthorID, AuthorName: nameIn(names, article.AuthorID), CreatedAt: article.CreatedAt,
+		Attachments: []AttachmentResponse{},
 	}
 }
 
