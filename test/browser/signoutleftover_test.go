@@ -3,9 +3,13 @@
 package browser
 
 import (
+	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 
@@ -105,8 +109,8 @@ func TestASignOutTakesAnImportsFileAndVerdictWithIt(t *testing.T) {
 	}
 }
 
-// A form left correcting a record goes back to creating one when its account
-// signs out.
+// Every form left correcting a record goes back to creating one when its
+// account signs out.
 //
 // The sign-out resets every form, and a reset leaves a hidden field's value
 // where it was - which is why each form's own reset clears its id by hand. Those
@@ -115,59 +119,104 @@ func TestASignOutTakesAnImportsFileAndVerdictWithIt(t *testing.T) {
 // filled it in to make something new changed the record the last person had
 // open: an administrator adding an account overwrote the one their predecessor
 // was correcting.
+//
+// It held the account and the role form alone while the ticket system added
+// seven more of the shape - the ticket, the queue, the three catalogs, the
+// organisation and the contact - and the sign-out reset none of them. So the
+// forms are found by the hidden id they hold rather than named, a record is
+// opened in each, and a form the case cannot open one in stops it: the next form
+// of the kind is taught to the case instead of passed over by it.
 func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 	t.Parallel()
 
 	p := open(t)
 	p.readyAdmin()
 
-	// The administrator's own row offers no correction, so somebody else's first.
-	p.run("add somebody", p.click(`.tab[data-view="users"]`),
-		chromedp.WaitVisible("#form-user", chromedp.ByID),
-		chromedp.SendKeys(`#form-user input[name="name"]`, "Wilma", chromedp.ByQuery),
-		chromedp.SendKeys(`#form-user input[name="email"]`, "wilma@example.com", chromedp.ByQuery),
-		p.chooseOption(`#form-user select[name="role"]`, "agent"),
-		chromedp.SendKeys(`#form-user input[name="password"]`, "wilma-password-1", chromedp.ByQuery),
-		p.click(`#form-user button[type="submit"]`))
-	p.waitForText("#table-users tbody", "wilma@example.com")
+	var made bool
 
-	p.run("start correcting the account", p.click(`#table-users tbody button[data-action="edit"]`))
+	p.awaitJSON(`(async () => {
+		const send = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body) });
+		await send('/users', { name: 'Wilma', email: 'wilma@example.com', role: 'agent', password: 'wilma-password-1' });
+		const acme = await send('/organisations', { name: 'Acme' });
+		const ann = await send('/contacts', { name: 'Ann', organisationId: acme.id });
+		const queue = (await api('/queues')).items[0];
+		await send('/tickets', { title: 'Printer', queueId: queue.id, body: 'It jams.', contactId: ann.id });
+		await refreshAll();
+		return true;
+	})()`, &made)
 
-	// A shipped role is opened to be looked at, through the same form and with
-	// its id in the same field.
-	p.run("open a role", p.click(`.tab[data-view="roles"]`),
-		chromedp.WaitVisible(`#table-roles tbody td.actions button`, chromedp.ByQuery),
-		p.click(`#table-roles tbody td.actions button`))
+	// Each by what a person would press: a row's edit button - the
+	// administrator's own account offers none, so Wilma's, and a shipped state
+	// offers none, so the first that does - and for the ticket form the
+	// ticket's number in the list, because opening a ticket puts it there.
+	openers := map[string]string{
+		"form-user":         `#table-users tbody button[data-action="edit"]`,
+		"form-role":         `#table-roles tbody td.actions button`,
+		"form-queue":        `#table-queue tbody td.actions button.link:not(.danger)`,
+		"form-state":        `#table-state tbody td.actions button.link:not(.danger)`,
+		"form-priority":     `#table-priority tbody td.actions button.link:not(.danger)`,
+		"form-type":         `#table-type tbody td.actions button.link:not(.danger)`,
+		"form-organisation": `#table-organisation tbody td.actions button.link:not(.danger)`,
+		"form-contact":      `#table-contact tbody td.actions button.link:not(.danger)`,
+		"form-ticket":       `#table-tickets tbody button.link`,
+	}
 
-	// Read from the forms rather than the screen: only one of the two tabs is
-	// showing.
-	var correcting bool
+	for form, opener := range openers {
+		p.run("open a record in "+form, chromedp.Evaluate(
+			fmt.Sprintf(`void document.querySelector(%s)?.click()`, jsString(opener)), nil))
+	}
 
-	p.run("confirm both forms are correcting", chromedp.Evaluate(`[['user', 'Add user'], ['role', 'Create role']]
-		.every(([kind, creating]) => document.querySelector('#form-' + kind).elements.id.value
-			&& document.querySelector('#' + kind + '-form-title').textContent.trim() !== creating)`, &correcting))
+	const holdingAnID = `[...document.querySelectorAll('form')]
+		.filter((form) => form.querySelector('input[type="hidden"][name="id"]'))`
 
-	if !correcting {
-		t.Fatal("this case starts from both forms correcting a record, and they are not")
+	// The ticket arrives in its form once it has been read, so this waits.
+	var correcting map[string]string
+
+	for deadline := time.Now().Add(waitPatience); ; time.Sleep(200 * time.Millisecond) {
+		p.evalJSON(`JSON.stringify(Object.fromEntries(`+holdingAnID+`
+			.map((form) => [form.getAttribute('id'), form.elements.id.value])))`, &correcting)
+
+		if !slices.Contains(slices.Collect(maps.Values(correcting)), "") || time.Now().After(deadline) {
+			break
+		}
+	}
+
+	for form, id := range correcting {
+		if _, known := openers[form]; !known {
+			t.Errorf("%s holds a hidden id and this case does not know how to open a record in it - teach it", form)
+		} else if id == "" {
+			t.Errorf("this case starts from every form correcting a record, and %s is not", form)
+		}
+	}
+
+	for form := range openers {
+		if _, there := correcting[form]; !there {
+			t.Errorf("this case opens a record in %s, which holds no hidden id any more", form)
+		}
+	}
+
+	if t.Failed() {
+		t.FailNow()
 	}
 
 	p.run("sign out", p.click("#logout"), chromedp.WaitVisible("#form-login", chromedp.ByID))
 
+	// What the next account would find: an id, a way to cancel the editing, and
+	// a heading drawn from the record rather than read from its key.
 	var left []string
 
-	p.run("read what the next account would find", chromedp.Evaluate(`(() => {
+	p.evalJSON(`JSON.stringify(`+holdingAnID+`.flatMap((form) => {
+		const name = form.getAttribute('id');
 		const left = [];
+		const cancel = form.querySelector('[data-i18n="action.cancelEdit"]');
+		const heading = document.querySelector('#' + name.replace(/^form-/, '') + '-form-title');
 
-		for (const [kind, creating] of [['user', 'Add user'], ['role', 'Create role']]) {
-			const form = document.querySelector('#form-' + kind);
-			const heading = document.querySelector('#' + kind + '-form-title').textContent.trim();
-
-			if (form.elements.id.value) left.push('the ' + kind + ' form still holds the id ' + form.elements.id.value);
-			if (heading !== creating) left.push('the ' + kind + ' form is still headed ' + JSON.stringify(heading));
-		}
+		if (form.elements.id.value) left.push(name + ' still holds the id ' + form.elements.id.value);
+		if (cancel && !cancel.hidden) left.push(name + ' still offers to cancel the editing');
+		if (heading && !heading.dataset.i18n) left.push(name + ' is still headed ' + JSON.stringify(heading.textContent.trim()));
 
 		return left;
-	})()`, &left))
+	}))`, &left)
 
 	for _, what := range left {
 		t.Errorf("after the sign-out %s", what)

@@ -8853,10 +8853,15 @@ function forgetTheLastAccount() {
   // And each form's own reset, which resetting the form does not reach: a hidden
   // field keeps its value through one, so a form left correcting a record kept
   // the record's id under its "edit" heading - and an administrator filling it in
-  // to add somebody changed the account their predecessor had open. After the
-  // caches and the account are gone, because two of them draw from those.
+  // to add somebody changed the account their predecessor had open. Every form
+  // holding a hidden id, which is how the sign-out case finds them; after the
+  // caches and the account are gone, because some of them draw from those.
   resetUserForm();
   resetRoleForm();
+  resetQueueForm();
+  for (const kind of Object.keys(CATALOGS)) resetCatalogForm(kind);
+  for (const kind of Object.keys(CUSTOMER_FORMS)) resetCustomerForm(kind);
+  resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
   // reset of every form never reached the file, the verdict or the button that
