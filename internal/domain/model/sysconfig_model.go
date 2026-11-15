@@ -48,11 +48,14 @@ type ConfigOption struct {
 	MaxLength   int
 }
 
-// The options, under KIX18's names, so that somebody who knows KIX finds each
-// under the name they know.
+// The options, under KIX18's names where KIX has the option, so that somebody
+// who knows KIX finds it under the name they know. KIX unlocks a moved ticket
+// through an event handler rather than a value, so that one has a name of its
+// own.
 const (
-	ConfigTicketHook        = "Ticket::Hook"
-	ConfigTicketHookDivider = "Ticket::HookDivider"
+	ConfigTicketHook         = "Ticket::Hook"
+	ConfigTicketHookDivider  = "Ticket::HookDivider"
+	ConfigTicketUnlockOnMove = "Ticket::UnlockOnMove"
 )
 
 // ConfigOptions are every option there is, in the order a list shows them.
@@ -72,6 +75,12 @@ func ConfigOptions() []ConfigOption {
 			Name: ConfigTicketHookDivider, Group: "Ticket", Type: ConfigString, Access: ConfigExternal,
 			Default: "", MaxLength: 5,
 			Description: "What stands between that word and the number: nothing, or a colon and a space.",
+		},
+		{
+			Name: ConfigTicketUnlockOnMove, Group: "Ticket", Type: ConfigBool, Access: ConfigInternal,
+			Default: "true",
+			Description: "Moving a ticket to another queue releases its lock, so that the agents of the queue " +
+				"it arrives in can take it up.",
 		},
 	}
 }

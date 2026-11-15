@@ -634,6 +634,7 @@ func main() {
 	customers := appservice.NewCustomerApplicationService(customerRepos.Organisations, customerRepos.Contacts)
 	ticketCatalog := appservice.NewTicketCatalogApplicationService(
 		catalogRepos.States, catalogRepos.Priorities, catalogRepos.Types)
+	sysConfig := appservice.NewSysConfigService(settingsRepo)
 	tickets := appservice.NewTicketApplicationService(sqldb.NewTicketRepository(db, cfg.Dialect), queueRepo,
 		catalogRepos, customerRepos, userRepo, roleRepo, func(ctx context.Context) string {
 			name, err := settingsService.Timezone(ctx)
@@ -642,7 +643,7 @@ func main() {
 			}
 
 			return name
-		}).WithMetrics(app.Metrics())
+		}).WithMetrics(app.Metrics()).WithConfig(sysConfig)
 
 	// What this installation is called in a language, wherever it has to name
 	// itself: the prompt a passkey device shows.
@@ -1009,7 +1010,7 @@ func main() {
 			WithFileTelemetry(fileTelemetry).
 			WithOpenIDCheck(openIDSignIn.Check),
 
-		SysConfig: rest.NewSysConfigHandler(appservice.NewSysConfigService(settingsRepo), authorizer),
+		SysConfig: rest.NewSysConfigHandler(sysConfig, authorizer),
 	})
 
 	// Expired sessions would otherwise accumulate forever.

@@ -478,3 +478,62 @@ func TestATicketCanBeGivenToWhoeverWorksInItsQueue(t *testing.T) {
 		t.Errorf("asking who works in a queue the agent does not reach answered %v, want not found", err)
 	}
 }
+
+// Moving a ticket to another queue releases its lock, as KIX18 does, so that the
+// agents of the queue it arrives in can take it up - unless the installation
+// switched that off, and except where the same request asks for the lock.
+func TestMovingATicketReleasesItsLock(t *testing.T) {
+	ctx := context.Background()
+	f := newTicketFixture(t)
+	settings := newStubSettings()
+	config := service.NewSysConfigService(settings)
+	f.tickets.WithConfig(config)
+
+	locked := true
+
+	lockedIn := func(title string) *model.Ticket {
+		ticket := f.open(t, f.admin, f.desk, title)
+
+		ticket, err := f.tickets.UpdateTicket(ctx, f.admin, ticket.ID, command.UpdateTicketCommand{Locked: &locked})
+		if err != nil || !ticket.Locked {
+			t.Fatalf("locking %q answered %+v, %v", title, ticket, err)
+		}
+
+		return ticket
+	}
+
+	moved, err := f.tickets.UpdateTicket(ctx, f.admin, lockedIn("Printer").ID,
+		command.UpdateTicketCommand{QueueID: &f.hidden.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if moved.Locked || moved.LockedAt != nil {
+		t.Errorf("moving a locked ticket left it locked: %+v", moved)
+	}
+
+	history, err := f.tickets.History(ctx, f.admin, moved.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if last := history[len(history)-1]; last.Event != model.HistoryLock || last.NewValue != "false" {
+		t.Errorf("the move's history ends with %+v; want the lock released", last)
+	}
+
+	asked, err := f.tickets.UpdateTicket(ctx, f.admin, lockedIn("Scanner").ID,
+		command.UpdateTicketCommand{QueueID: &f.hidden.ID, Locked: &locked})
+	if err != nil || !asked.Locked {
+		t.Errorf("a move that asked for the lock answered %+v, %v; want it kept", asked, err)
+	}
+
+	if _, err := config.Set(ctx, model.ConfigTicketUnlockOnMove, false); err != nil {
+		t.Fatal(err)
+	}
+
+	kept, err := f.tickets.UpdateTicket(ctx, f.admin, lockedIn("Monitor").ID,
+		command.UpdateTicketCommand{QueueID: &f.hidden.ID})
+	if err != nil || !kept.Locked {
+		t.Errorf("with %s off a move answered %+v, %v; want the lock kept", model.ConfigTicketUnlockOnMove, kept, err)
+	}
+}

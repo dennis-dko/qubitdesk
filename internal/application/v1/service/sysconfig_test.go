@@ -72,3 +72,24 @@ func TestTheSystemConfigurationKeepsOnlyWhatWasChanged(t *testing.T) {
 		t.Error("resetting the divider left it stored")
 	}
 }
+
+// Whoever may not change the installation's settings is listed the external
+// options alone: an internal one says how the installation works, which is
+// theirs to be subject to and not theirs to read.
+func TestOnlyTheExternalOptionsAreListedForEverybody(t *testing.T) {
+	values, err := service.NewSysConfigService(newStubSettings()).List(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, value := range values {
+		if value.Option.Access != model.ConfigExternal {
+			t.Errorf("%s is %s and was listed for somebody who may not change the settings",
+				value.Option.Name, value.Option.Access)
+		}
+	}
+
+	if len(values) == len(model.ConfigOptions()) {
+		t.Error("every option was listed, so the case has no internal option to hold back")
+	}
+}

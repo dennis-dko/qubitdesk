@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
@@ -89,6 +90,21 @@ func (s *SysConfigService) Reset(ctx context.Context, name string) (ConfigValue,
 	}
 
 	return ConfigValue{Option: option, Value: option.Default}, nil
+}
+
+// Bool reads a switch, as the code that obeys it does.
+func (s *SysConfigService) Bool(ctx context.Context, name string) (bool, error) {
+	option, ok := model.ConfigOptionNamed(name)
+	if !ok || option.Type != model.ConfigBool {
+		return false, fmt.Errorf("no switch of the system configuration is called %q", name)
+	}
+
+	value, err := s.valueOf(ctx, option)
+	if err != nil {
+		return option.Default == "true", err
+	}
+
+	return value.Value == "true", nil
 }
 
 // valueOf is the value an option has here: the one stored, or its default.

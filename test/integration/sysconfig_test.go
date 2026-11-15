@@ -98,3 +98,48 @@ func TestTheSystemConfigurationIsChangedAndPutBackOverHTTP(t *testing.T) {
 		t.Errorf("the administration log reads %+v; want the reset and the change, each naming Ticket::Hook", log.Entries)
 	}
 }
+
+// The tickets obey a switch of the system configuration through the whole stack:
+// with Ticket::UnlockOnMove off a moved ticket keeps its lock, and put back to
+// its default the switch releases it again, as KIX18 does.
+func TestTheTicketsObeyTheSystemConfiguration(t *testing.T) {
+	t.Parallel()
+
+	a := start(t)
+	admin := a.signInAsAdmin("a-much-better-password")
+	desk := theDesk(t, admin)
+
+	var board struct {
+		ID uint `json:"id"`
+	}
+
+	admin.must(admin.api(http.MethodPost, "/queues", map[string]any{"name": "Board"}), http.StatusCreated).
+		Data(t, &board)
+
+	movedLocked := func(title string) ticketResponse {
+		var ticket ticketResponse
+
+		admin.must(admin.api(http.MethodPost, "/tickets", map[string]any{
+			"title": title, "queueId": desk, "body": "It is broken.",
+		}), http.StatusCreated).Data(t, &ticket)
+		admin.must(admin.api(http.MethodPut, ticketPath(ticket.ID), map[string]any{"locked": true}), http.StatusOK)
+		admin.must(admin.api(http.MethodPut, ticketPath(ticket.ID), map[string]any{"queueId": board.ID}),
+			http.StatusOK).Data(t, &ticket)
+
+		return ticket
+	}
+
+	admin.must(admin.api(http.MethodPut, "/settings/sysconfig/Ticket::UnlockOnMove", map[string]any{"value": false}),
+		http.StatusOK)
+
+	if kept := movedLocked("Printer"); !kept.Locked {
+		t.Error("with Ticket::UnlockOnMove off a moved ticket lost its lock")
+	}
+
+	admin.must(admin.api(http.MethodDelete, "/settings/sysconfig/Ticket::UnlockOnMove", nil),
+		http.StatusNoContent, http.StatusOK)
+
+	if released := movedLocked("Scanner"); released.Locked {
+		t.Error("with Ticket::UnlockOnMove at its default a moved ticket kept its lock")
+	}
+}

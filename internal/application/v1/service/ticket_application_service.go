@@ -96,6 +96,10 @@ type TicketApplicationService struct {
 	zone func(ctx context.Context) string
 	now  func() time.Time
 
+	// config is the system configuration, read where a rule can be switched
+	// off; nil keeps every option at its default.
+	config ConfigReader
+
 	metrics
 }
 
@@ -127,6 +131,19 @@ type TicketCatalogRepositories struct {
 }
 
 var _ TicketService = (*TicketApplicationService)(nil)
+
+// ConfigReader reads the switches of the system configuration a rule obeys.
+type ConfigReader interface {
+	Bool(ctx context.Context, name string) (bool, error)
+}
+
+// WithConfig attaches the system configuration. Optional: without it every
+// option the service obeys keeps its default.
+func (s *TicketApplicationService) WithConfig(config ConfigReader) *TicketApplicationService {
+	s.config = config
+
+	return s
+}
 
 // WithMetrics attaches the recorder. Optional: without it tickets are opened and
 // nothing is counted.
@@ -329,7 +346,8 @@ func (s *TicketApplicationService) UpdateTicket(
 		ticket.Title = title
 	}
 
-	if cmd.QueueID != nil && *cmd.QueueID != ticket.QueueID {
+	moved := cmd.QueueID != nil && *cmd.QueueID != ticket.QueueID
+	if moved {
 		target, err := s.workable(ctx, caller, *cmd.QueueID)
 		if err != nil {
 			return nil, err
@@ -347,6 +365,14 @@ func (s *TicketApplicationService) UpdateTicket(
 		return nil, err
 	}
 
+	// After the people, so that a request moving the ticket and asking for the
+	// lock keeps the lock it asked for.
+	if moved && ticket.Locked && cmd.Locked == nil {
+		if err := s.releaseOnMove(ctx, ticket, change); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := s.chooseCustomer(ctx, ticket, customerChoice{
 		contactID: cmd.ContactID, clearContact: cmd.ClearContact,
 		organisationID: cmd.OrganisationID, clearOrganisation: cmd.ClearOrganisation,
@@ -361,6 +387,35 @@ func (s *TicketApplicationService) UpdateTicket(
 	ticket.UpdatedAt = now
 
 	return s.tickets.Update(ctx, ticket, change.entries)
+}
+
+// releaseOnMove takes a moved ticket's lock off, as KIX18 does unless the
+// installation switched it off (model.ConfigTicketUnlockOnMove): the lock says
+// somebody in the old queue is on the ticket, and the agents of the queue it
+// arrives in could otherwise not take it up.
+func (s *TicketApplicationService) releaseOnMove(ctx context.Context, ticket *model.Ticket, change *history) error {
+	releases, err := s.switchOn(ctx, model.ConfigTicketUnlockOnMove)
+	if err != nil || !releases {
+		return err
+	}
+
+	change.add(model.HistoryLock, strconv.FormatBool(true), strconv.FormatBool(false))
+	ticket.Locked = false
+	ticket.LockedAt = nil
+
+	return nil
+}
+
+// switchOn reads a switch of the system configuration, or its default where the
+// service was given none.
+func (s *TicketApplicationService) switchOn(ctx context.Context, name string) (bool, error) {
+	if s.config == nil {
+		option, _ := model.ConfigOptionNamed(name)
+
+		return option.Default == "true", nil
+	}
+
+	return s.config.Bool(ctx, name)
 }
 
 func (s *TicketApplicationService) DeleteTicket(ctx context.Context, caller *Principal, id uint) error {
