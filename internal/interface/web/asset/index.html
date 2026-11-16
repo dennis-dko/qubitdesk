@@ -604,6 +604,7 @@
         <div class="grid">
           <label class="wide" data-i18n="field.title">Title<input type="text" name="title" maxlength="255" required></label>
           <label data-i18n="field.queue">Queue<select name="queueId" required></select></label>
+          <label data-i18n="field.serviceLevelId">Service level<select name="serviceLevelId"></select></label>
           <label data-i18n="field.type">Type<select name="typeId"></select></label>
           <label data-i18n="field.priority">Priority<select name="priorityId"></select></label>
           <label class="ticket-edit-only" data-i18n="field.state" hidden>State<select name="stateId"></select></label>
@@ -858,6 +859,7 @@
             <label data-i18n="field.parentId">Under<select name="parentId"></select></label>
             <label data-i18n="field.followUp">Answer to a closed ticket<select name="followUp" required></select></label>
             <label data-i18n="field.unlockMinutes">Unlock after (minutes)<input type="number" name="unlockMinutes" min="0" max="10080" value="0" required></label>
+            <label data-i18n="field.serviceLevelId">Service level<select name="serviceLevelId"></select></label>
             <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
           </div>
           <!-- One line per role, each choosing how far that role reaches. Built
@@ -1008,6 +1010,46 @@
           <div class="row">
             <button type="submit" id="calendar-submit" data-i18n="action.create">Create</button>
             <button type="button" class="link" id="calendar-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- What a ticket is owed: minutes of service time until the first answer,
+           between answers and until it is solved, counted in a calendar or
+           around the clock. -->
+      <div class="card" id="sla-card" data-perm="queues:write">
+        <h2 data-i18n="sla.title">Service levels</h2>
+        <p class="muted" data-i18n="sla.hint">What a ticket is owed, in minutes of service time counted in a calendar, or around the clock where none is named. Zero minutes make no promise.</p>
+        <div class="table-wrap">
+          <table id="table-sla">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="field.calendarId">Calendar</th>
+                <th data-i18n="field.firstResponseMinutes">First response (minutes)</th>
+                <th data-i18n="field.solutionMinutes">Solution (minutes)</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-sla" class="form">
+          <h3 id="sla-form-title" data-i18n="sla.create">Add a service level</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="255" required></label>
+            <label data-i18n="field.calendarId">Calendar<select name="calendarId"></select></label>
+            <label data-i18n="field.firstResponseMinutes">First response (minutes)<input type="number" name="firstResponseMinutes" min="0" max="527040" step="1" value="0" required></label>
+            <label data-i18n="field.updateMinutes">Between answers (minutes)<input type="number" name="updateMinutes" min="0" max="527040" step="1" value="0" required></label>
+            <label data-i18n="field.solutionMinutes">Solution (minutes)<input type="number" name="solutionMinutes" min="0" max="527040" step="1" value="0" required></label>
+            <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="sla.offered">Offered for queues and tickets</span></label>
+          <div class="row">
+            <button type="submit" id="sla-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="sla-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
           </div>
         </form>
       </div>

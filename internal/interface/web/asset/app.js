@@ -16,7 +16,7 @@ const API = '/api/v1';
 const cache = {
   users: [], roles: [], permissions: [], queues: [],
   ticketQueues: [], states: [], priorities: [], types: [],
-  found: {}, sysconfig: [], calendars: [],
+  found: {}, sysconfig: [], calendars: [], levels: [],
 };
 
 /**
@@ -5032,6 +5032,137 @@ function wireCalendars() {
   $('#calendar-cancel').addEventListener('click', resetCalendarForm);
 }
 
+// ---------------------------------------------------------- service levels
+
+/** A service level's name, or "none" for a ticket or queue owed nothing. */
+function levelName(id) {
+  if (!id) return t('sla.none', 'none');
+
+  return cache.levels.find((level) => level.id === id)?.name ?? `#${id}`;
+}
+
+/**
+ * Fills a choice of service level: those still offered, and the one already
+ * chosen, retired or not, because it may stay. What choosing nothing means is
+ * the caller's to say - no level for a queue, the queue's for a new ticket.
+ */
+function fillLevelChoices(select, current, nothing) {
+  fillSelect(select,
+    cache.levels.filter((level) => level.valid || level.id === current)
+      .map((level) => ({ value: String(level.id), label: level.name })),
+    { placeholder: nothing, labelKey: 'label', valueKey: 'value' });
+  select.value = current ? String(current) : '';
+}
+
+/** Draws the service levels' card, for whoever sets up queues. */
+function loadSlaCard() {
+  const calendarOf = (id) => cache.calendars.find((calendar) => calendar.id === id)?.name ?? `#${id}`;
+  const minutes = (value) => (value ? String(value) : '–');
+
+  fillTable($('#table-sla tbody'), cache.levels.map((level) => el('tr', {},
+    el('td', { class: 'text', text: level.name }),
+    el('td', { class: 'text', text: level.calendarId ? calendarOf(level.calendarId) : t('sla.aroundTheClock', 'around the clock') }),
+    el('td', { text: minutes(level.firstResponseMinutes) }),
+    el('td', { text: minutes(level.solutionMinutes) }),
+    el('td', { text: level.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editSla(level) }),
+      deleteButton({
+        label: `${t('entity.sla', 'Service level')} "${level.name}"`,
+        path: `/service-levels/${level.id}`,
+        message: t('msg.slaDeleted', 'Service level deleted'),
+        after: refreshAll,
+      })),
+  )), 6, t('sla.empty', 'No service levels yet.'));
+
+  const form = $('#form-sla');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillSlaCalendars(form, null);
+}
+
+/** Fills the service level form's choice of calendar, around the clock first. */
+function fillSlaCalendars(form, current) {
+  fillSelect(form.elements.calendarId,
+    cache.calendars.filter((calendar) => calendar.valid || calendar.id === current)
+      .map((calendar) => ({ value: String(calendar.id), label: calendar.name })),
+    { placeholder: t('sla.aroundTheClock', 'around the clock'), labelKey: 'label', valueKey: 'value' });
+  form.elements.calendarId.value = current ? String(current) : '';
+}
+
+/** Opens a service level in the form, to correct it. */
+function editSla(level) {
+  const form = $('#form-sla');
+
+  form.elements.id.value = String(level.id);
+  form.elements.name.value = level.name;
+  form.elements.description.value = level.description ?? '';
+  form.elements.firstResponseMinutes.value = String(level.firstResponseMinutes);
+  form.elements.updateMinutes.value = String(level.updateMinutes);
+  form.elements.solutionMinutes.value = String(level.solutionMinutes);
+  form.elements.valid.checked = level.valid;
+  fillSlaCalendars(form, level.calendarId);
+
+  // Drawn rather than declared with a key, because it carries the level's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#sla-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('slaFormTitle', () => {
+    heading.textContent = t('sla.edit', 'Edit the service level {0}').replace('{0}', level.name);
+  });
+
+  swapTheLabel($('#sla-submit'), 'action.save', 'Save');
+  $('#sla-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the service level form back to making a new one. */
+function resetSlaForm() {
+  const form = $('#form-sla');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillSlaCalendars(form, null);
+
+  stopRedrawing('slaFormTitle');
+  swapTheLabel($('#sla-form-title'), 'sla.create', 'Add a service level');
+  swapTheLabel($('#sla-submit'), 'action.create', 'Create');
+  $('#sla-cancel').hidden = true;
+}
+
+/** Sends the service level form, making a level or correcting one. */
+function saveSla(form) {
+  const id = form.elements.id.value;
+  const calendar = form.elements.calendarId.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    firstResponseMinutes: Number(form.elements.firstResponseMinutes.value),
+    updateMinutes: Number(form.elements.updateMinutes.value),
+    solutionMinutes: Number(form.elements.solutionMinutes.value),
+    valid: form.elements.valid.checked,
+
+    // Said out loud when there is none: a calendar sent as nothing cannot be
+    // told apart from one that was not sent, and a correction would keep it.
+    ...(calendar ? { calendarId: Number(calendar) } : { clearCalendar: true }),
+  });
+
+  mutate(
+    () => (id ? api(`/service-levels/${id}`, { method: 'PUT', body }) : api('/service-levels', { method: 'POST', body })),
+    id ? t('msg.slaSaved', 'Service level saved') : t('msg.slaCreated', 'Service level created'),
+    async () => { resetSlaForm(); await refreshAll(); },
+  );
+}
+
+/** Wires the service level form. */
+function wireSla() {
+  const form = $('#form-sla');
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveSla(form); });
+  $('#sla-cancel').addEventListener('click', resetSlaForm);
+}
+
 // ---------------------------------------------------- system configuration
 
 /**
@@ -5643,10 +5774,12 @@ function dayAndTimeIn(iso, zone) {
 async function loadTickets() {
   if (!can('tickets:read')) return;
 
-  const [queues, states, priorities, types] = await Promise.all(
-    ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path].map((path) => api(path)),
+  const [queues, states, priorities, types, levels] = await Promise.all(
+    ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path, '/service-levels']
+      .map((path) => api(path)),
   );
 
+  cache.levels = levels?.items ?? [];
   cache.ticketQueues = queues?.items ?? [];
   cache.states = states?.items ?? [];
   cache.priorities = priorities?.items ?? [];
@@ -5715,7 +5848,9 @@ function ticketRow(ticket, byId) {
   return el('tr', {},
     el('td', { class: 'text' },
       el('button', { class: 'link', text: ticket.number, onclick: () => openTicket(ticket.id) })),
-    el('td', { class: 'text', text: ticket.title }),
+    el('td', { class: 'text' },
+      ticket.escalated ? el('span', { class: 'escalated', text: t('sla.overdue', 'overdue') }) : null,
+      ticket.title),
     el('td', { class: 'text', text: ticket.contactName || ticket.organisationName || '–' }),
     el('td', { class: 'text', text: queue ? queuePath(queue, byId) : `#${ticket.queueId}` }),
     el('td', {}, state ? statusBadge(state.name, state.type) : el('span', { text: `#${ticket.stateId}` })),
@@ -5837,6 +5972,13 @@ function drawTicketDetail(ticket, articles, history) {
     ...fact(t('field.state', 'State'), state ? statusBadge(state.name, state.type) : `#${ticket.stateId}`),
     ...fact(t('field.priority', 'Priority'), priority ? priorityName(priority.name) : ''),
     ...fact(t('field.type', 'Type'), type ? ticketTypeName(type.name) : ''),
+    ...fact(t('field.serviceLevelId', 'Service level'), levelName(ticket.serviceLevelId),
+      ticket.escalated ? el('span', { class: 'escalated', text: t('sla.overdue', 'overdue') }) : null),
+    ...(ticket.firstResponseDue ? fact(t('sla.firstResponseDue', 'First answer owed by'),
+      ticket.firstResponseAt
+        ? fillIn(t('sla.answeredAt', '{0} - answered {1}'), [fmtMoment(ticket.firstResponseDue), fmtMoment(ticket.firstResponseAt)])
+        : fmtMoment(ticket.firstResponseDue)) : []),
+    ...(ticket.solutionDue ? fact(t('sla.solutionDue', 'Solution owed by'), fmtMoment(ticket.solutionDue)) : []),
     ...fact(t('ticket.owner', 'Owner'), ticket.ownerName || t('ticket.nobody', 'nobody')),
     ...fact(t('field.responsibleId', 'Responsible'), ticket.responsibleName || t('ticket.nobody', 'nobody')),
     ...fact(t('field.contactId', 'Contact'), ticket.contactName || t('ticket.nobody', 'nobody')),
@@ -5939,6 +6081,9 @@ function changeOpenTicket(change) {
  */
 function fillTicketForm(form, ticket, assignees) {
   const offered = (items, current) => items.filter((item) => item.valid || item.id === current);
+
+  fillLevelChoices(form.elements.serviceLevelId, ticket?.serviceLevelId ?? null,
+    ticket ? t('sla.none', 'none') : t('sla.asQueue', 'as the queue says'));
   const working = cache.ticketQueues.filter((queue) =>
     (queue.reach === 'write' && queue.valid) || queue.id === ticket?.queueId);
 
@@ -6082,6 +6227,7 @@ function saveTicket(form) {
       body: form.elements.body.value,
       minutes: Number(form.elements.minutes.value) || 0,
       ...(can('customers:read') && value('contactId') ? { contactId: value('contactId') } : {}),
+      ...(value('serviceLevelId') ? { serviceLevelId: value('serviceLevelId') } : {}),
     });
 
     mutate(() => api('/tickets', { method: 'POST', body }), t('msg.ticketOpened', 'Ticket opened'),
@@ -6108,6 +6254,7 @@ function saveTicket(form) {
     ...(value('responsibleId') ? { responsibleId: value('responsibleId') } : { clearResponsible: true }),
     ...(waits && day ? { pendingUntil: momentIn(day, form.elements.pendingTime.value, readerZone()) } : {}),
     ...(can('customers:read') ? customerChange(form, openTicketShown) : {}),
+    ...(value('serviceLevelId') ? { serviceLevelId: value('serviceLevelId') } : { clearServiceLevel: true }),
   };
 
   // saveForm rather than mutate: a corrected ticket stays in the form, unlike a
@@ -6416,10 +6563,12 @@ const CATALOGS = {
 async function loadTicketSetup() {
   if (!can('queues:write')) return;
 
-  const [queues, states, priorities, types] = await Promise.all(
-    ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path].map((path) => api(path)),
+  const [queues, states, priorities, types, levels] = await Promise.all(
+    ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path, '/service-levels']
+      .map((path) => api(path)),
   );
 
+  cache.levels = levels?.items ?? [];
   loadQueueCard(queues?.items ?? []);
 
   const lists = { state: states?.items ?? [], priority: priorities?.items ?? [], type: types?.items ?? [] };
@@ -6442,6 +6591,7 @@ async function loadTicketSetup() {
   }
 
   await loadCalendars();
+  loadSlaCard();
 }
 
 /** One value as a row of its card's table. */
@@ -6621,6 +6771,7 @@ function loadQueueCard(queues) {
   if (form && !beingEdited(form)) {
     fillFollowUps(form);
     fillParents(form, null);
+    fillLevelChoices(form.elements.serviceLevelId, null, t('sla.none', 'none'));
     drawQueueAccess([]);
   }
 }
@@ -6714,6 +6865,7 @@ function editQueue(queue) {
 
   fillParents(form, queue);
   form.elements.parentId.value = queue.parentId ? String(queue.parentId) : '';
+  fillLevelChoices(form.elements.serviceLevelId, queue.serviceLevelId, t('sla.none', 'none'));
 
   drawQueueAccess(queue.access ?? []);
 
@@ -6742,6 +6894,7 @@ function resetQueueForm() {
 
   fillFollowUps(form);
   fillParents(form, null);
+  fillLevelChoices(form.elements.serviceLevelId, null, t('sla.none', 'none'));
   drawQueueAccess([]);
 
   stopRedrawing('queueFormTitle');
@@ -6754,6 +6907,7 @@ function resetQueueForm() {
 function saveQueue(form) {
   const id = form.elements.id.value;
   const parent = form.elements.parentId.value;
+  const level = form.elements.serviceLevelId.value;
 
   const sent = {
     name: form.elements.name.value.trim(),
@@ -6765,6 +6919,7 @@ function saveQueue(form) {
     // Said out loud when there is none: a parent sent as nothing cannot be told
     // apart from one that was not sent, and a correction would keep the old one.
     ...(parent ? { parentId: Number(parent) } : { clearParent: true }),
+    ...(level ? { serviceLevelId: Number(level) } : { clearServiceLevel: true }),
   };
 
   if (!$('#queue-access').hidden) {
@@ -9275,6 +9430,7 @@ function forgetTheLastAccount() {
   cache.found = {};
   cache.sysconfig = [];
   cache.calendars = [];
+  cache.levels = [];
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -9353,6 +9509,7 @@ function forgetTheLastAccount() {
   for (const kind of Object.keys(CUSTOMER_FORMS)) resetCustomerForm(kind);
   resetSysConfigForm();
   resetCalendarForm();
+  resetSlaForm();
   resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
@@ -9967,6 +10124,15 @@ const TOUR_STEPS = [
     text: () => t('tour.calendars.text',
       'The hours of each weekday, less public holidays and free days of its own, in which a service level\'s '
       + 'minutes are counted. A calendar that names no timezone or public holidays follows the installation\'s.'),
+  },
+  {
+    target: '#sla-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.sla.title', 'What a ticket is owed'),
+    text: () => t('tour.sla.text',
+      'Minutes until the first answer and until the solution, counted in a calendar or around the clock. A queue '
+      + 'names the level its new tickets start with, and a ticket past its moment is marked overdue.'),
   },
   {
     target: '#sysconfig-card',
@@ -14331,6 +14497,7 @@ function wireForms() {
   wireCustomers();
   wireSysConfig();
   wireCalendars();
+  wireSla();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();
