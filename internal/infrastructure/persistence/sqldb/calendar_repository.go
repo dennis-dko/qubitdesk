@@ -155,6 +155,18 @@ func (r *CalendarRepository) Delete(ctx context.Context, id uint) error {
 	})
 }
 
+func (r *CalendarRepository) CountServiceLevels(ctx context.Context, id uint) (int, error) {
+	var count int
+
+	err := r.db.QueryRowContext(ctx, r.rebind("SELECT COUNT(*) FROM service_levels WHERE calendar_id = ?"), id).
+		Scan(&count)
+	if err != nil {
+		return 0, apperror.Internal(err)
+	}
+
+	return count, nil
+}
+
 // fill reads a calendar's hours and free days, earliest first.
 func (r *CalendarRepository) fill(ctx context.Context, calendar *model.Calendar) error {
 	hours, err := r.db.QueryContext(ctx, r.rebind(

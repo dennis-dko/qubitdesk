@@ -63,9 +63,22 @@ func (s *CalendarApplicationService) Update(
 	return s.calendars.Update(ctx, calendar)
 }
 
+// Delete deletes a calendar no service level counts in. One that a level does
+// is refused, with how many, and is retired instead.
 func (s *CalendarApplicationService) Delete(ctx context.Context, id uint) error {
-	if id == 0 {
-		return apperror.InvalidFields("id")
+	calendar, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	levels, err := s.calendars.CountServiceLevels(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if levels > 0 {
+		return apperror.Conflictf("%d service levels count in the calendar %q", levels, calendar.Name).
+			WithCode("calendarInUse", calendar.Name, levels)
 	}
 
 	return s.calendars.Delete(ctx, id)

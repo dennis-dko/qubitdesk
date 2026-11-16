@@ -524,6 +524,10 @@ const FIELD_NAMES = {
   holidayPlace: 'Public holidays',
   hours: 'Working hours',
   freeDays: 'Free days',
+  calendarId: 'Calendar',
+  firstResponseMinutes: 'First response (minutes)',
+  updateMinutes: 'Between answers (minutes)',
+  solutionMinutes: 'Solution (minutes)',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -7970,6 +7974,9 @@ const CHANGE_SENTENCES = {
   'calendar.created': () => t('change.calendarCreated', 'Created the calendar {0}'),
   'calendar.updated': () => t('change.calendarUpdated', 'Changed the calendar {0}'),
   'calendar.deleted': () => t('change.calendarDeleted', 'Deleted the calendar {0}'),
+  'serviceLevel.created': () => t('change.serviceLevelCreated', 'Created the service level {0}'),
+  'serviceLevel.updated': () => t('change.serviceLevelUpdated', 'Changed the service level {0}'),
+  'serviceLevel.deleted': () => t('change.serviceLevelDeleted', 'Deleted the service level {0}'),
   'sysconfig.set': () => t('change.sysconfigSet', 'Changed the option {1}'),
   'sysconfig.reset': () => t('change.sysconfigReset', 'Put the option {1} back to its default'),
 };

@@ -635,6 +635,7 @@ func main() {
 	ticketCatalog := appservice.NewTicketCatalogApplicationService(
 		catalogRepos.States, catalogRepos.Priorities, catalogRepos.Types)
 	sysConfig := appservice.NewSysConfigService(settingsRepo)
+	calendarRepo := sqldb.NewCalendarRepository(db, cfg.Dialect)
 	tickets := appservice.NewTicketApplicationService(sqldb.NewTicketRepository(db, cfg.Dialect), queueRepo,
 		catalogRepos, customerRepos, userRepo, roleRepo, func(ctx context.Context) string {
 			name, err := settingsService.Timezone(ctx)
@@ -1011,8 +1012,10 @@ func main() {
 			WithOpenIDCheck(openIDSignIn.Check),
 
 		SysConfig: rest.NewSysConfigHandler(sysConfig, authorizer),
-		Calendars: rest.NewCalendarHandler(
-			appservice.NewCalendarApplicationService(sqldb.NewCalendarRepository(db, cfg.Dialect)), authorizer),
+		Calendars: rest.NewCalendarHandler(appservice.NewCalendarApplicationService(calendarRepo), authorizer),
+		Levels: rest.NewServiceLevelHandler(
+			appservice.NewSLAApplicationService(sqldb.NewServiceLevelRepository(db, cfg.Dialect), calendarRepo),
+			authorizer),
 	})
 
 	// Expired sessions would otherwise accumulate forever.

@@ -17,4 +17,7 @@ type CalendarRepository interface {
 	Update(ctx context.Context, calendar *model.Calendar) (*model.Calendar, error)
 
 	Delete(ctx context.Context, id uint) error
+
+	// CountServiceLevels is how many service levels count in the calendar.
+	CountServiceLevels(ctx context.Context, id uint) (int, error)
 }

@@ -147,6 +147,11 @@ func All(dialect string) map[int64]migration.Migrate {
 		20261116010400: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_calendar_free_days_calendar", "calendar_free_days", "calendar_id")
 		}},
+
+		// Which calendar a service level's minutes are counted in, and whether it
+		// is still offered.
+		20261116010500: {UP: func(d migration.Datasource) error { return addServiceLevelCalendar(d, dialect) }},
+		20261116010600: {UP: func(d migration.Datasource) error { return addServiceLevelValidity(d, dialect) }},
 	}
 }
 
@@ -186,6 +191,22 @@ func createCalendarFreeDays(d migration.Datasource, dialect string) error {
 		recurring %[4]s NOT NULL DEFAULT %[5]s,
 		name VARCHAR(255) NOT NULL DEFAULT ''
 	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), boolean(dialect), falseLiteral(dialect)))
+}
+
+// addServiceLevelCalendar names the calendar a service level's minutes are
+// counted in. Added rather than written into the table, because the calendars
+// arrived after it and a key must point at a table that exists; a service
+// level without one counts around the clock.
+func addServiceLevelCalendar(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`ALTER TABLE service_levels ADD COLUMN calendar_id %s REFERENCES calendars(id)`,
+		foreignKeyID(dialect)))
+}
+
+// addServiceLevelValidity says whether a service level is still offered: one
+// tickets carry is retired rather than deleted, as every value they carry is.
+func addServiceLevelValidity(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`ALTER TABLE service_levels ADD COLUMN valid %s NOT NULL DEFAULT %s`,
+		boolean(dialect), trueLiteral(dialect)))
 }
 
 // createRoles keeps the named sets of rights. A role is a row because an

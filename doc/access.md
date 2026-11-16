@@ -266,7 +266,7 @@ What holds the round trip together:
 Under **Settings**, *Changes to the installation* lists who changed how the
 installation is run, newest first: an account created, corrected, given another
 role, given a new password or deleted; a role created, changed or deleted; a
-queue, ticket state, priority, type or calendar created, changed or deleted; accounts or roles
+queue, ticket state, priority, type, calendar or service level created, changed or deleted; accounts or roles
 imported; each settings card saved; an option of the system configuration
 changed or put back to its default, by name; maintenance mode
 switched on or off; the directory synchronised; the application restarted, updated or set up. Everybody holding `settings:manage` can read it, and nobody else.

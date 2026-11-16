@@ -2926,13 +2926,181 @@
           "tickets"
         ],
         "summary": "Delete a calendar",
-        "description": "Takes `queues:write`.",
+        "description": "A calendar a service level counts in is refused, with how many; retire it instead. Takes `queues:write`.",
         "responses": {
           "204": {
             "description": "Deleted"
           },
           "404": {
             "description": "Not found"
+          },
+          "409": {
+            "description": "A service level counts in it"
+          }
+        }
+      }
+    },
+    "/service-levels": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the service levels",
+        "description": "What a ticket is owed: minutes of service time until the first answer, between answers and until it is solved, counted in a calendar - zero makes no promise. Read with `tickets:read` or `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "The service levels"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Create a service level",
+        "description": "Needs a `name`; minutes run from 0 to a year's worth, and a calendar no longer offered is not chosen. Takes `queues:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "calendarId": {
+                    "type": "integer",
+                    "description": "The calendar its minutes are counted in; none counts around the clock"
+                  },
+                  "clearCalendar": {
+                    "type": "boolean"
+                  },
+                  "firstResponseMinutes": {
+                    "type": "integer"
+                  },
+                  "updateMinutes": {
+                    "type": "integer"
+                  },
+                  "solutionMinutes": {
+                    "type": "integer"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the service level cannot be stored with"
+          },
+          "409": {
+            "description": "Another service level has that name"
+          }
+        }
+      }
+    },
+    "/service-levels/{id}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read a service level",
+        "description": "Read with `tickets:read` or `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "The service level"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change a service level",
+        "description": "A field left out stays as it was; `clearCalendar` makes it count around the clock. Takes `queues:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "calendarId": {
+                    "type": "integer",
+                    "description": "The calendar its minutes are counted in; none counts around the clock"
+                  },
+                  "clearCalendar": {
+                    "type": "boolean"
+                  },
+                  "firstResponseMinutes": {
+                    "type": "integer"
+                  },
+                  "updateMinutes": {
+                    "type": "integer"
+                  },
+                  "solutionMinutes": {
+                    "type": "integer"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the service level cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another service level has that name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete a service level",
+        "description": "One that queues or tickets use is refused, with how many; retire it instead. Takes `queues:write`.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Queues or tickets use it"
           }
         }
       }

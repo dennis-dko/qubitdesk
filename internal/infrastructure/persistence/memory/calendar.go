@@ -16,12 +16,13 @@ import (
 type CalendarRepository struct {
 	mu        sync.Mutex
 	calendars map[uint]model.Calendar
+	levels    map[uint]int
 	next      uint
 }
 
 // NewCalendarRepository creates an empty calendar repository.
 func NewCalendarRepository() *CalendarRepository {
-	return &CalendarRepository{calendars: map[uint]model.Calendar{}, next: 1}
+	return &CalendarRepository{calendars: map[uint]model.Calendar{}, levels: map[uint]int{}, next: 1}
 }
 
 var _ repository.CalendarRepository = (*CalendarRepository)(nil)
@@ -106,6 +107,22 @@ func (r *CalendarRepository) Delete(_ context.Context, id uint) error {
 	delete(r.calendars, id)
 
 	return nil
+}
+
+// CountIn says how many service levels count in a calendar, which are kept
+// elsewhere.
+func (r *CalendarRepository) CountIn(id uint, levels int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.levels[id] = levels
+}
+
+func (r *CalendarRepository) CountServiceLevels(_ context.Context, id uint) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.levels[id], nil
 }
 
 func (r *CalendarRepository) taken(name string, except uint) bool {
