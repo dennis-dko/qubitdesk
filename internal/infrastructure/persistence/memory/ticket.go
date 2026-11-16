@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
@@ -146,6 +147,7 @@ func (r *TicketRepository) AddArticle(
 	article *model.Article,
 	minutes int,
 	history []model.HistoryEntry,
+	firstResponse *time.Time,
 ) (*model.Article, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -156,6 +158,10 @@ func (r *TicketRepository) AddArticle(
 	}
 
 	ticket.UpdatedAt = article.CreatedAt
+	if ticket.FirstResponseAt == nil && firstResponse != nil {
+		answered := *firstResponse
+		ticket.FirstResponseAt = &answered
+	}
 	r.tickets[ticket.ID] = ticket
 
 	stored := *article

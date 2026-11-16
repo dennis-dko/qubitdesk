@@ -173,7 +173,7 @@ func TestATicketChangesAndGoesWithEverythingWrittenInIt(t *testing.T) {
 	if _, err := tables.tickets.AddArticle(ctx, &model.Article{
 		TicketID: ticket.ID, Sender: model.SenderAgent, Channel: model.ChannelNote, Body: "Rebooted the switch.",
 		CreatedAt: latest,
-	}, 20, nil); err != nil {
+	}, 20, nil, nil); err != nil {
 		t.Fatalf("add an article: %v", err)
 	}
 

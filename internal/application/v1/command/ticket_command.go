@@ -25,6 +25,10 @@ type CreateTicketCommand struct {
 	ContactID      *uint
 	OrganisationID *uint
 
+	// ServiceLevelID is the service level the ticket is owed, where it is not
+	// the one its queue starts tickets with.
+	ServiceLevelID *uint
+
 	// The article the ticket starts from.
 	Channel         *string
 	CustomerVisible bool
@@ -58,6 +62,11 @@ type UpdateTicketCommand struct {
 	ClearContact      bool
 	OrganisationID    *uint
 	ClearOrganisation bool
+
+	// ServiceLevelID puts the ticket under another service level, counting what
+	// it is owed afresh from its opening; ClearServiceLevel takes it off.
+	ServiceLevelID    *uint
+	ClearServiceLevel bool
 
 	// Locked locks the ticket to its owner, or frees it. Locking a ticket nobody
 	// owns makes the caller its owner, as KIX18 does.

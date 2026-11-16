@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
@@ -27,7 +28,7 @@ var _ repository.TicketRepository = (*TicketRepository)(nil)
 
 const ticketColumns = "id, number, title, queue_id, state_id, priority_id, type_id, owner_id, responsible_id, " +
 	"contact_id, organisation_id, locked, locked_at, channel, created_by, created_at, updated_at, closed_at, " +
-	"pending_until"
+	"pending_until, service_level_id, first_response_due, first_response_at, solution_due"
 
 func (r *TicketRepository) Create(
 	ctx context.Context,
@@ -42,11 +43,13 @@ func (r *TicketRepository) Create(
 		newID, err := tx.insert(ctx,
 			"INSERT INTO tickets (title, queue_id, state_id, priority_id, type_id, owner_id, responsible_id, "+
 				"contact_id, organisation_id, locked, locked_at, channel, created_by, created_at, updated_at, "+
-				"closed_at, pending_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"closed_at, pending_until, service_level_id, first_response_due, solution_due) "+
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			ticket.Title, ticket.QueueID, ticket.StateID, ticket.PriorityID, ticket.TypeID,
 			ticket.OwnerID, ticket.ResponsibleID, ticket.ContactID, ticket.OrganisationID,
 			ticket.Locked, ticket.LockedAt, string(ticket.Channel),
-			ticket.CreatedBy, ticket.CreatedAt, ticket.UpdatedAt, ticket.ClosedAt, ticket.PendingUntil)
+			ticket.CreatedBy, ticket.CreatedAt, ticket.UpdatedAt, ticket.ClosedAt, ticket.PendingUntil,
+			ticket.ServiceLevelID, ticket.FirstResponseDue, ticket.SolutionDue)
 		if err != nil {
 			return apperror.Internal(err)
 		}
@@ -182,11 +185,13 @@ func (r *TicketRepository) Update(
 		found, err := tx.update(ctx, "tickets",
 			"UPDATE tickets SET title = ?, queue_id = ?, state_id = ?, priority_id = ?, type_id = ?, owner_id = ?, "+
 				"responsible_id = ?, contact_id = ?, organisation_id = ?, locked = ?, locked_at = ?, updated_at = ?, "+
-				"closed_at = ?, pending_until = ? WHERE id = ?",
+				"closed_at = ?, pending_until = ?, service_level_id = ?, first_response_due = ?, solution_due = ? "+
+				"WHERE id = ?",
 			ticket.ID,
 			ticket.Title, ticket.QueueID, ticket.StateID, ticket.PriorityID, ticket.TypeID, ticket.OwnerID,
 			ticket.ResponsibleID, ticket.ContactID, ticket.OrganisationID, ticket.Locked, ticket.LockedAt,
-			ticket.UpdatedAt, ticket.ClosedAt, ticket.PendingUntil, ticket.ID)
+			ticket.UpdatedAt, ticket.ClosedAt, ticket.PendingUntil,
+			ticket.ServiceLevelID, ticket.FirstResponseDue, ticket.SolutionDue, ticket.ID)
 		if err != nil {
 			return apperror.Internal(err)
 		}
@@ -209,12 +214,16 @@ func (r *TicketRepository) AddArticle(
 	article *model.Article,
 	minutes int,
 	history []model.HistoryEntry,
+	firstResponse *time.Time,
 ) (*model.Article, error) {
 	var id uint
 
 	err := r.withTx(ctx, func(tx base) error {
-		found, err := tx.update(ctx, "tickets", "UPDATE tickets SET updated_at = ? WHERE id = ?",
-			article.TicketID, article.CreatedAt, article.TicketID)
+		// COALESCE keeps the moment a ticket was first answered: a later answer
+		// is not its first.
+		found, err := tx.update(ctx, "tickets",
+			"UPDATE tickets SET updated_at = ?, first_response_at = COALESCE(first_response_at, ?) WHERE id = ?",
+			article.TicketID, article.CreatedAt, firstResponse, article.TicketID)
 		if err != nil {
 			return apperror.Internal(err)
 		}
@@ -442,16 +451,18 @@ func scanTicket(row scanner) (*model.Ticket, error) {
 		ticket                        model.Ticket
 		number                        sql.NullString
 		owner, responsible, createdBy sql.NullInt64
-		contact, organisation         sql.NullInt64
+		contact, organisation, level  sql.NullInt64
 		channel                       string
 		lockedAt, created, updated    dateTime
 		closed, pending               dateTime
+		responseDue, respondedAt      dateTime
+		solutionDue                   dateTime
 	)
 
 	err := row.Scan(&ticket.ID, &number, &ticket.Title, &ticket.QueueID, &ticket.StateID, &ticket.PriorityID,
 		&ticket.TypeID, &owner, &responsible, &contact, &organisation, &ticket.Locked, &lockedAt, &channel,
 		&createdBy,
-		&created, &updated, &closed, &pending)
+		&created, &updated, &closed, &pending, &level, &responseDue, &respondedAt, &solutionDue)
 	if err != nil {
 		return nil, err
 	}
@@ -468,6 +479,10 @@ func scanTicket(row scanner) (*model.Ticket, error) {
 	ticket.UpdatedAt = updated.Time
 	ticket.ClosedAt = ptr(closed)
 	ticket.PendingUntil = ptr(pending)
+	ticket.ServiceLevelID = optionalID(level)
+	ticket.FirstResponseDue = ptr(responseDue)
+	ticket.FirstResponseAt = ptr(respondedAt)
+	ticket.SolutionDue = ptr(solutionDue)
 
 	return &ticket, nil
 }

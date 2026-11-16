@@ -30,8 +30,10 @@ type TicketRepository interface {
 
 	// AddArticle stores an article, the time noted with it and the history
 	// saying so, and marks the ticket changed at the article's moment.
+	// firstResponse is when the article answered the ticket for the first time
+	// where it did; a ticket already answered keeps the moment it was.
 	AddArticle(ctx context.Context, article *model.Article, minutes int,
-		history []model.HistoryEntry) (*model.Article, error)
+		history []model.HistoryEntry, firstResponse *time.Time) (*model.Article, error)
 
 	Articles(ctx context.Context, ticketID uint) ([]*model.Article, error)
 

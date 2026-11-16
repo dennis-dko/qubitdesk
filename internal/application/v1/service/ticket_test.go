@@ -21,6 +21,9 @@ import (
 type ticketFixture struct {
 	tickets       *service.TicketApplicationService
 	repo          *memory.TicketRepository
+	queues        *memory.QueueRepository
+	levels        *memory.ServiceLevelRepository
+	calendars     *memory.CalendarRepository
 	priorities    *memory.TicketPriorityRepository
 	contacts      *memory.ContactRepository
 	organisations *memory.OrganisationRepository
@@ -97,10 +100,15 @@ func newTicketFixture(t *testing.T) ticketFixture {
 	})
 	f.hidden, _ = queues.Save(ctx, &model.Queue{Name: "Board", Valid: true, FollowUp: model.FollowUpReopen})
 
+	f.queues = queues
+	f.levels = memory.NewServiceLevelRepository()
+	f.calendars = memory.NewCalendarRepository()
+
 	f.tickets = service.NewTicketApplicationService(f.repo, queues,
 		service.TicketCatalogRepositories{States: states, Priorities: priorities, Types: types},
 		service.TicketCustomerRepositories{Contacts: f.contacts, Organisations: f.organisations},
-		users, roles, func(context.Context) string { return "Europe/Berlin" })
+		users, roles, func(context.Context) string { return "Europe/Berlin" }).
+		WithServiceLevels(f.levels, f.calendars, func(context.Context) string { return "" })
 
 	return f
 }

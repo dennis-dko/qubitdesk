@@ -98,7 +98,7 @@ running instance.
 | `PUT` | `/api/v1/users/{id}/role` | Role |
 | `GET/POST/PUT/DELETE` | `/api/v1/roles`, `/roles/{id}` | Roles |
 | `GET` | `/api/v1/permissions` | Every enforced permission |
-| `GET/POST/PUT/DELETE` | `/api/v1/tickets`, `/tickets/{id}` | The tickets, reached through their queues: reading takes `tickets:read` and a queue the caller's role reaches, opening and changing take `tickets:create` or `tickets:write` and a queue it works in, deleting `tickets:delete`; a ticket out of reach is not found. Listing is paged - `limit` at most 200, refused above - and filters by `queue`, `state`, `unfinished`, `owner` (an id or `me`) and `q` |
+| `GET/POST/PUT/DELETE` | `/api/v1/tickets`, `/tickets/{id}` | The tickets, reached through their queues: reading takes `tickets:read` and a queue the caller's role reaches, opening and changing take `tickets:create` or `tickets:write` and a queue it works in, deleting `tickets:delete`; a ticket out of reach is not found. Listing is paged - `limit` at most 200, refused above - and filters by `queue`, `state`, `unfinished`, `owner` (an id or `me`) and `q`. A ticket names its `serviceLevelId` and when it is owed its first answer and its solution, and `escalated` says a promise has run out unkept |
 | `GET/POST` | `/api/v1/tickets/{id}/articles` | What is written in a ticket - a note or a call, with the minutes worked, each article listing its files |
 | `POST` | `/api/v1/tickets/{id}/articles/{article}/attachments` | A file for an article, as multipart/form-data in `file`, at most 20 MB |
 | `GET` | `/api/v1/tickets/{id}/attachments/{attachment}` | A file's bytes, always as application/octet-stream, and only through its own ticket |

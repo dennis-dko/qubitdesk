@@ -645,7 +645,15 @@ func main() {
 			}
 
 			return name
-		}).WithMetrics(app.Metrics()).WithConfig(sysConfig)
+		}).WithMetrics(app.Metrics()).WithConfig(sysConfig).
+		WithServiceLevels(levelRepo, calendarRepo, func(ctx context.Context) string {
+			place, err := settingsService.HolidayPlace(ctx)
+			if err != nil {
+				return ""
+			}
+
+			return place
+		})
 
 	// What this installation is called in a language, wherever it has to name
 	// itself: the prompt a passkey device shows.

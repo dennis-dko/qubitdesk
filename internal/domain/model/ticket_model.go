@@ -52,6 +52,26 @@ type Ticket struct {
 	// PendingUntil is the moment a ticket in a pending state waits for; empty in
 	// every other state.
 	PendingUntil *time.Time
+
+	// ServiceLevelID is the service level the ticket is owed, where it has one;
+	// the moments below are counted from its opening in the level's calendar,
+	// and are empty for a promise the level does not make.
+	ServiceLevelID *uint
+
+	// FirstResponseDue is when the first answer is owed, and FirstResponseAt
+	// when one was given: the first article of an agent the customer sees.
+	FirstResponseDue *time.Time
+	FirstResponseAt  *time.Time
+
+	// SolutionDue is when the ticket is owed a finished state.
+	SolutionDue *time.Time
+}
+
+// Escalated says whether a promise the ticket was made has run out unkept: no
+// first answer by its moment, or not finished by its.
+func (t Ticket) Escalated(now time.Time) bool {
+	return (t.FirstResponseDue != nil && t.FirstResponseAt == nil && now.After(*t.FirstResponseDue)) ||
+		(t.SolutionDue != nil && t.ClosedAt == nil && now.After(*t.SolutionDue))
 }
 
 // Channel is how something reached the service desk: a ticket's first contact,
@@ -151,6 +171,7 @@ const (
 	HistoryArticle      HistoryEvent = "article"
 	HistoryTime         HistoryEvent = "time"
 	HistoryAttachment   HistoryEvent = "attachment"
+	HistoryServiceLevel HistoryEvent = "sla"
 )
 
 // HistoryEvents lists every kind of thing that happens to a ticket, which is
@@ -159,7 +180,7 @@ func HistoryEvents() []HistoryEvent {
 	return []HistoryEvent{
 		HistoryCreated, HistoryTitle, HistoryQueue, HistoryState, HistoryPriority, HistoryType,
 		HistoryOwner, HistoryResponsible, HistoryContact, HistoryOrganisation, HistoryLock, HistoryPending,
-		HistoryArticle, HistoryTime, HistoryAttachment,
+		HistoryArticle, HistoryTime, HistoryAttachment, HistoryServiceLevel,
 	}
 }
 

@@ -5584,6 +5584,7 @@ const HISTORY_SENTENCES = {
   article: () => t('history.article', 'Wrote a {1}'),
   time: () => t('history.time', 'Noted {1} minutes'),
   attachment: () => t('history.attachment', 'Attached {1}'),
+  sla: () => t('history.sla', 'Changed the service level from {0} to {1}'),
 };
 
 /** How the ticket list stands: which page, how many to a page, how many in all. */

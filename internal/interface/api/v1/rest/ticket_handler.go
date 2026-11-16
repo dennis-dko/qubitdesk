@@ -58,6 +58,15 @@ type TicketResponse struct {
 	UpdatedAt        time.Time  `json:"updatedAt"`
 	ClosedAt         *time.Time `json:"closedAt"`
 	PendingUntil     *time.Time `json:"pendingUntil"`
+
+	// ServiceLevelID is the service level the ticket is owed; the moments are
+	// empty for a promise it does not make, and Escalated says one has run out
+	// unkept.
+	ServiceLevelID   *uint      `json:"serviceLevelId"`
+	FirstResponseDue *time.Time `json:"firstResponseDue"`
+	FirstResponseAt  *time.Time `json:"firstResponseAt"`
+	SolutionDue      *time.Time `json:"solutionDue"`
+	Escalated        bool       `json:"escalated"`
 }
 
 // TicketDetailResponse is one ticket with what is read about it beside: the
@@ -81,6 +90,7 @@ type CreateTicketRequest struct {
 	ResponsibleID   *uint      `json:"responsibleId"`
 	ContactID       *uint      `json:"contactId"`
 	OrganisationID  *uint      `json:"organisationId"`
+	ServiceLevelID  *uint      `json:"serviceLevelId"`
 	Channel         *string    `json:"channel"`
 	CustomerVisible bool       `json:"customerVisible"`
 	Subject         *string    `json:"subject"`
@@ -106,6 +116,8 @@ type UpdateTicketRequest struct {
 	ClearContact      bool       `json:"clearContact"`
 	OrganisationID    *uint      `json:"organisationId"`
 	ClearOrganisation bool       `json:"clearOrganisation"`
+	ServiceLevelID    *uint      `json:"serviceLevelId"`
+	ClearServiceLevel bool       `json:"clearServiceLevel"`
 	Locked            *bool      `json:"locked"`
 }
 
@@ -211,7 +223,7 @@ func (h *TicketHandler) Create(c *gofr.Context) (any, error) {
 	ticket, err := h.tickets.CreateTicket(c, caller, command.CreateTicketCommand{
 		Title: req.Title, QueueID: req.QueueID, StateID: req.StateID, PriorityID: req.PriorityID,
 		TypeID: req.TypeID, PendingUntil: req.PendingUntil, OwnerID: req.OwnerID, ResponsibleID: req.ResponsibleID,
-		ContactID: req.ContactID, OrganisationID: req.OrganisationID,
+		ContactID: req.ContactID, OrganisationID: req.OrganisationID, ServiceLevelID: req.ServiceLevelID,
 		Channel: req.Channel, CustomerVisible: req.CustomerVisible, Subject: req.Subject, Body: req.Body,
 		Minutes: req.Minutes,
 	})
@@ -244,7 +256,8 @@ func (h *TicketHandler) Update(c *gofr.Context) (any, error) {
 		TypeID: req.TypeID, PendingUntil: req.PendingUntil, OwnerID: req.OwnerID, ClearOwner: req.ClearOwner,
 		ResponsibleID: req.ResponsibleID, ClearResponsible: req.ClearResponsible,
 		ContactID: req.ContactID, ClearContact: req.ClearContact,
-		OrganisationID: req.OrganisationID, ClearOrganisation: req.ClearOrganisation, Locked: req.Locked,
+		OrganisationID: req.OrganisationID, ClearOrganisation: req.ClearOrganisation,
+		ServiceLevelID: req.ServiceLevelID, ClearServiceLevel: req.ClearServiceLevel, Locked: req.Locked,
 	}); err != nil {
 		return nil, toHTTPError(err)
 	}
@@ -588,7 +601,9 @@ func newTicketResponse(ticket *model.Ticket, names ticketNames) TicketResponse {
 		Locked: ticket.Locked, LockedAt: ticket.LockedAt, Channel: string(ticket.Channel),
 		CreatedBy: ticket.CreatedBy, CreatedByName: nameIn(names.people, ticket.CreatedBy),
 		CreatedAt: ticket.CreatedAt, UpdatedAt: ticket.UpdatedAt, ClosedAt: ticket.ClosedAt,
-		PendingUntil: ticket.PendingUntil,
+		PendingUntil:   ticket.PendingUntil,
+		ServiceLevelID: ticket.ServiceLevelID, FirstResponseDue: ticket.FirstResponseDue,
+		FirstResponseAt: ticket.FirstResponseAt, SolutionDue: ticket.SolutionDue, Escalated: ticket.Escalated(time.Now()),
 	}
 }
 

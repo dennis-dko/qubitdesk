@@ -105,6 +105,12 @@ type TicketApplicationService struct {
 	// off; nil keeps every option at its default.
 	config ConfigReader
 
+	// levels, calendars and holidays decide what a ticket is owed; without
+	// them a ticket is opened owed nothing - see WithServiceLevels.
+	levels    repository.ServiceLevelRepository
+	calendars repository.CalendarRepository
+	holidays  func(ctx context.Context) string
+
 	metrics
 }
 
@@ -291,6 +297,10 @@ func (s *TicketApplicationService) CreateTicket(
 		return nil, err
 	}
 
+	if err := s.openOwed(ctx, ticket, cmd.ServiceLevelID, queue); err != nil {
+		return nil, err
+	}
+
 	article.AuthorID = callerID(caller)
 	article.CreatedAt = now
 
@@ -385,6 +395,10 @@ func (s *TicketApplicationService) UpdateTicket(
 		return nil, err
 	}
 
+	if err := s.changeOwed(ctx, ticket, cmd.ServiceLevelID, cmd.ClearServiceLevel, change); err != nil {
+		return nil, err
+	}
+
 	if len(change.entries) == 0 {
 		return ticket, nil
 	}
@@ -459,7 +473,13 @@ func (s *TicketApplicationService) AddArticle(
 		change.add(model.HistoryTime, "", strconv.Itoa(minutes))
 	}
 
-	return s.tickets.AddArticle(ctx, article, minutes, change.entries)
+	// The first article of an agent the customer sees answers the ticket.
+	var answered *time.Time
+	if article.CustomerVisible && ticket.FirstResponseAt == nil {
+		answered = &now
+	}
+
+	return s.tickets.AddArticle(ctx, article, minutes, change.entries, answered)
 }
 
 // reached reads a ticket and its queue for a caller, and answers "not found"

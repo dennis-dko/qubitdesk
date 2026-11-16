@@ -482,6 +482,7 @@
   "history.priority": "Hat die Priorität von {0} auf {1} geändert",
   "history.queue": "Hat es von {0} nach {1} verschoben",
   "history.responsible": "Hat die Verantwortung von {0} auf {1} übertragen",
+  "history.sla": "Service-Level von {0} auf {1} geändert",
   "history.state": "Hat den Status von {0} auf {1} geändert",
   "history.time": "Hat {1} Minuten erfasst",
   "history.title": "Hat den Titel von „{0}“ in „{1}“ geändert",
