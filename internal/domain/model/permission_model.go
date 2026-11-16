@@ -36,6 +36,13 @@ const (
 	// pretending otherwise.
 	PermQueueWrite = "queues:write"
 
+	// PermAutomationWrite sets up the automation: the macros, and what runs them.
+	// A macro runs as the application on every ticket it is given, whatever queue
+	// it stands in and whatever its steps do - deleting it included - so this
+	// reaches further than any right on tickets does, and is its own right rather
+	// than part of setting up the queues.
+	PermAutomationWrite = "automation:write"
+
 	// The four rights on tickets. Each reaches only the queues the holder's role
 	// was given - reading where the role may read a queue, the other three where it
 	// may work in it - and a ticket in a queue the role does not reach is not found
@@ -84,6 +91,7 @@ func AllPermissions() []string {
 		PermRoleRead, PermRoleWrite,
 		PermSettingsManage,
 		PermQueueWrite,
+		PermAutomationWrite,
 		PermTicketRead, PermTicketCreate, PermTicketWrite, PermTicketDelete,
 		PermCustomerRead, PermCustomerWrite,
 		PermFAQRead, PermFAQWrite,
@@ -109,6 +117,7 @@ func AdminPermissions() []string {
 		PermRoleRead, PermRoleWrite,
 		PermSettingsManage,
 		PermQueueWrite,
+		PermAutomationWrite,
 		PermTicketRead, PermTicketCreate, PermTicketWrite, PermTicketDelete,
 		PermCustomerRead, PermCustomerWrite,
 		PermFAQRead, PermFAQWrite,

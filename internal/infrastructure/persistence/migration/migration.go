@@ -152,7 +152,37 @@ func All(dialect string) map[int64]migration.Migrate {
 		// is still offered.
 		20261116010500: {UP: func(d migration.Datasource) error { return addServiceLevelCalendar(d, dialect) }},
 		20261116010600: {UP: func(d migration.Datasource) error { return addServiceLevelValidity(d, dialect) }},
+
+		// What the automation does to a ticket: macros and their steps.
+		20261116020000: {UP: func(d migration.Datasource) error { return createMacros(d, dialect) }},
+		20261116020100: {UP: func(d migration.Datasource) error { return createMacroActions(d, dialect) }},
+		20261116020200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_macro_actions_macro", "macro_actions", "macro_id")
+		}},
 	}
+}
+
+// createMacros keeps the named runs of steps the automation takes on a ticket,
+// as KIX18 keeps its macros.
+func createMacros(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE macros (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect)))
+}
+
+// createMacroActions keeps a macro's steps in the order they are taken, each
+// with its parameters as a JSON object of the names its type defines.
+func createMacroActions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE macro_actions (
+		%[1]s,
+		macro_id %[2]s NOT NULL REFERENCES macros(id),
+		position INT NOT NULL,
+		type VARCHAR(64) NOT NULL,
+		parameters %[3]s NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect)))
 }
 
 // createCalendars keeps when a service is given, as KIX18 keeps it. An empty

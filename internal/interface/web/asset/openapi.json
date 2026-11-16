@@ -53,6 +53,10 @@
     {
       "name": "customers",
       "description": "Who tickets come from: the organisations and their contacts. Reading takes `customers:read` and changing `customers:write`, and neither is narrowed by queue."
+    },
+    {
+      "name": "automation",
+      "description": "What the application does to tickets by itself: the macros, run as the application on every ticket they are given. Takes `automation:write`."
     }
   ],
   "paths": {
@@ -3101,6 +3105,176 @@
           },
           "409": {
             "description": "Queues or tickets use it"
+          }
+        }
+      }
+    },
+    "/macros": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "List the macros",
+        "description": "Each with its steps in the order they are taken, and under `steps` every step there is with the parameters it reads - what each holds, whether it is needed and its bound. Takes `automation:write`.",
+        "responses": {
+          "200": {
+            "description": "The macros and the steps there are"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Create a macro",
+        "description": "Needs a `name`. Every step is checked as it is saved: a type there is, the parameters it reads and no other, a record that is there and still offered, merged never, and a waiting state with the minutes it waits. Takes `automation:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "description": "A step there is, as `steps` in the list names it"
+                        },
+                        "parameters": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          },
+                          "description": "The values the step reads, by the names its type defines: a record by its id, a switch as true or false, minutes as a number"
+                        }
+                      }
+                    },
+                    "description": "The steps in the order they are taken; sent, they take the place of every step the macro had"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the macro cannot be stored with, or a step that could not be taken"
+          },
+          "409": {
+            "description": "Another macro has that name"
+          }
+        }
+      }
+    },
+    "/macros/{id}": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Read a macro",
+        "description": "Takes `automation:write`.",
+        "responses": {
+          "200": {
+            "description": "The macro"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Change a macro",
+        "description": "A field left out stays as it was; `actions`, sent, take the place of every step. Takes `automation:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "description": "A step there is, as `steps` in the list names it"
+                        },
+                        "parameters": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          },
+                          "description": "The values the step reads, by the names its type defines: a record by its id, a switch as true or false, minutes as a number"
+                        }
+                      }
+                    },
+                    "description": "The steps in the order they are taken; sent, they take the place of every step the macro had"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the macro cannot be stored with, or a step that could not be taken"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another macro has that name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Delete a macro",
+        "description": "Takes `automation:write`.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
           }
         }
       }

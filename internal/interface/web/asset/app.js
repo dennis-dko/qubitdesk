@@ -529,6 +529,7 @@ const FIELD_NAMES = {
   updateMinutes: 'Between answers (minutes)',
   solutionMinutes: 'Solution (minutes)',
   serviceLevelId: 'Service level',
+  actions: 'Steps',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -2641,6 +2642,7 @@ const PERMISSION_TITLES = {
   'roles:write': 'Create and change roles',
   'settings:manage': 'Administer the installation',
   'queues:write': 'Set up queues',
+  'automation:write': 'Set up the automation',
   'tickets:read': 'See tickets',
   'tickets:create': 'Open tickets',
   'tickets:write': 'Work on tickets',
@@ -2668,6 +2670,7 @@ const PERMISSION_DETAILS = {
   'roles:write': 'Make a role, change what it grants, remove one nobody holds. The roles shipped with the application stay as they are.',
   'settings:manage': 'The installation itself: the database connection, the directory, the mailboxes tickets arrive through, appearance, maintenance mode, telemetry, the log and the restart. This is the right that makes somebody an administrator.',
   'queues:write': 'Make and change queues and decide which role reaches each - and with them the states, priorities and types tickets are sorted by, the service levels and the answer templates. Whoever holds it reaches every queue.',
+  'automation:write': 'Make and change the macros and what runs them. A macro acts as the application on every ticket it is given, in any queue and deleting included - so this reaches further than any right on tickets.',
   'tickets:read': 'The tickets in the queues this role reaches, with everything written in them. A queue the role does not reach is not there for it.',
   'tickets:create': 'Open a ticket for a customer - one who called, or one to write to - in a queue this role may work in.',
   'tickets:write': 'Answer, note, change state and priority, take a ticket and hand it over, move it to another queue - in the queues this role may work in.',
@@ -2686,6 +2689,7 @@ const PERMISSION_GROUPS = {
   roles: 'Roles',
   settings: 'Settings',
   queues: 'Queues',
+  automation: 'Automation',
   tickets: 'Tickets',
   customers: 'Customers',
   faq: 'Knowledge base',
@@ -8151,6 +8155,9 @@ const CHANGE_SENTENCES = {
   'serviceLevel.created': () => t('change.serviceLevelCreated', 'Created the service level {0}'),
   'serviceLevel.updated': () => t('change.serviceLevelUpdated', 'Changed the service level {0}'),
   'serviceLevel.deleted': () => t('change.serviceLevelDeleted', 'Deleted the service level {0}'),
+  'macro.created': () => t('change.macroCreated', 'Created the macro {0}'),
+  'macro.updated': () => t('change.macroUpdated', 'Changed the macro {0}'),
+  'macro.deleted': () => t('change.macroDeleted', 'Deleted the macro {0}'),
   'sysconfig.set': () => t('change.sysconfigSet', 'Changed the option {1}'),
   'sysconfig.reset': () => t('change.sysconfigReset', 'Put the option {1} back to its default'),
 };

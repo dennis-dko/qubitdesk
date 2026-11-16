@@ -1,0 +1,17 @@
+package repository
+
+import (
+	"context"
+
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+)
+
+// MacroRepository keeps the macros, each with its steps in the order they are
+// taken; saving a macro writes its steps in place of the ones it had.
+type MacroRepository interface {
+	GetAll(ctx context.Context) ([]*model.Macro, error)
+	GetByID(ctx context.Context, id uint) (*model.Macro, error)
+	Save(ctx context.Context, macro *model.Macro) (*model.Macro, error)
+	Update(ctx context.Context, macro *model.Macro) (*model.Macro, error)
+	Delete(ctx context.Context, id uint) error
+}

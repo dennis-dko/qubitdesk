@@ -1026,6 +1026,11 @@ func main() {
 		Levels: rest.NewServiceLevelHandler(
 			appservice.NewSLAApplicationService(levelRepo, calendarRepo),
 			authorizer),
+		Macros: rest.NewMacroHandler(
+			appservice.NewMacroApplicationService(sqldb.NewMacroRepository(db, cfg.Dialect), appservice.MacroReferences{
+				Catalog: catalogRepos, Customers: customerRepos, Queues: queueRepo, Users: userRepo,
+			}),
+			authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves
