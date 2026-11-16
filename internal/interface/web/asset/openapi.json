@@ -3278,6 +3278,198 @@
           }
         }
       }
+    },
+    "/exec-plans": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "List the execution plans",
+        "description": "When the jobs that name a plan run: at times on weekdays, or on events. Under `events` every event a plan can run on. Takes `automation:write`.",
+        "responses": {
+          "200": {
+            "description": "The plans and the events there are"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Create an execution plan",
+        "description": "Needs a `name` and a `type`. A time-based plan needs weekdays and times, an event-based one events, and neither takes the other kind's values. Takes `automation:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "TimeBased",
+                      "EventBased"
+                    ]
+                  },
+                  "weekdays": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 6
+                    },
+                    "description": "A time-based plan's days, 0 being Sunday"
+                  },
+                  "times": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "08:00"
+                    },
+                    "description": "A time-based plan's times of day, as the wall reads them in the installation's zone"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "An event-based plan's events, as `events` in the list names them"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the plan cannot be stored with"
+          },
+          "409": {
+            "description": "Another plan has that name"
+          }
+        }
+      }
+    },
+    "/exec-plans/{id}": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Read an execution plan",
+        "description": "Takes `automation:write`.",
+        "responses": {
+          "200": {
+            "description": "The plan"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Change an execution plan",
+        "description": "A field left out stays as it was; changing the `type` takes the other kind's values away. Takes `automation:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "TimeBased",
+                      "EventBased"
+                    ]
+                  },
+                  "weekdays": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 6
+                    },
+                    "description": "A time-based plan's days, 0 being Sunday"
+                  },
+                  "times": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "08:00"
+                    },
+                    "description": "A time-based plan's times of day, as the wall reads them in the installation's zone"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "An event-based plan's events, as `events` in the list names them"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the plan cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another plan has that name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Delete an execution plan",
+        "description": "Takes `automation:write`.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     }
   },
   "components": {

@@ -1031,6 +1031,8 @@ func main() {
 				Catalog: catalogRepos, Customers: customerRepos, Queues: queueRepo, Users: userRepo,
 			}),
 			authorizer),
+		Plans: rest.NewExecPlanHandler(
+			appservice.NewExecPlanApplicationService(sqldb.NewExecPlanRepository(db, cfg.Dialect)), authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves

@@ -159,7 +159,24 @@ func All(dialect string) map[int64]migration.Migrate {
 		20261116020200: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_macro_actions_macro", "macro_actions", "macro_id")
 		}},
+
+		// When the automation runs: execution plans.
+		20261116020300: {UP: func(d migration.Datasource) error { return createExecPlans(d, dialect) }},
 	}
+}
+
+// createExecPlans keeps when the jobs that name a plan run, as KIX18 keeps its
+// execution plans: the weekdays, times or events in parameters, a JSON object,
+// so that the two kinds of plan share one table.
+func createExecPlans(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE exec_plans (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		type VARCHAR(32) NOT NULL,
+		parameters %[4]s NOT NULL
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), longText(dialect)))
 }
 
 // createMacros keeps the named runs of steps the automation takes on a ticket,

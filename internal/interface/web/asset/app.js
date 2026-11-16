@@ -530,6 +530,9 @@ const FIELD_NAMES = {
   solutionMinutes: 'Solution (minutes)',
   serviceLevelId: 'Service level',
   actions: 'Steps',
+  weekdays: 'Weekdays',
+  times: 'Times',
+  events: 'Events',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -8158,6 +8161,9 @@ const CHANGE_SENTENCES = {
   'macro.created': () => t('change.macroCreated', 'Created the macro {0}'),
   'macro.updated': () => t('change.macroUpdated', 'Changed the macro {0}'),
   'macro.deleted': () => t('change.macroDeleted', 'Deleted the macro {0}'),
+  'execPlan.created': () => t('change.execPlanCreated', 'Created the execution plan {0}'),
+  'execPlan.updated': () => t('change.execPlanUpdated', 'Changed the execution plan {0}'),
+  'execPlan.deleted': () => t('change.execPlanDeleted', 'Deleted the execution plan {0}'),
   'sysconfig.set': () => t('change.sysconfigSet', 'Changed the option {1}'),
   'sysconfig.reset': () => t('change.sysconfigReset', 'Put the option {1} back to its default'),
 };
