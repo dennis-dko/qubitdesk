@@ -9,7 +9,6 @@ import (
 	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
 // meddled is a ticket repository through which somebody changes every ticket
@@ -37,33 +36,49 @@ func (m meddled) LockedTickets(ctx context.Context) ([]*model.Ticket, error) {
 	return found, err
 }
 
-// A ticket waiting to close by itself moves on once its moment has come - to the
-// state the system configuration names, or to closed where that names one that
-// waits itself - and not before, written into its history by the application.
+// waitingIn opens a ticket and sets it waiting in the state given for an hour
+// from now.
+func (f ticketFixture) waitingIn(t *testing.T, state *model.TicketState, title string, now time.Time, locked bool) *model.Ticket {
+	t.Helper()
+
+	ticket := f.open(t, f.agent, f.desk, title)
+	moment := now.Add(time.Hour)
+
+	waits, err := f.tickets.UpdateTicket(context.Background(), f.agent, ticket.ID, command.UpdateTicketCommand{
+		StateID: &state.ID, PendingUntil: &moment, Locked: &locked,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return waits
+}
+
+// waitingState adds a state of the pending-auto type that moves a ticket on to
+// the state given, through the tables.
+func (f ticketFixture) waitingState(t *testing.T, name string, next *model.TicketState) *model.TicketState {
+	t.Helper()
+
+	state, err := f.stateRepo.Save(context.Background(), &model.TicketState{
+		Name: name, Type: model.StateTypePendingAuto, Valid: true, NextStateID: &next.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return state
+}
+
+// A ticket waiting to move on by itself moves on once its moment has come - to
+// the state its waiting state names, and to closed where that names none that
+// can still end a wait, which only a database changed by hand leaves it doing -
+// and not before, written into its history by the application.
 func TestATicketWhoseWaitIsOverMovesOn(t *testing.T) {
 	ctx := context.Background()
 	f := newTicketFixture(t)
-	settings := newStubSettings()
-	config := service.NewSysConfigService(settings)
-	f.tickets.WithConfig(config)
-
 	now := time.Now().UTC()
 
-	waiting := func(title string) *model.Ticket {
-		ticket := f.open(t, f.agent, f.desk, title)
-
-		moment := now.Add(time.Hour)
-		waits, err := f.tickets.UpdateTicket(ctx, f.agent, ticket.ID, command.UpdateTicketCommand{
-			StateID: &f.states["pending-auto-close"].ID, PendingUntil: &moment,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		return waits
-	}
-
-	printer := waiting("Printer")
+	printer := f.waitingIn(t, f.states["pending-auto-close"], "Printer", now, false)
 
 	if moved, _, err := f.tickets.Housekeep(ctx, now); err != nil || moved != 0 {
 		t.Fatalf("before its moment the housekeeping moved %d, %v", moved, err)
@@ -84,30 +99,33 @@ func TestATicketWhoseWaitIsOverMovesOn(t *testing.T) {
 		t.Errorf("the printer's history ends with %+v; want the application closing it", last)
 	}
 
-	if _, err := config.Set(ctx, model.ConfigTicketStateAfterPending, "open"); err != nil {
-		t.Fatal(err)
-	}
-
-	scanner := waiting("Scanner")
+	scanner := f.waitingIn(t, f.waitingState(t, "pending-auto-open", f.states["open"]), "Scanner", now, false)
 	if _, _, err := f.tickets.Housekeep(ctx, now.Add(2*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 
 	if opened, _ := f.tickets.GetTicket(ctx, f.agent, scanner.ID); opened.StateID != f.states["open"].ID {
-		t.Errorf("with open named the scanner went to state %d, want open", opened.StateID)
+		t.Errorf("waiting to open, the scanner went to state %d, want open", opened.StateID)
 	}
 
-	if _, err := config.Set(ctx, model.ConfigTicketStateAfterPending, "pending-reminder"); err != nil {
+	resolved, err := f.stateRepo.Save(ctx, &model.TicketState{Name: "resolved", Type: model.StateTypeClosed, Valid: true})
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	monitor := waiting("Monitor")
+	monitor := f.waitingIn(t, f.waitingState(t, "pending-auto-resolve", resolved), "Monitor", now, false)
+
+	resolved.Valid = false
+	if _, err := f.stateRepo.Update(ctx, resolved); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, _, err := f.tickets.Housekeep(ctx, now.Add(2*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 
 	if fallen, _ := f.tickets.GetTicket(ctx, f.agent, monitor.ID); fallen.StateID != f.states["closed"].ID {
-		t.Errorf("with a waiting state named the monitor went to state %d, want closed", fallen.StateID)
+		t.Errorf("waiting for a state retired by hand, the monitor went to state %d, want closed", fallen.StateID)
 	}
 }
 
@@ -302,27 +320,9 @@ func TestTheHousekeepingLeavesWhatSomebodyChangedMeanwhile(t *testing.T) {
 func TestAWaitThatClosesATicketFreesItsLock(t *testing.T) {
 	ctx := context.Background()
 	f := newTicketFixture(t)
-	settings := newStubSettings()
-	config := service.NewSysConfigService(settings)
-	f.tickets.WithConfig(config)
-
 	now := time.Now().UTC()
-	moment, locked := now.Add(time.Hour), true
 
-	waitingLocked := func(title string) *model.Ticket {
-		ticket := f.open(t, f.agent, f.desk, title)
-
-		waits, err := f.tickets.UpdateTicket(ctx, f.agent, ticket.ID, command.UpdateTicketCommand{
-			StateID: &f.states["pending-auto-close"].ID, PendingUntil: &moment, Locked: &locked,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		return waits
-	}
-
-	printer := waitingLocked("Printer")
+	printer := f.waitingIn(t, f.states["pending-auto-close"], "Printer", now, true)
 
 	if _, _, err := f.tickets.Housekeep(ctx, now.Add(2*time.Hour)); err != nil {
 		t.Fatal(err)
@@ -346,11 +346,7 @@ func TestAWaitThatClosesATicketFreesItsLock(t *testing.T) {
 		t.Errorf("the printer's history ends with %v; want the application closing it and freeing it", said)
 	}
 
-	if _, err := config.Set(ctx, model.ConfigTicketStateAfterPending, "open"); err != nil {
-		t.Fatal(err)
-	}
-
-	scanner := waitingLocked("Scanner")
+	scanner := f.waitingIn(t, f.waitingState(t, "pending-auto-open", f.states["open"]), "Scanner", now, true)
 	if _, _, err := f.tickets.Housekeep(ctx, now.Add(2*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
@@ -413,35 +409,6 @@ func TestAnAnswerTheCustomerSeesStartsTheLockAgain(t *testing.T) {
 
 	if _, freed, err := f.tickets.Housekeep(ctx, now.Add(10*time.Minute)); err != nil || freed != 1 {
 		t.Errorf("a note the customer does not see kept the lock: %d freed, %v", freed, err)
-	}
-}
-
-// The system configuration names only a state a wait can end in for a ticket
-// whose wait is over: one that is there and offered, does not wait itself and
-// is not merged - anything else is refused as it is set rather than quietly
-// closing every ticket instead.
-func TestOnlyAStateAWaitCanEndInIsNamedForIt(t *testing.T) {
-	ctx := context.Background()
-	f := newTicketFixture(t)
-	config := service.NewSysConfigService(newStubSettings()).
-		WithCheck(model.ConfigTicketStateAfterPending, f.tickets.CanEndAWait)
-
-	if _, err := f.stateRepo.Save(ctx, &model.TicketState{Name: "resolved", Type: model.StateTypeClosed}); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, refused := range []string{"nothing like it", "pending-reminder", "pending-auto-close", "merged", "resolved"} {
-		if _, err := config.Set(ctx, model.ConfigTicketStateAfterPending, refused); apperror.KindOf(err) != apperror.KindInvalid {
-			t.Errorf("naming %q was answered %v, want it refused as invalid", refused, err)
-		}
-	}
-
-	if _, err := config.Set(ctx, model.ConfigTicketStateAfterPending, "open"); err != nil {
-		t.Fatalf("naming open was refused: %v", err)
-	}
-
-	if named, err := config.String(ctx, model.ConfigTicketStateAfterPending); err != nil || named != "open" {
-		t.Errorf("after naming open the option reads %q, %v", named, err)
 	}
 }
 

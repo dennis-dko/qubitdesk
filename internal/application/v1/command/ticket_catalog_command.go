@@ -7,6 +7,10 @@ type TicketStateCommand struct {
 	Type        *string
 	Description *string
 	Valid       *bool
+
+	// NextStateID is the state a waiting state moves a ticket on to, which a
+	// state of the pending-auto type needs and no other may have.
+	NextStateID *uint
 }
 
 // TicketPriorityCommand creates a ticket priority or changes one. Creating needs

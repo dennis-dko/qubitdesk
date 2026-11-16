@@ -28,7 +28,9 @@ func NewTicketCatalogHandler(catalog service.TicketCatalogService, authz *Author
 	return &TicketCatalogHandler{catalog: catalog, authz: authz}
 }
 
-// TicketStateResponse is a state as the API hands it out.
+// TicketStateResponse is a state as the API hands it out; nextStateId is, for a
+// state that waits to move a ticket on by itself, the state it moves it on to,
+// and null for every other.
 type TicketStateResponse struct {
 	ID          uint   `json:"id"`
 	Name        string `json:"name"`
@@ -36,6 +38,7 @@ type TicketStateResponse struct {
 	Description string `json:"description"`
 	Valid       bool   `json:"valid"`
 	IsSystem    bool   `json:"isSystem"`
+	NextStateID *uint  `json:"nextStateId"`
 }
 
 // TicketStateRequest creates or changes a state; on a change an absent field is
@@ -45,6 +48,7 @@ type TicketStateRequest struct {
 	Type        *string `json:"type"`
 	Description *string `json:"description"`
 	Valid       *bool   `json:"valid"`
+	NextStateID *uint   `json:"nextStateId"`
 }
 
 // TicketPriorityResponse is a priority as the API hands it out.
@@ -86,7 +90,7 @@ type TicketTypeRequest struct {
 func newTicketStateResponse(s *model.TicketState) TicketStateResponse {
 	return TicketStateResponse{
 		ID: s.ID, Name: s.Name, Type: string(s.Type), Description: s.Description,
-		Valid: s.Valid, IsSystem: s.IsSystem,
+		Valid: s.Valid, IsSystem: s.IsSystem, NextStateID: s.NextStateID,
 	}
 }
 
@@ -366,7 +370,9 @@ func (h *TicketCatalogHandler) deleteOne(c *gofr.Context, remove func(context.Co
 }
 
 func (r TicketStateRequest) command() command.TicketStateCommand {
-	return command.TicketStateCommand{Name: r.Name, Type: r.Type, Description: r.Description, Valid: r.Valid}
+	return command.TicketStateCommand{
+		Name: r.Name, Type: r.Type, Description: r.Description, Valid: r.Valid, NextStateID: r.NextStateID,
+	}
 }
 
 func (r TicketPriorityRequest) command() command.TicketPriorityCommand {

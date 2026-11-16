@@ -168,11 +168,16 @@ func NewTicketStateRepository(db DB, dialect string) *TicketStateRepository {
 		table:   "ticket_states",
 		missing: func(id string) error { return apperror.NotFound("state", id) },
 		stmts: catalogStatements{
-			all:          "SELECT id, name, state_type, description, valid, is_system FROM ticket_states ORDER BY id",
-			byID:         "SELECT id, name, state_type, description, valid, is_system FROM ticket_states WHERE id = ?",
-			byName:       "SELECT id, name, state_type, description, valid, is_system FROM ticket_states WHERE name = ?",
-			insert:       "INSERT INTO ticket_states (name, state_type, description, valid) VALUES (?, ?, ?, ?)",
-			update:       "UPDATE ticket_states SET name = ?, state_type = ?, description = ?, valid = ? WHERE id = ?",
+			all: "SELECT id, name, state_type, description, valid, is_system, next_state_id FROM ticket_states " +
+				"ORDER BY id",
+			byID: "SELECT id, name, state_type, description, valid, is_system, next_state_id FROM ticket_states " +
+				"WHERE id = ?",
+			byName: "SELECT id, name, state_type, description, valid, is_system, next_state_id FROM ticket_states " +
+				"WHERE name = ?",
+			insert: "INSERT INTO ticket_states (name, state_type, description, valid, next_state_id) " +
+				"VALUES (?, ?, ?, ?, ?)",
+			update: "UPDATE ticket_states SET name = ?, state_type = ?, description = ?, valid = ?, next_state_id = ? " +
+				"WHERE id = ?",
 			delete:       "DELETE FROM ticket_states WHERE id = ?",
 			countTickets: "SELECT COUNT(*) FROM tickets WHERE state_id = ?",
 		},
@@ -180,18 +185,25 @@ func NewTicketStateRepository(db DB, dialect string) *TicketStateRepository {
 			var (
 				state model.TicketState
 				kind  string
+				next  sql.NullInt64
 			)
 
-			if err := row.Scan(&state.ID, &state.Name, &kind, &state.Description, &state.Valid, &state.IsSystem); err != nil {
+			if err := row.Scan(&state.ID, &state.Name, &kind, &state.Description, &state.Valid, &state.IsSystem,
+				&next); err != nil {
 				return nil, err
 			}
 
 			state.Type = model.StateType(kind)
 
+			if next.Valid {
+				id := uint(next.Int64)
+				state.NextStateID = &id
+			}
+
 			return &state, nil
 		},
 		written: func(state *model.TicketState) []any {
-			return []any{state.Name, string(state.Type), state.Description, state.Valid}
+			return []any{state.Name, string(state.Type), state.Description, state.Valid, state.NextStateID}
 		},
 		id:   func(state *model.TicketState) uint { return state.ID },
 		name: func(state *model.TicketState) string { return state.Name },
@@ -202,6 +214,17 @@ func NewTicketStateRepository(db DB, dialect string) *TicketStateRepository {
 }
 
 var _ repository.TicketStateRepository = (*TicketStateRepository)(nil)
+
+func (r *TicketStateRepository) CountWaitingFor(ctx context.Context, id uint) (int, error) {
+	var count int
+
+	if err := r.db.QueryRowContext(ctx, r.rebind("SELECT COUNT(*) FROM ticket_states WHERE next_state_id = ?"), id).
+		Scan(&count); err != nil {
+		return 0, apperror.Internal(err)
+	}
+
+	return count, nil
+}
 
 // TicketPriorityRepository stores how urgent a ticket can be, the most urgent
 // first.

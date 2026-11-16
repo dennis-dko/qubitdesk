@@ -166,7 +166,39 @@ func All(dialect string) map[int64]migration.Migrate {
 		// The state types a lock runs out in, new and open as shipped.
 		20261117010000: {UP: func(d migration.Datasource) error { return createUnlockStateTypes(d, dialect) }},
 		20261117010100: {UP: func(d migration.Datasource) error { return seedUnlockStateTypes(d, dialect) }},
+
+		// The state a waiting state moves a ticket on to, closed for the one that
+		// ships.
+		20261117010200: {UP: func(d migration.Datasource) error { return addStateNextState(d, dialect) }},
+		20261117010300: {UP: func(d migration.Datasource) error { return seedPendingCloseNextState(d, dialect) }},
 	}
+}
+
+// addStateNextState names, for a state that waits to move a ticket on by
+// itself, the state it moves it on to - by id, so that renaming either leaves
+// it standing, where KIX18's Ticket::StateAfterPending names both by name and a
+// rename leaves the ticket waiting for ever.
+func addStateNextState(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`ALTER TABLE ticket_states ADD COLUMN next_state_id %s REFERENCES ticket_states(id)`,
+		foreignKeyID(dialect)))
+}
+
+// seedPendingCloseNextState moves the shipped waiting state on to closed, as
+// KIX18 ships it. Read first and written second, because MySQL refuses an
+// UPDATE that reads the table it writes.
+func seedPendingCloseNextState(d migration.Datasource, dialect string) error {
+	var closed uint
+	if err := d.SQL.QueryRow(sqldb.Rebind(dialect, "SELECT id FROM ticket_states WHERE name = ?"), "closed").
+		Scan(&closed); err != nil {
+		return fmt.Errorf("reading the closed state: %w", err)
+	}
+
+	if _, err := d.SQL.Exec(sqldb.Rebind(dialect, "UPDATE ticket_states SET next_state_id = ? WHERE name = ?"),
+		closed, "pending-auto-close"); err != nil {
+		return fmt.Errorf("moving the shipped waiting state on to closed: %w", err)
+	}
+
+	return nil
 }
 
 // createUnlockStateTypes keeps the state types a queue's unlock time frees a

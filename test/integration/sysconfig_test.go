@@ -28,8 +28,8 @@ func (l configList) valueOf(name string) (any, bool, bool) {
 	return nil, false, false
 }
 
-// An option is changed, read back by an agent, refused a value it cannot hold -
-// a state a wait cannot end in among them - and put back to its default, over HTTP with its name in the path - the colons
+// An option is changed, read back by an agent, refused a value it cannot hold,
+// and put back to its default, over HTTP with its name in the path - the colons
 // written plainly and escaped - and the administration log names the option.
 func TestTheSystemConfigurationIsChangedAndPutBackOverHTTP(t *testing.T) {
 	t.Parallel()
@@ -55,8 +55,6 @@ func TestTheSystemConfigurationIsChangedAndPutBackOverHTTP(t *testing.T) {
 		{"/settings/sysconfig/Ticket::Hook", 5, http.StatusBadRequest},
 		{"/settings/sysconfig/Ticket::Hook", "a hook far longer than twenty", http.StatusBadRequest},
 		{"/settings/sysconfig/Ticket::Nothing", "x", http.StatusNotFound},
-		{"/settings/sysconfig/Ticket::StateAfterPending", "no such state", http.StatusBadRequest},
-		{"/settings/sysconfig/Ticket::StateAfterPending", "pending-reminder", http.StatusBadRequest},
 	} {
 		if got := admin.api(http.MethodPut, refused.path, map[string]any{"value": refused.value}); got.Status != refused.want {
 			t.Errorf("%s with %v was answered %d, want %d", refused.path, refused.value, got.Status, refused.want)

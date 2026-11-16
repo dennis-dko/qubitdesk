@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
 // Housekeep does what a ticket is owed without anybody asking, KIX18's daemon
@@ -42,15 +41,16 @@ func (s *TicketApplicationService) Housekeep(ctx context.Context, now time.Time)
 	return moved, freed, err
 }
 
-// endWaits moves every ticket whose pending-auto wait is over, and frees the
-// lock of one its next state closes, as KIX18's pending check does.
+// endWaits moves every ticket whose pending-auto wait is over on to the state
+// its waiting state names, and frees the lock of one that state closes, as
+// KIX18's pending check does.
 func (s *TicketApplicationService) endWaits(ctx context.Context, states []*model.TicketState, now time.Time) (int, error) {
 	due, err := s.tickets.PendingDue(ctx, ofType(states, model.StateTypePendingAuto), now)
 	if err != nil || len(due) == 0 {
 		return 0, err
 	}
 
-	next, err := s.stateAfterPending(ctx)
+	closed, err := s.states.GetByName(ctx, model.StateClosed)
 	if err != nil {
 		return 0, err
 	}
@@ -58,7 +58,9 @@ func (s *TicketApplicationService) endWaits(ctx context.Context, states []*model
 	moved := 0
 
 	for _, ticket := range due {
-		from, release := ticket.StateID, ticket.Locked && next.Type == model.StateTypeClosed
+		from := ticket.StateID
+		next := nextAfter(states, from, closed)
+		release := ticket.Locked && next.Type == model.StateTypeClosed
 
 		change := historyBySystem(ticket.ID, now)
 		change.add(model.HistoryState, s.stateName(states, from), next.Name)
@@ -86,60 +88,23 @@ func (s *TicketApplicationService) endWaits(ctx context.Context, states []*model
 	return moved, nil
 }
 
-// stateAfterPending is the state the system configuration names for a wait
-// that is over - closed unless it says otherwise - and closed again where the
-// state it names can no longer end one, renamed or retired since it was named.
-func (s *TicketApplicationService) stateAfterPending(ctx context.Context) (*model.TicketState, error) {
-	name := model.StateClosed
-
-	if s.config != nil {
-		configured, err := s.config.String(ctx, model.ConfigTicketStateAfterPending)
-		if err != nil {
-			return nil, err
+// nextAfter is the state a waiting state moves a ticket on to - closed where it
+// names none that can still end a wait, which the catalog's rules leave only a
+// database changed by hand doing.
+func nextAfter(states []*model.TicketState, from uint, closed *model.TicketState) *model.TicketState {
+	for _, state := range states {
+		if state.ID != from || state.NextStateID == nil {
+			continue
 		}
 
-		name = configured
+		for _, next := range states {
+			if next.ID == *state.NextStateID && next.EndsAWait() {
+				return next
+			}
+		}
 	}
 
-	state, err := s.states.GetByName(ctx, name)
-	if err != nil && apperror.KindOf(err) != apperror.KindNotFound {
-		return nil, err
-	}
-
-	if err == nil && endsAWait(state) {
-		return state, nil
-	}
-
-	return s.states.GetByName(ctx, model.StateClosed)
-}
-
-// CanEndAWait refuses a state the system configuration may not name for a
-// ticket whose wait is over: one that is not there or no longer offered, one
-// that waits itself, where the wait would never end, and merged, which only
-// merging reaches. Stored, a misspelt name would quietly have closed every
-// ticket instead.
-func (s *TicketApplicationService) CanEndAWait(ctx context.Context, name string) error {
-	state, err := s.states.GetByName(ctx, name)
-	if apperror.KindOf(err) == apperror.KindNotFound {
-		return apperror.InvalidFields("value")
-	}
-
-	if err != nil {
-		return err
-	}
-
-	if !endsAWait(state) {
-		return apperror.InvalidFields("value")
-	}
-
-	return nil
-}
-
-// endsAWait says whether a ticket whose wait is over may move to a state.
-func endsAWait(state *model.TicketState) bool {
-	return state.Valid && !slices.Contains([]model.StateType{
-		model.StateTypePendingAuto, model.StateTypePendingReminder, model.StateTypeMerged,
-	}, state.Type)
+	return closed
 }
 
 // freeLocks frees every lock that has run as long as its ticket's queue

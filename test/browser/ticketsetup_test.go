@@ -4,6 +4,7 @@ package browser
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -311,5 +312,57 @@ func TestTheTicketSetupNamesWhereALockRunsOut(t *testing.T) {
 
 	if got := switches(); !strings.Contains(got, "pending-reminder+") {
 		t.Errorf("drawn again the switches read %q; want the waiting type on", got)
+	}
+}
+
+// A waiting state is made with the state it moves a ticket on to: the choice
+// shows only for that type, is needed there, offers only states that can end a
+// wait, and the table says where the state moves a ticket on to.
+func TestAWaitingStateIsMadeWithWhereItMovesOn(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+
+	p.run("open the ticket setup", p.click(`.tab[data-view="ticketsetup"]`),
+		chromedp.WaitVisible("#table-state", chromedp.ByID))
+	p.waitForText("#table-state tbody", "pending reminder")
+
+	if p.visible("#state-next") {
+		t.Error("the choice of where a state moves a ticket on to shows for a new state")
+	}
+
+	p.run("name a waiting state", chromedp.SetValue(`#form-state [name="name"]`, "waiting to reopen", chromedp.ByQuery),
+		p.chooseOption(`#form-state [name="type"]`, "pending-auto"))
+
+	if !p.visible("#state-next") {
+		t.Fatal("the choice of where a waiting state moves a ticket on to did not show")
+	}
+
+	var offered []string
+
+	p.evalJSON(`JSON.stringify([...document.querySelectorAll('#form-state [name="nextStateId"] option')]
+		.map((option) => option.textContent))`, &offered)
+
+	for _, waits := range []string{"pending reminder", "merged"} {
+		if slices.Contains(offered, waits) {
+			t.Errorf("the next states offered are %q, %s among them", offered, waits)
+		}
+	}
+
+	var openID string
+
+	p.evalJSON(`JSON.stringify(String(cache.ticketStates.find((state) => state.name === 'open').id))`, &openID)
+
+	p.run("send it on to open", p.chooseOption(`#form-state [name="nextStateId"]`, openID), p.click("#state-submit"))
+	p.waitForText("#table-state tbody", "waiting to reopen")
+
+	var row string
+
+	p.evalJSON(`JSON.stringify([...document.querySelectorAll('#table-state tbody tr')]
+		.find((row) => row.textContent.includes('waiting to reopen')).textContent)`, &row)
+
+	if !strings.Contains(row, "→ open") {
+		t.Errorf("the waiting state's row reads %q; want it saying it moves on to open", row)
 	}
 }

@@ -153,10 +153,23 @@ func TestAStateNeedsATypeTheCodeKnows(t *testing.T) {
 	_, err = f.catalog.CreateState(ctx, command.TicketStateCommand{Name: ptr("waiting"), Type: ptr("waiting")})
 	invalidFields(t, err, "type")
 
+	closed, err := f.states.Save(ctx, &model.TicketState{Name: "closed", Type: model.StateTypeClosed, Valid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for _, kind := range model.StateTypes() {
 		name := "a state of type " + string(kind)
 
-		state, err := f.catalog.CreateState(ctx, command.TicketStateCommand{Name: ptr(name), Type: ptr(string(kind))})
+		// A state that waits to move a ticket on by itself needs to say where to.
+		var next *uint
+		if kind == model.StateTypePendingAuto {
+			next = &closed.ID
+		}
+
+		state, err := f.catalog.CreateState(ctx, command.TicketStateCommand{
+			Name: ptr(name), Type: ptr(string(kind)), NextStateID: next,
+		})
 		if err != nil {
 			t.Fatalf("a state of type %s was refused: %v", kind, err)
 		}
@@ -287,5 +300,93 @@ func TestTheStateTypesALockRunsOutInAreAddedToButKeepWhatShips(t *testing.T) {
 
 	if back, err := f.catalog.SetUnlockStateTypes(ctx, []string{"new", "open"}); err != nil || len(back) != 2 {
 		t.Errorf("taking the added type away again answered %v, %v", back, err)
+	}
+}
+
+// A waiting state names the state it moves a ticket on to, and only one that
+// can end a wait: there, offered, not waiting itself and not merged. No other
+// state names one, and a state that stops waiting lets go of the one it named.
+func TestAWaitingStateNamesAStateThatEndsItsWait(t *testing.T) {
+	ctx := context.Background()
+	f := newCatalogFixture()
+
+	seed := func(name string, kind model.StateType, valid bool) *model.TicketState {
+		state, err := f.states.Save(ctx, &model.TicketState{Name: name, Type: kind, Valid: valid})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return state
+	}
+
+	closed := seed("closed", model.StateTypeClosed, true)
+	reminder := seed("pending-reminder", model.StateTypePendingReminder, true)
+	merged := seed("merged", model.StateTypeMerged, true)
+	retired := seed("resolved", model.StateTypeClosed, false)
+
+	waiting, err := f.catalog.CreateState(ctx, command.TicketStateCommand{
+		Name: ptr("waiting to close"), Type: ptr("pending-auto"), NextStateID: &closed.ID,
+	})
+	if err != nil || waiting.NextStateID == nil || *waiting.NextStateID != closed.ID {
+		t.Fatalf("a waiting state moving on to closed was made as %+v, %v", waiting, err)
+	}
+
+	for name, next := range map[string]*uint{
+		"none": nil, "a state there is not": ptr(uint(99)), "one that waits": &reminder.ID,
+		"merged": &merged.ID, "a retired one": &retired.ID,
+	} {
+		_, err := f.catalog.CreateState(ctx, command.TicketStateCommand{
+			Name: ptr("waiting for " + name), Type: ptr("pending-auto"), NextStateID: next,
+		})
+		if detail, ok := apperror.Detail(err); !ok || !slices.Contains(detail.Fields, "nextStateId") {
+			t.Errorf("a waiting state moving on to %s was answered %v, want nextStateId refused", name, err)
+		}
+	}
+
+	if _, err := f.catalog.CreateState(ctx, command.TicketStateCommand{
+		Name: ptr("done"), Type: ptr("closed"), NextStateID: &closed.ID,
+	}); apperror.KindOf(err) != apperror.KindInvalid {
+		t.Errorf("a closed state naming a next state was answered %v, want it refused", err)
+	}
+
+	turned, err := f.catalog.UpdateState(ctx, waiting.ID, command.TicketStateCommand{Type: ptr("open")})
+	if err != nil || turned.NextStateID != nil {
+		t.Errorf("a waiting state turned open reads %+v, %v; want its next state gone", turned, err)
+	}
+}
+
+// A state some waiting state moves a ticket on to stays able to end that wait:
+// it is neither retired, nor deleted, nor given a type that waits or merges,
+// and each refusal says how many waiting states name it.
+func TestAStateAWaitEndsInIsKeptAbleToEndIt(t *testing.T) {
+	ctx := context.Background()
+	f := newCatalogFixture()
+
+	resolved, err := f.states.Save(ctx, &model.TicketState{Name: "resolved", Type: model.StateTypeClosed, Valid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.catalog.CreateState(ctx, command.TicketStateCommand{
+		Name: ptr("waiting to resolve"), Type: ptr("pending-auto"), NextStateID: &resolved.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, change := range map[string]command.TicketStateCommand{
+		"retired":         {Valid: ptr(false)},
+		"made to wait":    {Type: ptr("pending-reminder")},
+		"made the merged": {Type: ptr("merged")},
+	} {
+		_, err := f.catalog.UpdateState(ctx, resolved.ID, change)
+		if detail := refusal(t, err, "stateEndsAWait"); len(detail.Values) != 2 || detail.Values[1] != 1 {
+			t.Errorf("%s, the refusal carries %v; want the state and one waiting state", name, detail.Values)
+		}
+	}
+
+	_ = refusal(t, f.catalog.DeleteState(ctx, resolved.ID), "stateEndsAWait")
+
+	if _, err := f.catalog.UpdateState(ctx, resolved.ID, command.TicketStateCommand{Name: ptr("solved")}); err != nil {
+		t.Errorf("renaming the state a wait ends in was answered %v; a rename leaves the id standing", err)
 	}
 }

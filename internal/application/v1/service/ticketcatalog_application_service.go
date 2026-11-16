@@ -88,7 +88,7 @@ func (s *TicketCatalogApplicationService) CreateState(
 	}
 
 	state := &model.TicketState{Valid: true}
-	if err := applyState(state, cmd); err != nil {
+	if err := s.applyState(ctx, state, cmd); err != nil {
 		return nil, err
 	}
 
@@ -109,8 +109,14 @@ func (s *TicketCatalogApplicationService) UpdateState(
 		return nil, shipped("state", state.Name).WithCode("stateShipped", state.Name)
 	}
 
-	if err := applyState(state, cmd); err != nil {
+	if err := s.applyState(ctx, state, cmd); err != nil {
 		return nil, err
+	}
+
+	if !state.EndsAWait() {
+		if err := s.keptEndingWaits(ctx, state); err != nil {
+			return nil, err
+		}
 	}
 
 	return s.states.Update(ctx, state)
@@ -135,7 +141,29 @@ func (s *TicketCatalogApplicationService) DeleteState(ctx context.Context, id ui
 		return carried("state", state.Name, tickets).WithCode("stateInUse", state.Name, tickets)
 	}
 
+	if err := s.keptEndingWaits(ctx, state); err != nil {
+		return err
+	}
+
 	return s.states.Delete(ctx, id)
+}
+
+// keptEndingWaits refuses to take a state away from the waiting states that
+// move a ticket on to it - retired, deleted, or given a type that waits or
+// merges - because a ticket whose wait was over would have nowhere to go, and
+// would quietly be closed instead.
+func (s *TicketCatalogApplicationService) keptEndingWaits(ctx context.Context, state *model.TicketState) error {
+	waiting, err := s.states.CountWaitingFor(ctx, state.ID)
+	if err != nil {
+		return err
+	}
+
+	if waiting > 0 {
+		return apperror.Conflictf("%d waiting state(s) move a ticket on to the state %q", waiting, state.Name).
+			WithCode("stateEndsAWait", state.Name, waiting)
+	}
+
+	return nil
 }
 
 func (s *TicketCatalogApplicationService) ListUnlockStateTypes(ctx context.Context) ([]model.UnlockStateType, error) {
@@ -327,7 +355,11 @@ func (s *TicketCatalogApplicationService) DeleteType(ctx context.Context, id uin
 // applyState writes what cmd says onto state and refuses the result if any of
 // it is not a state: no name or one longer than its column, a type the code does
 // not know, a description longer than a description is allowed to be.
-func applyState(state *model.TicketState, cmd command.TicketStateCommand) error {
+func (s *TicketCatalogApplicationService) applyState(
+	ctx context.Context,
+	state *model.TicketState,
+	cmd command.TicketStateCommand,
+) error {
 	if cmd.Type != nil {
 		state.Type = model.StateType(strings.TrimSpace(*cmd.Type))
 	}
@@ -339,11 +371,57 @@ func applyState(state *model.TicketState, cmd command.TicketStateCommand) error 
 		invalid = append(invalid, "type")
 	}
 
+	ends, err := s.nextStateOf(ctx, state, cmd.NextStateID)
+	if err != nil {
+		return err
+	}
+
+	if !ends {
+		invalid = append(invalid, "nextStateId")
+	}
+
 	if len(invalid) > 0 {
 		return apperror.InvalidFields(invalid...)
 	}
 
 	return nil
+}
+
+// nextStateOf writes the state a waiting state moves a ticket on to, and says
+// whether it can: a state of the pending-auto type needs one that ends a wait -
+// offered, not waiting itself, not merged - and any other state has none, so a
+// change of type away from waiting takes it off rather than leaving it to look
+// as if it applied.
+func (s *TicketCatalogApplicationService) nextStateOf(
+	ctx context.Context,
+	state *model.TicketState,
+	sent *uint,
+) (bool, error) {
+	if state.Type != model.StateTypePendingAuto {
+		state.NextStateID = nil
+
+		return sent == nil, nil
+	}
+
+	if sent != nil {
+		next := *sent
+		state.NextStateID = &next
+	}
+
+	if state.NextStateID == nil {
+		return false, nil
+	}
+
+	next, err := s.states.GetByID(ctx, *state.NextStateID)
+	if apperror.KindOf(err) == apperror.KindNotFound {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return next.EndsAWait(), nil
 }
 
 // applyPriority is applyState for a priority, whose level orders it among the

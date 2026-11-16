@@ -109,6 +109,18 @@ type TicketStateRepository struct {
 	*catalog[model.TicketState]
 }
 
+func (r *TicketStateRepository) CountWaitingFor(_ context.Context, id uint) (int, error) {
+	count := 0
+
+	for _, state := range r.items.all() {
+		if state.NextStateID != nil && *state.NextStateID == id {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
 // NewTicketStateRepository creates an empty state repository.
 func NewTicketStateRepository() *TicketStateRepository {
 	return &TicketStateRepository{newCatalog("state",

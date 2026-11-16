@@ -1834,7 +1834,7 @@
           "tickets"
         ],
         "summary": "Create a state",
-        "description": "Takes `queues:write`. Needs a `name` and a `type` - one of `new`, `open`, `pending-reminder`, `pending-auto`, `closed`, `removed` and `merged` - because the type is what the code does with a ticket in it. A new state is the installation's own, and valid unless it says otherwise.",
+        "description": "Takes `queues:write`. Needs a `name` and a `type` - one of `new`, `open`, `pending-reminder`, `pending-auto`, `closed`, `removed` and `merged` - because the type is what the code does with a ticket in it. A new state is the installation's own, and valid unless it says otherwise. A `pending-auto` state needs a `nextStateId`, the state a ticket whose wait is over moves on to - offered, not waiting itself, not merged - and no other state takes one.",
         "responses": {
           "201": {
             "description": "Created"
@@ -1869,7 +1869,7 @@
           "tickets"
         ],
         "summary": "Change a state",
-        "description": "Takes `queues:write`; a field left out stays as it was. A value the code moves tickets into by itself (`isSystem`) ships with the application and stays as it is. Making a state invalid takes it out of what is offered while the tickets carrying it keep it. The type is the code's to act on, so it is one of the seven listed under creating one.",
+        "description": "Takes `queues:write`; a field left out stays as it was. A value the code moves tickets into by itself (`isSystem`) ships with the application and stays as it is. Making a state invalid takes it out of what is offered while the tickets carrying it keep it. The type is the code's to act on, so it is one of the seven listed under creating one. A state some waiting state moves a ticket on to is not made invalid or given a type that waits or merges; a state that stops waiting lets go of its `nextStateId`.",
         "responses": {
           "200": {
             "description": "Updated"
@@ -1890,7 +1890,7 @@
           "tickets"
         ],
         "summary": "Delete a state",
-        "description": "Takes `queues:write`. A value the code moves tickets into by itself (`isSystem`) ships with the application and stays as it is. A state tickets carry is refused with how many carry it: make it invalid instead.",
+        "description": "Takes `queues:write`. A value the code moves tickets into by itself (`isSystem`) ships with the application and stays as it is. A state tickets carry is refused with how many carry it: make it invalid instead. So is a state some waiting state moves a ticket on to, with how many.",
         "responses": {
           "204": {
             "description": "Deleted"

@@ -21,6 +21,10 @@ type TicketStateRepository interface {
 	// CountTickets reports how many tickets are in the state, so that deleting
 	// one in use is refused rather than leaving tickets in no state at all.
 	CountTickets(ctx context.Context, id uint) (int, error)
+
+	// CountWaitingFor reports how many waiting states move a ticket on to the
+	// state, which keeps it able to end their wait.
+	CountWaitingFor(ctx context.Context, id uint) (int, error)
 }
 
 // TicketPriorityRepository keeps how urgent a ticket can be, the most urgent

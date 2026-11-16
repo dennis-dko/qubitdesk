@@ -534,6 +534,7 @@ const FIELD_NAMES = {
   times: 'Times',
   events: 'Events',
   types: 'State types',
+  nextStateId: 'Moves on to',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -664,6 +665,7 @@ const REFUSAL_VALUES = {
   stateShipped: { 0: statusName },
   stateInUse: { 0: statusName },
   stateRetired: { 0: statusName },
+  stateEndsAWait: { 0: statusName },
   priorityShipped: { 0: priorityName },
   priorityInUse: { 0: priorityName },
   priorityRetired: { 0: priorityName },
@@ -6544,9 +6546,16 @@ const CATALOGS = {
     created: () => t('msg.stateCreated', 'State created'),
     saved: () => t('msg.stateSaved', 'State saved'),
     deleted: () => t('msg.stateDeleted', 'State deleted'),
-    cells: (entry) => [el('td', { class: 'text', text: stateTypeName(entry.type) })],
-    fill: (form, entry) => { form.elements.type.value = entry.type; },
-    sent: (form) => ({ type: form.elements.type.value }),
+    cells: (entry) => [el('td', { class: 'text', text: stateTypeAndNext(entry) })],
+    fill: (form, entry) => {
+      form.elements.type.value = entry.type;
+      form.elements.nextStateId.value = entry.nextStateId ? String(entry.nextStateId) : '';
+      showNextState(form);
+    },
+    sent: (form) => (form.elements.type.value === 'pending-auto'
+      ? { type: 'pending-auto', nextStateId: Number(form.elements.nextStateId.value) }
+      : { type: form.elements.type.value }),
+    reset: (form) => showNextState(form),
   },
   priority: {
     path: '/ticket-priorities',
@@ -6562,6 +6571,7 @@ const CATALOGS = {
     cells: (entry) => [el('td', { class: 'num', text: String(entry.level) })],
     fill: (form, entry) => { form.elements.level.value = String(entry.level); },
     sent: (form) => ({ level: Number(form.elements.level.value) }),
+    reset: () => {},
   },
   type: {
     path: '/ticket-types',
@@ -6577,6 +6587,7 @@ const CATALOGS = {
     cells: () => [],
     fill: () => {},
     sent: () => ({}),
+    reset: () => {},
   },
 };
 
@@ -6603,10 +6614,15 @@ async function loadTicketSetup() {
   // on every reload of the screens, and refilling the select puts it back on its
   // first entry.
   const stateForm = $('#form-state');
+  cache.ticketStates = lists.state;
   if (stateForm && !beingEdited(stateForm)) {
     fillSelect(stateForm.elements.type,
       Object.keys(STATE_TYPE_TITLES).map((type) => ({ value: type, label: stateTypeName(type) })),
       { labelKey: 'label', valueKey: 'value' });
+    fillSelect(stateForm.elements.nextStateId,
+      lists.state.filter(endsAWait).map((state) => ({ value: String(state.id), label: statusName(state.name) })),
+      { labelKey: 'label', valueKey: 'value' });
+    showNextState(stateForm);
   }
 
   for (const [kind, catalog] of Object.entries(CATALOGS)) {
@@ -6658,6 +6674,34 @@ function wireUnlockTypes() {
       refreshAll,
     );
   });
+}
+
+/**
+ * Whether a ticket whose wait is over may move on to a state - offered, not
+ * waiting itself, not merged - as the server holds a waiting state's next state
+ * to.
+ */
+function endsAWait(state) {
+  return state.valid && !['pending-auto', 'pending-reminder', 'merged'].includes(state.type);
+}
+
+/**
+ * Shows the choice of the state a waiting state moves a ticket on to only for
+ * a state of that type, and makes it needed there: hidden, it must not be
+ * required, or the form could not be sent and would not say why.
+ */
+function showNextState(form) {
+  const waits = form.elements.type.value === 'pending-auto';
+
+  $('#state-next').hidden = !waits;
+  form.elements.nextStateId.required = waits;
+}
+
+/** A state's type, and for a waiting state the state it moves a ticket on to. */
+function stateTypeAndNext(entry) {
+  const next = (cache.ticketStates ?? []).find((state) => state.id === entry.nextStateId);
+
+  return next ? `${stateTypeName(entry.type)} → ${statusName(next.name)}` : stateTypeName(entry.type);
 }
 
 /** One value as a row of its card's table. */
@@ -6725,6 +6769,7 @@ function resetCatalogForm(kind) {
 
   form.reset();
   form.elements.id.value = '';
+  catalog.reset(form);
 
   stopRedrawing(`${kind}FormTitle`);
   swapTheLabel($(`#${kind}-form-title`), ...catalog.create);
@@ -14597,6 +14642,8 @@ function wireForms() {
 
     $(`#${kind}-cancel`).addEventListener('click', () => resetCatalogForm(kind));
   }
+
+  $('#form-state').elements.type.addEventListener('change', (e) => showNextState(e.target.form));
 
   // The same thing, offered where a shipped role is being read rather than at
   // the end of a form that is a screen further down.

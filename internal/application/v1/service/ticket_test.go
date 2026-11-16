@@ -89,6 +89,13 @@ func newTicketFixture(t *testing.T) ticketFixture {
 		f.states[seed.Name], _ = states.Save(ctx, &seed)
 	}
 
+	// The shipped waiting state moves a ticket on to closed, as the migration
+	// seeds it.
+	f.states["pending-auto-close"].NextStateID = &f.states["closed"].ID
+	if _, err := states.Update(ctx, f.states["pending-auto-close"]); err != nil {
+		t.Fatal(err)
+	}
+
 	for level, name := range []string{"high", "normal", "low"} {
 		f.priority[name], _ = priorities.Save(ctx, &model.TicketPriority{
 			Name: name, Level: level + 1, Valid: true, IsSystem: name == "normal",

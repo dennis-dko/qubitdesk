@@ -26,6 +26,7 @@ val refusalValues: Map<String, Map<Int, String>> = mapOf(
     "stateShipped" to mapOf(0 to "statusName"),
     "stateInUse" to mapOf(0 to "statusName"),
     "stateRetired" to mapOf(0 to "statusName"),
+    "stateEndsAWait" to mapOf(0 to "statusName"),
     "priorityShipped" to mapOf(0 to "priorityName"),
     "priorityInUse" to mapOf(0 to "priorityName"),
     "priorityRetired" to mapOf(0 to "priorityName"),

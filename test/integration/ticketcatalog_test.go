@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -177,5 +178,65 @@ func TestTheTicketCatalogIsAdministeredAndLogged(t *testing.T) {
 
 	if gone := admin.api(http.MethodGet, path, nil); gone.Status != http.StatusNotFound {
 		t.Errorf("the deleted state was answered %d, want 404", gone.Status)
+	}
+}
+
+// A waiting state names where it moves a ticket on to, over HTTP and through
+// the database: the shipped one moves on to closed, a new one without a next
+// state is refused, one moving on to open is kept, and a state some waiting
+// state moves on to is neither retired nor deleted.
+func TestAWaitingStateNamesWhereItMovesOnOverHTTP(t *testing.T) {
+	t.Parallel()
+
+	a := start(t)
+	admin := a.signInAsAdmin("a-much-better-password")
+
+	type state struct {
+		ID          uint   `json:"id"`
+		Name        string `json:"name"`
+		NextStateID *uint  `json:"nextStateId"`
+	}
+
+	var list struct {
+		Items []state `json:"items"`
+	}
+
+	admin.must(admin.api(http.MethodGet, "/ticket-states", nil), http.StatusOK).Data(t, &list)
+
+	named := map[string]state{}
+	for _, entry := range list.Items {
+		named[entry.Name] = entry
+	}
+
+	if next := named["pending-auto-close"].NextStateID; next == nil || *next != named["closed"].ID {
+		t.Fatalf("the shipped waiting state moves on to %v, want closed", next)
+	}
+
+	refused := admin.api(http.MethodPost, "/ticket-states", map[string]any{"name": "waiting", "type": "pending-auto"})
+	if refused.Status != http.StatusBadRequest || !strings.Contains(string(refused.Body), "nextStateId") {
+		t.Errorf("a waiting state naming nowhere to go was answered %d %s", refused.Status, refused.Body)
+	}
+
+	var resolved, reopening state
+
+	admin.must(admin.api(http.MethodPost, "/ticket-states", map[string]any{"name": "resolved", "type": "closed"}),
+		http.StatusCreated).Data(t, &resolved)
+	admin.must(admin.api(http.MethodPost, "/ticket-states", map[string]any{
+		"name": "waiting to resolve", "type": "pending-auto", "nextStateId": resolved.ID,
+	}), http.StatusCreated).Data(t, &reopening)
+
+	if reopening.NextStateID == nil || *reopening.NextStateID != resolved.ID {
+		t.Errorf("the waiting state was kept as %+v; want it moving on to resolved", reopening)
+	}
+
+	path := "/ticket-states/" + strconv.FormatUint(uint64(resolved.ID), 10)
+
+	for _, got := range []response{
+		admin.api(http.MethodPut, path, map[string]any{"valid": false}),
+		admin.api(http.MethodDelete, path, nil),
+	} {
+		if got.Status != http.StatusConflict || errorCode(t, got) != "stateEndsAWait" {
+			t.Errorf("taking away the state a wait ends in was answered %d %s", got.Status, got.Body)
+		}
 	}
 }

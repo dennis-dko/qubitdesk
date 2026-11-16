@@ -655,7 +655,6 @@ func main() {
 
 			return place
 		})
-	sysConfig.WithCheck(model.ConfigTicketStateAfterPending, tickets.CanEndAWait)
 
 	// What this installation is called in a language, wherever it has to name
 	// itself: the prompt a passkey device shows.

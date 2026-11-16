@@ -152,3 +152,46 @@ func TestTheStateRepositoryKeepsTheRulesOfTheTable(t *testing.T) {
 		t.Errorf("deleting it twice answered %v, want not found", err)
 	}
 }
+
+// The shipped waiting state moves a ticket on to closed, as KIX18 ships it, and
+// a waiting state's next state reads back by id and is counted for the state it
+// names - so the catalog can keep that state able to end the wait.
+func TestTheShippedWaitingStateMovesOnToClosed(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	states := sqldb.NewTicketStateRepository(db, sqldb.DialectSQLite)
+
+	waiting, err := states.GetByName(ctx, "pending-auto-close")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	closed, err := states.GetByName(ctx, "closed")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if waiting.NextStateID == nil || *waiting.NextStateID != closed.ID {
+		t.Fatalf("the shipped waiting state moves on to %v, want closed (%d)", waiting.NextStateID, closed.ID)
+	}
+
+	open, err := states.GetByName(ctx, "open")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reopening, err := states.Save(ctx, &model.TicketState{
+		Name: "pending-auto-open", Type: model.StateTypePendingAuto, Valid: true, NextStateID: &open.ID,
+	})
+	if err != nil || reopening.NextStateID == nil || *reopening.NextStateID != open.ID {
+		t.Fatalf("a waiting state moving on to open reads %+v, %v", reopening, err)
+	}
+
+	for name, want := range map[string]int{"closed": 1, "open": 1, "merged": 0} {
+		state, _ := states.GetByName(ctx, name)
+
+		if count, err := states.CountWaitingFor(ctx, state.ID); err != nil || count != want {
+			t.Errorf("%d waiting states move on to %s, %v; want %d", count, name, err, want)
+		}
+	}
+}

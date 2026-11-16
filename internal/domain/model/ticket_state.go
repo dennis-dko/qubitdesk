@@ -77,6 +77,17 @@ type TicketState struct {
 	// IsSystem marks a state the code moves tickets into by itself. It stays as
 	// it shipped: not renamed, retyped, retired or deleted.
 	IsSystem bool
+
+	// NextStateID is, for a state that waits to move a ticket on by itself, the
+	// state it moves it on to once its moment has come; no other state has one.
+	NextStateID *uint
+}
+
+// EndsAWait says whether a ticket whose wait is over may move on to the state:
+// one that is offered, that does not wait itself, where the wait would never
+// end, and that is not merged, which only merging reaches.
+func (s TicketState) EndsAWait() bool {
+	return s.Valid && s.Type != StateTypePendingAuto && s.Type != StateTypePendingReminder && s.Type != StateTypeMerged
 }
 
 // The states the code moves tickets into by itself, by the names the migration

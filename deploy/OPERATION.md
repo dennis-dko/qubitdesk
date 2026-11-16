@@ -1511,7 +1511,7 @@ Expired sessions are pruned at 03:00 daily, on the server's clock like the
 directory's schedule. That schedule is not configurable.
 
 Once a minute the application looks after its tickets: one whose wait is over
-moves on to the state the system configuration names, and a lock that has run
+moves on to the state its waiting state names, and a lock that has run
 as long as its queue allows is freed. It writes a line at INFO when it changed
 something and at ERROR when it could not, and nothing while there was nothing
 to do - so a quiet log is not a sign that it has stopped. That schedule is not
