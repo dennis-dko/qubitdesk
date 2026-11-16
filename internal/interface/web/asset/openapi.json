@@ -2721,7 +2721,7 @@
           "tickets"
         ],
         "summary": "List the calendars",
-        "description": "When a service is given - the hours of each weekday, less public holidays and free days - which a service level's minutes are counted in, by name. Takes `queues:write`.",
+        "description": "When a service is given - the hours of each weekday, less public holidays and free days - which a service level's minutes are counted in, by name, with `holidayCountries`: the countries and regions a calendar's public holidays can be kept in. Takes `queues:write`.",
         "responses": {
           "200": {
             "description": "The calendars"

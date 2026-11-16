@@ -968,6 +968,49 @@
           </div>
         </form>
       </div>
+
+      <!-- When the service is given, which a service level's minutes are counted
+           in. The weekdays' boxes and the free days' rows are drawn by the
+           script, which names the weekdays in the reader's language. -->
+      <div class="card" id="calendar-card" data-perm="queues:write">
+        <h2 data-i18n="calendar.title">Calendars</h2>
+        <p class="muted" data-i18n="calendar.hint">When the service is given, which a service level's minutes are counted in: the hours of each weekday, less the public holidays of a place and free days of its own.</p>
+        <div class="table-wrap">
+          <table id="table-calendar">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="field.zone">Timezone</th>
+                <th data-i18n="field.holidayPlace">Public holidays</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-calendar" class="form">
+          <h3 id="calendar-form-title" data-i18n="calendar.create">Add a calendar</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="255" required></label>
+            <label data-i18n="field.zone">Timezone<select name="zone"></select></label>
+            <label data-i18n="field.holidayPlace">Public holidays<select name="country"></select></label>
+            <label data-i18n="holiday.region" hidden>State<select name="region"></select></label>
+            <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <h4 data-i18n="field.hours">Working hours</h4>
+          <div class="grid" id="calendar-hours"></div>
+          <h4 data-i18n="field.freeDays">Free days</h4>
+          <div id="calendar-free-days"></div>
+          <button type="button" class="secondary" id="calendar-add-day" data-i18n="calendar.addDay">Add a free day</button>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="calendar.offered">Offered for service levels</span></label>
+          <div class="row">
+            <button type="submit" id="calendar-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="calendar-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
     </section>
 
     <!-- My account -->

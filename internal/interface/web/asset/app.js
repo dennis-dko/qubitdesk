@@ -16,7 +16,7 @@ const API = '/api/v1';
 const cache = {
   users: [], roles: [], permissions: [], queues: [],
   ticketQueues: [], states: [], priorities: [], types: [],
-  found: {}, sysconfig: [],
+  found: {}, sysconfig: [], calendars: [],
 };
 
 /**
@@ -3285,6 +3285,15 @@ function wireValidityMessages() {
 }
 
 /**
+ * HOURS_PATTERN is what a calendar's box for a weekday takes: stretches such as
+ * 08:00–12:00, either kind of dash, apart by commas, or nothing for a day off.
+ * The dash is escaped because the browser reads a pattern in its v mode, where
+ * an unescaped one in a class is no pattern at all - and an unreadable pattern
+ * is ignored, which would let anything through.
+ */
+const HOURS_PATTERN = '\\d{2}:\\d{2}\\s*[\\-–]\\s*\\d{2}:\\d{2}(\\s*,\\s*\\d{2}:\\d{2}\\s*[\\-–]\\s*\\d{2}:\\d{2})*';
+
+/**
  * What each pattern a field is held to asks for, in words. The browser can only
  * call a pattern "the requested format", which says nothing about what to type,
  * and says it in its own language rather than the screen's - so every pattern
@@ -3292,6 +3301,7 @@ function wireValidityMessages() {
  * one that is not.
  */
 const PATTERN_MESSAGES = {
+  [HOURS_PATTERN]: () => t('calendar.hoursFormat', 'Write the hours as 08:00–12:00, 13:00–17:00.'),
   '[0-9]{6}': () => t('valid.code', 'Please enter the six digits your authenticator app shows.'),
   '[A-Za-z]{3}': () => t('valid.currency', 'Please enter the three letters of a currency, such as EUR.'),
 };
@@ -4814,6 +4824,209 @@ function swapTheLabel(node, key, english) {
   setLeadingText(node, t(key, english));
 }
 
+// --------------------------------------------------------------- calendars
+
+/** The weekdays in the order a working week is written, Monday first; 0 is Sunday. */
+const CALENDAR_WEEK = [1, 2, 3, 4, 5, 6, 0];
+
+/** A weekday's name in the reader's language. */
+function weekdayName(weekday) {
+  // The 7th of January 2024 was a Sunday, so the 7th plus the weekday is that day.
+  return new Intl.DateTimeFormat(activeLocale(), { weekday: 'long', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(2024, 0, 7 + weekday)));
+}
+
+/** Whose public holidays a calendar keeps, in words. */
+function calendarHolidays(place) {
+  if (!place) return t('calendar.installation', "the installation's");
+  if (place === 'none') return t('holiday.noRegion', 'No public holidays');
+
+  return place.includes('-') ? regionName(place) : countryName(place);
+}
+
+/**
+ * Reads the calendars and draws their card, for whoever sets up queues; the
+ * countries their public holidays are chosen from come with them, for somebody
+ * whose screens never loaded the installation's holiday card.
+ */
+async function loadCalendars() {
+  const page = await api('/calendars');
+  cache.calendars = page?.items ?? [];
+  if (page?.holidayCountries?.length) holidayCountries = page.holidayCountries;
+
+  fillTable($('#table-calendar tbody'), cache.calendars.map(calendarRow), 5,
+    t('calendar.empty', 'No calendars yet.'));
+
+  const form = $('#form-calendar');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillCalendarForm(form, null);
+}
+
+/** One calendar as a row of its card's table. */
+function calendarRow(calendar) {
+  return el('tr', {},
+    el('td', { class: 'text', text: calendar.name }),
+    el('td', { class: 'text', text: calendar.zone || t('calendar.installation', "the installation's") }),
+    el('td', { class: 'text', text: calendarHolidays(calendar.holidayPlace) }),
+    el('td', { text: calendar.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editCalendar(calendar) }),
+      deleteButton({
+        label: `${t('entity.calendar', 'Calendar')} "${calendar.name}"`,
+        path: `/calendars/${calendar.id}`,
+        message: t('msg.calendarDeleted', 'Calendar deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/**
+ * Fills the calendar form from a calendar, or for a new one: the zone and the
+ * public holidays offering the installation's own first, a box for each
+ * weekday's hours and a row for each free day.
+ */
+function fillCalendarForm(form, calendar) {
+  fillTimezoneSelect(form.elements.zone, calendar?.zone ?? '', t('calendar.installation', "the installation's"));
+  fillHolidayPickers(form, calendar?.holidayPlace ?? '', '',
+    el('option', { value: '', text: t('calendar.installation', "the installation's") }),
+    el('option', { value: 'none', text: t('holiday.noRegion', 'No public holidays') }));
+
+  $('#calendar-hours').replaceChildren(...CALENDAR_WEEK.map((weekday) => el('label', {},
+    weekdayName(weekday),
+    el('input', {
+      type: 'text',
+      name: `hours${weekday}`,
+      maxlength: '120',
+      pattern: HOURS_PATTERN,
+      placeholder: '08:00–12:00, 13:00–17:00',
+      value: (calendar?.hours ?? []).filter((stretch) => stretch.weekday === weekday)
+        .map((stretch) => `${stretch.from}–${stretch.to}`).join(', '),
+    }))));
+
+  $('#calendar-free-days').replaceChildren(...(calendar?.freeDays ?? []).map(freeDayRow));
+}
+
+/**
+ * One free day as a row of the calendar form: its date, whether it comes every
+ * year, its name. Filled before it is put into the form, so that filling it is
+ * not taken for somebody editing.
+ */
+function freeDayRow(free = { day: '', recurring: false, name: '' }) {
+  const date = el('input', { type: 'date', name: 'freeDay', required: true });
+  const row = el('div', { class: 'row calendar-day' },
+    el('label', {}, t('calendar.day', 'Date'), date),
+    el('label', { class: 'switch' },
+      el('input', { type: 'checkbox', name: 'freeDayRecurring', checked: free.recurring }),
+      el('span', { class: 'switch-track' }),
+      el('span', { class: 'switch-label', text: t('calendar.everyYear', 'every year') })),
+    el('label', {}, t('field.name', 'Name'),
+      el('input', { type: 'text', name: 'freeDayName', maxlength: '255', value: free.name })),
+    el('button', { type: 'button', class: 'link', text: t('calendar.removeDay', 'remove'), onclick: () => row.remove() }));
+
+  enhanceDateFields(row);
+  setDateField(date, free.day);
+
+  return row;
+}
+
+/**
+ * The hours the weekday boxes say. Each box is held to HOURS_PATTERN, which the
+ * browser checks before the form is sent, so every stretch here reads; whether
+ * stretches overlap or run backwards is the server's to refuse, which it does by
+ * naming the hours.
+ */
+function calendarHoursOf(form) {
+  const hours = [];
+
+  for (const weekday of CALENDAR_WEEK) {
+    for (const part of form.elements[`hours${weekday}`].value.split(',')) {
+      const found = part.trim().match(/^(\d{2}:\d{2})\s*[-–]\s*(\d{2}:\d{2})$/);
+      if (found) hours.push({ weekday, from: found[1], to: found[2] });
+    }
+  }
+
+  return hours;
+}
+
+/** The free days the form's rows say. */
+function calendarFreeDaysOf(form) {
+  return $$('.calendar-day', form).map((row) => ({
+    day: $('input[name="freeDay"]', row).value,
+    recurring: $('input[name="freeDayRecurring"]', row).checked,
+    name: $('input[name="freeDayName"]', row).value.trim(),
+  }));
+}
+
+/** Sends the calendar form, making a calendar or correcting one. */
+function saveCalendar(form) {
+  const hours = calendarHoursOf(form);
+  const id = form.elements.id.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    zone: form.elements.zone.value,
+    holidayPlace: chosenPlace(form),
+    hours,
+    freeDays: calendarFreeDaysOf(form),
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id ? api(`/calendars/${id}`, { method: 'PUT', body }) : api('/calendars', { method: 'POST', body })),
+    id ? t('msg.calendarSaved', 'Calendar saved') : t('msg.calendarCreated', 'Calendar created'),
+    async () => { resetCalendarForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a calendar in the form, to correct it. */
+function editCalendar(calendar) {
+  const form = $('#form-calendar');
+
+  form.elements.id.value = String(calendar.id);
+  form.elements.name.value = calendar.name;
+  form.elements.description.value = calendar.description;
+  form.elements.valid.checked = calendar.valid;
+  fillCalendarForm(form, calendar);
+
+  // Drawn rather than declared with a key, because it carries the calendar's
+  // name; see editRole for why the key has to come off.
+  const heading = $('#calendar-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('calendarFormTitle', () => {
+    heading.textContent = t('calendar.edit', 'Edit the calendar {0}').replace('{0}', calendar.name);
+  });
+
+  swapTheLabel($('#calendar-submit'), 'action.save', 'Save');
+  $('#calendar-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the calendar form back to making a new one. */
+function resetCalendarForm() {
+  const form = $('#form-calendar');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillCalendarForm(form, null);
+
+  stopRedrawing('calendarFormTitle');
+  swapTheLabel($('#calendar-form-title'), 'calendar.create', 'Add a calendar');
+  swapTheLabel($('#calendar-submit'), 'action.create', 'Create');
+  $('#calendar-cancel').hidden = true;
+}
+
+/** Wires the calendar form. */
+function wireCalendars() {
+  const form = $('#form-calendar');
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveCalendar(form); });
+  form.elements.country.addEventListener('change', () => fillRegions(form));
+  $('#calendar-add-day').addEventListener('click', () => $('#calendar-free-days').append(freeDayRow()));
+  $('#calendar-cancel').addEventListener('click', resetCalendarForm);
+}
+
 // ---------------------------------------------------- system configuration
 
 /**
@@ -6221,6 +6434,8 @@ async function loadTicketSetup() {
 
     fillTable(tbody, lists[kind].map((entry) => catalogRow(kind, entry)), catalog.columns, catalog.empty());
   }
+
+  await loadCalendars();
 }
 
 /** One value as a row of its card's table. */
@@ -9050,6 +9265,7 @@ function forgetTheLastAccount() {
   cache.types = [];
   cache.found = {};
   cache.sysconfig = [];
+  cache.calendars = [];
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -9127,6 +9343,7 @@ function forgetTheLastAccount() {
   for (const kind of Object.keys(CATALOGS)) resetCatalogForm(kind);
   for (const kind of Object.keys(CUSTOMER_FORMS)) resetCustomerForm(kind);
   resetSysConfigForm();
+  resetCalendarForm();
   resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
@@ -9732,6 +9949,15 @@ const TOUR_STEPS = [
       'People can sign in through your organisation\'s provider instead of with a password, '
       + 'once each has linked their account to it. Nobody gets an account just because the '
       + 'provider knows them.'),
+  },
+  {
+    target: '#calendar-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.calendars.title', 'When the service is given'),
+    text: () => t('tour.calendars.text',
+      'The hours of each weekday, less public holidays and free days of its own, in which a service level\'s '
+      + 'minutes are counted. A calendar that names no timezone or public holidays follows the installation\'s.'),
   },
   {
     target: '#sysconfig-card',
@@ -14095,6 +14321,7 @@ function wireForms() {
   wireTickets();
   wireCustomers();
   wireSysConfig();
+  wireCalendars();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();

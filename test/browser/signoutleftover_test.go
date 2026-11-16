@@ -142,6 +142,7 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		const ann = await send('/contacts', { name: 'Ann', organisationId: acme.id });
 		const queue = (await api('/queues')).items[0];
 		await send('/tickets', { title: 'Printer', queueId: queue.id, body: 'It jams.', contactId: ann.id });
+		await send('/calendars', { name: 'Office', hours: [{ weekday: 1, from: '08:00', to: '17:00' }] });
 		await refreshAll();
 		return true;
 	})()`, &made)
@@ -161,6 +162,7 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		"form-contact":      `#table-contact tbody td.actions button.link:not(.danger)`,
 		"form-ticket":       `#table-tickets tbody button.link`,
 		"form-sysconfig":    `#table-sysconfig tbody td.actions button.link`,
+		"form-calendar":     `#table-calendar tbody td.actions button.link:not(.danger)`,
 	}
 
 	for form, opener := range openers {

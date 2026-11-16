@@ -53,6 +53,16 @@ type CalendarResponse struct {
 	Valid        bool                 `json:"valid"`
 }
 
+// CalendarListResponse is the calendars, with the countries and regions a
+// calendar's public holidays can be kept in - what the form that makes one
+// offers, for somebody who sets up queues without administering the
+// installation, whose holiday card is the other place the list is shown.
+type CalendarListResponse struct {
+	Items            []CalendarResponse       `json:"items"`
+	TotalCount       uint                     `json:"totalCount"`
+	HolidayCountries []HolidayCountryResponse `json:"holidayCountries"`
+}
+
 // CalendarRequest creates or changes a calendar; on a change an absent field
 // stays as it was, and hours or freeDays that are sent replace the old ones.
 type CalendarRequest struct {
@@ -161,7 +171,9 @@ func (h *CalendarHandler) List(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	return listOf(calendars, newCalendarResponse), nil
+	page := listOf(calendars, newCalendarResponse)
+
+	return CalendarListResponse{Items: page.Items, TotalCount: page.TotalCount, HolidayCountries: holidayCountries()}, nil
 }
 
 // Get handles GET /api/v1/calendars/{id}.

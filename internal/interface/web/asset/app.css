@@ -887,6 +887,7 @@ tbody tr.rejected td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .ticket-articles > li > p { margin: 0 0 4px; }
 .ticket-article-body { overflow-wrap: anywhere; white-space: pre-wrap; }
 .ticket-attachments { margin: 6px 0 0; padding-left: 20px; }
+.calendar-day { align-items: flex-end; flex-wrap: wrap; }
 .ticket-history ol { margin: 8px 0 0; padding-left: 20px; }
 
 /* Notices at the foot of the window, the newest nearest the edge: on the right
