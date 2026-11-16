@@ -32,6 +32,9 @@ type QueueResponse struct {
 	UnlockMinutes int    `json:"unlockMinutes"`
 	Valid         bool   `json:"valid"`
 
+	// ServiceLevelID is the service level a new ticket in the queue starts with.
+	ServiceLevelID *uint `json:"serviceLevelId"`
+
 	// Reach is how far the caller reaches into the queue: read or write.
 	Reach string `json:"reach"`
 
@@ -58,6 +61,9 @@ type QueueRequest struct {
 	UnlockMinutes *int                  `json:"unlockMinutes"`
 	Valid         *bool                 `json:"valid"`
 	Access        *[]QueueAccessRequest `json:"access"`
+
+	ServiceLevelID    *uint `json:"serviceLevelId"`
+	ClearServiceLevel bool  `json:"clearServiceLevel"`
 }
 
 // QueueAccessRequest gives one role a level of access to a queue.
@@ -77,7 +83,7 @@ func newQueueResponse(caller *service.Principal, queue *model.Queue) QueueRespon
 	return QueueResponse{
 		ID: queue.ID, Name: queue.Name, ParentID: queue.ParentID, Description: queue.Description,
 		FollowUp: string(queue.FollowUp), UnlockMinutes: queue.UnlockMinutes, Valid: queue.Valid,
-		Reach: string(reach), Access: access,
+		ServiceLevelID: queue.ServiceLevelID, Reach: string(reach), Access: access,
 	}
 }
 
@@ -85,6 +91,7 @@ func (r QueueRequest) command() command.QueueCommand {
 	cmd := command.QueueCommand{
 		Name: r.Name, ParentID: r.ParentID, ClearParent: r.ClearParent, Description: r.Description,
 		FollowUp: r.FollowUp, UnlockMinutes: r.UnlockMinutes, Valid: r.Valid,
+		ServiceLevelID: r.ServiceLevelID, ClearServiceLevel: r.ClearServiceLevel,
 	}
 
 	if r.Access != nil {

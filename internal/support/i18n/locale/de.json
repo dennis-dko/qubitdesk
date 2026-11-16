@@ -442,6 +442,7 @@
   "field.region": "Bundesland oder Region",
   "field.responsibleId": "Verantwortlich",
   "field.role": "Rolle",
+  "field.serviceLevelId": "Service-Level",
   "field.sessionIdleMinutes": "Abmelden nach Untätigkeit (Minuten)",
   "field.sessionLifetimeHours": "Sitzungsdauer (Stunden)",
   "field.solutionMinutes": "Lösung (Minuten)",

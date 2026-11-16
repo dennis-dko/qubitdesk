@@ -626,7 +626,8 @@ func main() {
 		Priorities: sqldb.NewTicketPriorityRepository(db, cfg.Dialect),
 		Types:      sqldb.NewTicketTypeRepository(db, cfg.Dialect),
 	}
-	queues := appservice.NewQueueApplicationService(queueRepo, roleRepo)
+	levelRepo := sqldb.NewServiceLevelRepository(db, cfg.Dialect)
+	queues := appservice.NewQueueApplicationService(queueRepo, roleRepo, levelRepo)
 	customerRepos := appservice.TicketCustomerRepositories{
 		Contacts:      sqldb.NewContactRepository(db, cfg.Dialect),
 		Organisations: sqldb.NewOrganisationRepository(db, cfg.Dialect),
@@ -1014,7 +1015,7 @@ func main() {
 		SysConfig: rest.NewSysConfigHandler(sysConfig, authorizer),
 		Calendars: rest.NewCalendarHandler(appservice.NewCalendarApplicationService(calendarRepo), authorizer),
 		Levels: rest.NewServiceLevelHandler(
-			appservice.NewSLAApplicationService(sqldb.NewServiceLevelRepository(db, cfg.Dialect), calendarRepo),
+			appservice.NewSLAApplicationService(levelRepo, calendarRepo),
 			authorizer),
 	})
 

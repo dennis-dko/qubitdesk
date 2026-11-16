@@ -15,6 +15,11 @@ type QueueCommand struct {
 	UnlockMinutes *int
 	Valid         *bool
 
+	// ServiceLevelID names the service level a new ticket in the queue starts
+	// with; ClearServiceLevel takes it off, for the reason ClearParent is said.
+	ServiceLevelID    *uint
+	ClearServiceLevel bool
+
 	// Access replaces the roles that reach the queue when it is not nil; an empty
 	// list leaves the queue to whoever holds queues:write.
 	Access *[]QueueAccessCommand

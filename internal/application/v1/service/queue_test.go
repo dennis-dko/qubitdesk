@@ -18,6 +18,7 @@ import (
 type queueFixture struct {
 	queues  *service.QueueApplicationService
 	repo    *memory.QueueRepository
+	levels  *memory.ServiceLevelRepository
 	agent   *model.Role
 	admin   *service.Principal
 	working *service.Principal
@@ -34,10 +35,12 @@ func newQueueFixture(t *testing.T) queueFixture {
 	}
 
 	repo := memory.NewQueueRepository()
+	levels := memory.NewServiceLevelRepository()
 
 	return queueFixture{
-		queues: service.NewQueueApplicationService(repo, roles),
+		queues: service.NewQueueApplicationService(repo, roles, levels),
 		repo:   repo,
+		levels: levels,
 		agent:  agent,
 		admin: &service.Principal{
 			User: &model.User{ID: 1}, Permissions: model.AdminPermissions(),
@@ -248,5 +251,47 @@ func TestABrokenQueueTreeEndsTheWalk(t *testing.T) {
 		refusedWith(t, err, "queueUnderItself")
 	case <-time.After(5 * time.Second):
 		t.Fatal("placing a queue under a broken tree never ended")
+	}
+}
+
+// A queue names the service level its new tickets start with: one that is not
+// there is refused, one no longer offered is not chosen anew and stays where it
+// was chosen, and taking it off leaves the queue's tickets without one.
+func TestAQueueNamesTheServiceLevelItsTicketsStartWith(t *testing.T) {
+	ctx := context.Background()
+	f := newQueueFixture(t)
+
+	gold, err := f.levels.Save(ctx, &model.ServiceLevel{Name: "Gold", Valid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.queues.CreateQueue(ctx, command.QueueCommand{Name: ptr("Nowhere"), ServiceLevelID: ptr(uint(99))}); apperror.KindOf(err) != apperror.KindInvalid {
+		t.Errorf("a queue naming a service level that is not there was answered %v", err)
+	}
+
+	desk := f.create(t, command.QueueCommand{Name: ptr("Service Desk"), ServiceLevelID: &gold.ID})
+	if desk.ServiceLevelID == nil || *desk.ServiceLevelID != gold.ID {
+		t.Fatalf("the desk was kept as %+v", desk)
+	}
+
+	gold.Valid = false
+	if _, err := f.levels.Update(ctx, gold); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.queues.CreateQueue(ctx, command.QueueCommand{Name: ptr("Late"), ServiceLevelID: &gold.ID}); apperror.KindOf(err) != apperror.KindInvalid {
+		t.Errorf("a retired service level chosen for a new queue was answered %v", err)
+	}
+
+	kept, err := f.queues.UpdateQueue(ctx, desk.ID,
+		command.QueueCommand{ServiceLevelID: &gold.ID, Description: ptr("First line")})
+	if err != nil || kept.ServiceLevelID == nil {
+		t.Errorf("the desk keeping its retired service level answered %+v, %v", kept, err)
+	}
+
+	cleared, err := f.queues.UpdateQueue(ctx, desk.ID, command.QueueCommand{ClearServiceLevel: true})
+	if err != nil || cleared.ServiceLevelID != nil {
+		t.Errorf("taking the desk's service level off answered %+v, %v", cleared, err)
 	}
 }

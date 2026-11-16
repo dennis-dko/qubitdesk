@@ -18,6 +18,10 @@ type Queue struct {
 	// nothing with it before it is free for somebody else; zero never frees it.
 	UnlockMinutes int
 
+	// ServiceLevelID is the service level a ticket opened in the queue starts
+	// with, where it names one.
+	ServiceLevelID *uint
+
 	// Valid says whether a ticket may still be put into the queue. One that is
 	// not keeps the tickets already in it.
 	Valid bool

@@ -23,7 +23,7 @@ func NewQueueRepository(db DB, dialect string) *QueueRepository {
 
 var _ repository.QueueRepository = (*QueueRepository)(nil)
 
-const queueColumns = "id, name, parent_id, description, follow_up, unlock_minutes, valid"
+const queueColumns = "id, name, parent_id, description, follow_up, unlock_minutes, valid, service_level_id"
 
 func (r *QueueRepository) GetAll(ctx context.Context) ([]*model.Queue, error) {
 	rows, err := r.db.QueryContext(ctx, "SELECT "+queueColumns+" FROM queues ORDER BY name")
@@ -95,9 +95,10 @@ func (r *QueueRepository) Save(ctx context.Context, queue *model.Queue) (*model.
 
 	err := r.withTx(ctx, func(tx base) error {
 		newID, err := tx.insert(ctx,
-			"INSERT INTO queues (name, parent_id, description, signature, auto_reply, follow_up, unlock_minutes, valid) "+
-				"VALUES (?, ?, ?, '', '', ?, ?, ?)",
-			queue.Name, queue.ParentID, queue.Description, string(queue.FollowUp), queue.UnlockMinutes, queue.Valid)
+			"INSERT INTO queues (name, parent_id, description, signature, auto_reply, follow_up, unlock_minutes, valid, "+
+				"service_level_id) VALUES (?, ?, ?, '', '', ?, ?, ?, ?)",
+			queue.Name, queue.ParentID, queue.Description, string(queue.FollowUp), queue.UnlockMinutes, queue.Valid,
+			queue.ServiceLevelID)
 		if err != nil {
 			return translateQueueErr(err, queue.Name)
 		}
@@ -118,11 +119,11 @@ func (r *QueueRepository) Save(ctx context.Context, queue *model.Queue) (*model.
 func (r *QueueRepository) Update(ctx context.Context, queue *model.Queue) (*model.Queue, error) {
 	err := r.withTx(ctx, func(tx base) error {
 		found, err := tx.update(ctx, "queues",
-			"UPDATE queues SET name = ?, parent_id = ?, description = ?, follow_up = ?, unlock_minutes = ?, valid = ? "+
-				"WHERE id = ?",
+			"UPDATE queues SET name = ?, parent_id = ?, description = ?, follow_up = ?, unlock_minutes = ?, valid = ?, "+
+				"service_level_id = ? WHERE id = ?",
 			queue.ID,
 			queue.Name, queue.ParentID, queue.Description, string(queue.FollowUp), queue.UnlockMinutes, queue.Valid,
-			queue.ID)
+			queue.ServiceLevelID, queue.ID)
 		if err != nil {
 			return translateQueueErr(err, queue.Name)
 		}
@@ -217,10 +218,12 @@ func scanQueue(row scanner) (*model.Queue, error) {
 	var (
 		queue    model.Queue
 		parent   sql.NullInt64
+		level    sql.NullInt64
 		followUp string
 	)
 
-	err := row.Scan(&queue.ID, &queue.Name, &parent, &queue.Description, &followUp, &queue.UnlockMinutes, &queue.Valid)
+	err := row.Scan(&queue.ID, &queue.Name, &parent, &queue.Description, &followUp, &queue.UnlockMinutes, &queue.Valid,
+		&level)
 	if err != nil {
 		return nil, err
 	}
@@ -228,6 +231,11 @@ func scanQueue(row scanner) (*model.Queue, error) {
 	if parent.Valid {
 		id := uint(parent.Int64)
 		queue.ParentID = &id
+	}
+
+	if level.Valid {
+		id := uint(level.Int64)
+		queue.ServiceLevelID = &id
 	}
 
 	queue.FollowUp = model.FollowUp(followUp)

@@ -32,12 +32,18 @@ type QueueService interface {
 type QueueApplicationService struct {
 	queues repository.QueueRepository
 	roles  repository.RoleRepository
+	levels repository.ServiceLevelRepository
 }
 
 // NewQueueApplicationService needs the roles, to refuse access for one that
-// does not exist.
-func NewQueueApplicationService(queues repository.QueueRepository, roles repository.RoleRepository) *QueueApplicationService {
-	return &QueueApplicationService{queues: queues, roles: roles}
+// does not exist, and the service levels, to refuse one a queue cannot start
+// its tickets with.
+func NewQueueApplicationService(
+	queues repository.QueueRepository,
+	roles repository.RoleRepository,
+	levels repository.ServiceLevelRepository,
+) *QueueApplicationService {
+	return &QueueApplicationService{queues: queues, roles: roles, levels: levels}
 }
 
 var _ QueueService = (*QueueApplicationService)(nil)
@@ -163,6 +169,22 @@ func (s *QueueApplicationService) DeleteQueue(ctx context.Context, id uint) erro
 	return s.queues.Delete(ctx, id)
 }
 
+// levelOffered answers whether a queue may start its tickets with a service
+// level: one that is there and still offered, or the one it starts them with
+// already.
+func (s *QueueApplicationService) levelOffered(ctx context.Context, id uint, current *uint) (bool, error) {
+	level, err := s.levels.GetByID(ctx, id)
+	if apperror.KindOf(err) == apperror.KindNotFound {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return level.Valid || (current != nil && *current == id), nil
+}
+
 // apply writes what cmd says onto queue and refuses the result if any of it is
 // not a queue. Every field is checked before anything is refused, so a form
 // learns everything wrong with it at once; only a parent that would put the
@@ -189,6 +211,25 @@ func (s *QueueApplicationService) apply(ctx context.Context, queue *model.Queue,
 
 	if cmd.Valid != nil {
 		queue.Valid = *cmd.Valid
+	}
+
+	switch {
+	case cmd.ClearServiceLevel && cmd.ServiceLevelID != nil:
+		invalid = append(invalid, "serviceLevelId")
+	case cmd.ClearServiceLevel:
+		queue.ServiceLevelID = nil
+	case cmd.ServiceLevelID != nil:
+		ok, err := s.levelOffered(ctx, *cmd.ServiceLevelID, queue.ServiceLevelID)
+		if err != nil {
+			return err
+		}
+
+		if ok {
+			level := *cmd.ServiceLevelID
+			queue.ServiceLevelID = &level
+		} else {
+			invalid = append(invalid, "serviceLevelId")
+		}
 	}
 
 	switch {

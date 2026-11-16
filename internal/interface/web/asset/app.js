@@ -528,6 +528,7 @@ const FIELD_NAMES = {
   firstResponseMinutes: 'First response (minutes)',
   updateMinutes: 'Between answers (minutes)',
   solutionMinutes: 'Solution (minutes)',
+  serviceLevelId: 'Service level',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
