@@ -625,6 +625,8 @@ func main() {
 		States:     sqldb.NewTicketStateRepository(db, cfg.Dialect),
 		Priorities: sqldb.NewTicketPriorityRepository(db, cfg.Dialect),
 		Types:      sqldb.NewTicketTypeRepository(db, cfg.Dialect),
+
+		UnlockTypes: sqldb.NewUnlockStateTypeRepository(db, cfg.Dialect),
 	}
 	levelRepo := sqldb.NewServiceLevelRepository(db, cfg.Dialect)
 	queues := appservice.NewQueueApplicationService(queueRepo, roleRepo, levelRepo)
@@ -633,8 +635,7 @@ func main() {
 		Organisations: sqldb.NewOrganisationRepository(db, cfg.Dialect),
 	}
 	customers := appservice.NewCustomerApplicationService(customerRepos.Organisations, customerRepos.Contacts)
-	ticketCatalog := appservice.NewTicketCatalogApplicationService(
-		catalogRepos.States, catalogRepos.Priorities, catalogRepos.Types)
+	ticketCatalog := appservice.NewTicketCatalogApplicationService(catalogRepos)
 	sysConfig := appservice.NewSysConfigService(settingsRepo)
 	calendarRepo := sqldb.NewCalendarRepository(db, cfg.Dialect)
 	tickets := appservice.NewTicketApplicationService(sqldb.NewTicketRepository(db, cfg.Dialect), queueRepo,

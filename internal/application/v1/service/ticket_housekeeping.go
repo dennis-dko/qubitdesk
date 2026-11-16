@@ -144,8 +144,9 @@ func endsAWait(state *model.TicketState) bool {
 
 // freeLocks frees every lock that has run as long as its ticket's queue
 // allows, counted from when it was taken or last answered under; a queue
-// allowing nothing frees nothing. Only a ticket new or open loses its lock, as
-// KIX18's Ticket::UnlockStateType has it.
+// allowing nothing frees nothing. Only a ticket in a state of a type the
+// installation names loses its lock - new and open as it ships, as KIX18's
+// Ticket::UnlockStateType does.
 func (s *TicketApplicationService) freeLocks(ctx context.Context, states []*model.TicketState, now time.Time) (int, error) {
 	locked, err := s.tickets.LockedTickets(ctx)
 	if err != nil || len(locked) == 0 {
@@ -162,7 +163,17 @@ func (s *TicketApplicationService) freeLocks(ctx context.Context, states []*mode
 		allowed[queue.ID] = time.Duration(queue.UnlockMinutes) * time.Minute
 	}
 
-	working := ofType(states, model.StateTypeNew, model.StateTypeOpen)
+	unlocking, err := s.unlockTypes.GetAll(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	types := make([]model.StateType, 0, len(unlocking))
+	for _, entry := range unlocking {
+		types = append(types, entry.Type)
+	}
+
+	working := ofType(states, types...)
 	freed := 0
 
 	for _, ticket := range locked {

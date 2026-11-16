@@ -51,3 +51,13 @@ type TicketTypeRepository interface {
 	// state's count exists.
 	CountTickets(ctx context.Context, id uint) (int, error)
 }
+
+// UnlockStateTypeRepository keeps the state types a lock runs out in, in the
+// order the types are listed.
+type UnlockStateTypeRepository interface {
+	GetAll(ctx context.Context) ([]model.UnlockStateType, error)
+
+	// Replace makes the types given the ones a lock runs out in beside the
+	// shipped ones, which it keeps whatever it is given.
+	Replace(ctx context.Context, types []model.StateType) error
+}

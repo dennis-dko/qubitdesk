@@ -444,3 +444,37 @@ func TestOnlyAStateAWaitCanEndInIsNamedForIt(t *testing.T) {
 		t.Errorf("after naming open the option reads %q, %v", named, err)
 	}
 }
+
+// A lock runs out in the state types the installation names: a ticket that
+// waits keeps its lock as an installation ships, and loses it once the types
+// it waits in are named too.
+func TestALockRunsOutInTheStateTypesTheInstallationNames(t *testing.T) {
+	ctx := context.Background()
+	f := newTicketFixture(t)
+	now := time.Now().UTC()
+	locked, moment := true, now.Add(3*time.Hour)
+
+	f.desk.UnlockMinutes = 30
+	if _, err := f.queues.Update(ctx, f.desk); err != nil {
+		t.Fatal(err)
+	}
+
+	waits := f.open(t, f.agent, f.desk, "Scanner")
+	if _, err := f.tickets.UpdateTicket(ctx, f.agent, waits.ID, command.UpdateTicketCommand{
+		Locked: &locked, StateID: &f.states["pending-reminder"].ID, PendingUntil: &moment,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, freed, err := f.tickets.Housekeep(ctx, now.Add(time.Hour)); err != nil || freed != 0 {
+		t.Fatalf("as shipped, a lock on a ticket that waits was freed: %d, %v", freed, err)
+	}
+
+	if err := f.unlockTypes.Replace(ctx, []model.StateType{model.StateTypePendingReminder}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, freed, err := f.tickets.Housekeep(ctx, now.Add(time.Hour)); err != nil || freed != 1 {
+		t.Errorf("with the waiting type named, %d locks were freed, %v; want the scanner's", freed, err)
+	}
+}

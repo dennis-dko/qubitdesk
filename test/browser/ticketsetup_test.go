@@ -253,3 +253,63 @@ func jsString(s string) string {
 
 	return string(quoted)
 }
+
+// The ticket setup screen names the state types a lock runs out in: new and
+// open are on and cannot be switched off, another switched on is saved and
+// stays on once the screen is drawn again.
+func TestTheTicketSetupNamesWhereALockRunsOut(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+
+	p.run("open the ticket setup", p.click(`.tab[data-view="ticketsetup"]`),
+		chromedp.WaitVisible("#unlock-card", chromedp.ByID))
+
+	switches := func() string {
+		var state string
+
+		p.evalJSON(`JSON.stringify([...document.querySelectorAll('#unlock-types input[name="types"]')]
+			.map((box) => box.value + (box.checked ? '+' : '-') + (box.disabled ? '!' : '')).join(' '))`, &state)
+
+		return state
+	}
+
+	deadline := time.Now().Add(waitPatience)
+	for !strings.Contains(switches(), "new+!") && time.Now().Before(deadline) {
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	if got := switches(); got != "new+! open+! pending-reminder- pending-auto- closed- removed- merged-" {
+		t.Fatalf("the switches read %q; want new and open on and fixed, the rest off", got)
+	}
+
+	p.run("switch on the waiting type and save", chromedp.Click(`#unlock-types input[value="pending-reminder"]`, chromedp.ByQuery),
+		p.click(`#form-unlock-types button[type="submit"]`))
+
+	var kept []struct {
+		Type     string `json:"type"`
+		IsSystem bool   `json:"isSystem"`
+	}
+
+	deadline = time.Now().Add(waitPatience)
+	for len(kept) != 3 && time.Now().Before(deadline) {
+		p.awaitJSON(`api('/unlock-state-types').then((list) => list.items)`, &kept)
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	if len(kept) != 3 || kept[2].Type != "pending-reminder" || kept[2].IsSystem {
+		t.Fatalf("the server keeps %+v; want the waiting type beside new and open", kept)
+	}
+
+	p.run("draw the screen again", chromedp.Evaluate(`refreshAll()`, nil))
+
+	deadline = time.Now().Add(waitPatience)
+	for !strings.Contains(switches(), "pending-reminder+") && time.Now().Before(deadline) {
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	if got := switches(); !strings.Contains(got, "pending-reminder+") {
+		t.Errorf("drawn again the switches read %q; want the waiting type on", got)
+	}
+}

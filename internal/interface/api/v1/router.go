@@ -266,6 +266,9 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.PUT(base+"/service-levels/{id}", h.Levels.Update)
 	app.DELETE(base+"/service-levels/{id}", h.Levels.Delete)
 
+	app.GET(base+"/unlock-state-types", h.Catalog.ListUnlockStateTypes)
+	app.PUT(base+"/unlock-state-types", h.Catalog.SetUnlockStateTypes)
+
 	app.GET(base+"/macros", h.Macros.List)
 	app.GET(base+"/macros/{id}", h.Macros.Get)
 	app.POST(base+"/macros", h.Macros.Create)

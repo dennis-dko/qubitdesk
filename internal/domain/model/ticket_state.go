@@ -52,6 +52,15 @@ func FinishedStateTypes() []StateType {
 	return []StateType{StateTypeClosed, StateTypeRemoved, StateTypeMerged}
 }
 
+// UnlockStateType is a state type a queue's unlock time frees a lock in, as
+// KIX18's Ticket::UnlockStateType lists them. They are kept in the database so
+// that an installation can add to them; the shipped ones, new and open, are its
+// own and stay.
+type UnlockStateType struct {
+	Type     StateType
+	IsSystem bool
+}
+
 // TicketState is one of the states a ticket can be in: a name, and the type that
 // says what the code does with a ticket in it.
 type TicketState struct {

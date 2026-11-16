@@ -908,6 +908,16 @@
           </div>
         </form>
       </div>
+      <div class="card" id="unlock-card">
+        <h2 data-i18n="catalog.unlockTypes">Where a lock runs out</h2>
+        <p class="muted" data-i18n="catalog.unlockTypesIntro">A queue's unlock time frees a ticket's lock only in a state of a type switched on here. New and open ship with the application and stay on.</p>
+        <form method="post" id="form-unlock-types" class="form" data-perm="queues:write">
+          <div id="unlock-types" class="perm-list"></div>
+          <div class="row">
+            <button type="submit" data-i18n="action.save">Save</button>
+          </div>
+        </form>
+      </div>
       <div class="card" id="priority-card">
         <h2 data-i18n="catalog.priorities">Priorities</h2>
         <p class="muted" data-i18n="catalog.prioritiesIntro">How urgent a ticket is, ordered by level - 1 is the most urgent. Normal is what a ticket starts with, so it ships with the application and stays as it is.</p>

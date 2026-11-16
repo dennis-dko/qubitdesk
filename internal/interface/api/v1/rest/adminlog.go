@@ -70,6 +70,7 @@ var administrativeChanges = []struct {
 	{http.MethodPost, "/api/v1/service-levels", "serviceLevel.created", "name"},
 	{http.MethodPut, "/api/v1/service-levels/{id}", "serviceLevel.updated", "name"},
 	{http.MethodDelete, "/api/v1/service-levels/{id}", "serviceLevel.deleted", ""},
+	{http.MethodPut, "/api/v1/unlock-state-types", "unlockStateTypes.changed", ""},
 	{http.MethodPost, "/api/v1/macros", "macro.created", "name"},
 	{http.MethodPut, "/api/v1/macros/{id}", "macro.updated", "name"},
 	{http.MethodDelete, "/api/v1/macros/{id}", "macro.deleted", ""},

@@ -111,6 +111,9 @@ type TicketApplicationService struct {
 	calendars repository.CalendarRepository
 	holidays  func(ctx context.Context) string
 
+	// unlockTypes are the state types a queue's unlock time frees a lock in.
+	unlockTypes repository.UnlockStateTypeRepository
+
 	metrics
 }
 
@@ -127,18 +130,20 @@ func NewTicketApplicationService(
 ) *TicketApplicationService {
 	return &TicketApplicationService{
 		tickets: tickets, queues: queues,
-		states: catalog.States, priorities: catalog.Priorities, types: catalog.Types,
+		states: catalog.States, priorities: catalog.Priorities, types: catalog.Types, unlockTypes: catalog.UnlockTypes,
 		contacts: customers.Contacts, organisations: customers.Organisations,
 		users: users, roles: roles, zone: zone, now: time.Now,
 	}
 }
 
-// TicketCatalogRepositories are the three tables tickets are sorted by, handed
-// over together because a ticket is sorted by all three at once.
+// TicketCatalogRepositories are the tables tickets are sorted by, handed over
+// together because a ticket is sorted by all of them at once - and the state
+// types a lock runs out in, which belong with the states.
 type TicketCatalogRepositories struct {
-	States     repository.TicketStateRepository
-	Priorities repository.TicketPriorityRepository
-	Types      repository.TicketTypeRepository
+	States      repository.TicketStateRepository
+	Priorities  repository.TicketPriorityRepository
+	Types       repository.TicketTypeRepository
+	UnlockTypes repository.UnlockStateTypeRepository
 }
 
 var _ TicketService = (*TicketApplicationService)(nil)

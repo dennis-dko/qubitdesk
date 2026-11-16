@@ -31,6 +31,9 @@ type TicketCatalogService interface {
 	CreateType(ctx context.Context, cmd command.TicketTypeCommand) (*model.TicketType, error)
 	UpdateType(ctx context.Context, id uint, cmd command.TicketTypeCommand) (*model.TicketType, error)
 	DeleteType(ctx context.Context, id uint) error
+
+	ListUnlockStateTypes(ctx context.Context) ([]model.UnlockStateType, error)
+	SetUnlockStateTypes(ctx context.Context, types []string) ([]model.UnlockStateType, error)
 }
 
 // TicketCatalogApplicationService is the TicketCatalogService the application
@@ -48,19 +51,18 @@ type TicketCatalogService interface {
 //
 // And no two values share a name, which the database decides and this passes on.
 type TicketCatalogApplicationService struct {
-	states     repository.TicketStateRepository
-	priorities repository.TicketPriorityRepository
-	types      repository.TicketTypeRepository
+	states      repository.TicketStateRepository
+	priorities  repository.TicketPriorityRepository
+	types       repository.TicketTypeRepository
+	unlockTypes repository.UnlockStateTypeRepository
 }
 
-// NewTicketCatalogApplicationService works on the three tables alone; that a
-// ticket may only be put into a valid value is the ticket's rule, not theirs.
-func NewTicketCatalogApplicationService(
-	states repository.TicketStateRepository,
-	priorities repository.TicketPriorityRepository,
-	types repository.TicketTypeRepository,
-) *TicketCatalogApplicationService {
-	return &TicketCatalogApplicationService{states: states, priorities: priorities, types: types}
+// NewTicketCatalogApplicationService works on the catalog's tables alone; that
+// a ticket may only be put into a valid value is the ticket's rule, not theirs.
+func NewTicketCatalogApplicationService(catalog TicketCatalogRepositories) *TicketCatalogApplicationService {
+	return &TicketCatalogApplicationService{
+		states: catalog.States, priorities: catalog.Priorities, types: catalog.Types, unlockTypes: catalog.UnlockTypes,
+	}
 }
 
 var _ TicketCatalogService = (*TicketCatalogApplicationService)(nil)
@@ -134,6 +136,50 @@ func (s *TicketCatalogApplicationService) DeleteState(ctx context.Context, id ui
 	}
 
 	return s.states.Delete(ctx, id)
+}
+
+func (s *TicketCatalogApplicationService) ListUnlockStateTypes(ctx context.Context) ([]model.UnlockStateType, error) {
+	return s.unlockTypes.GetAll(ctx)
+}
+
+// SetUnlockStateTypes makes the types given the ones a queue's unlock time
+// frees a lock in. The shipped ones have to be among them: they stay, and a
+// list leaving one out is refused rather than quietly put back, so that what
+// was sent is what holds.
+func (s *TicketCatalogApplicationService) SetUnlockStateTypes(
+	ctx context.Context,
+	types []string,
+) ([]model.UnlockStateType, error) {
+	kinds := make([]model.StateType, 0, len(types))
+
+	for _, sent := range types {
+		kind := model.StateType(strings.TrimSpace(sent))
+		if !slices.Contains(model.StateTypes(), kind) {
+			return nil, apperror.InvalidFields("types")
+		}
+
+		if !slices.Contains(kinds, kind) {
+			kinds = append(kinds, kind)
+		}
+	}
+
+	kept, err := s.unlockTypes.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range kept {
+		if entry.IsSystem && !slices.Contains(kinds, entry.Type) {
+			return nil, apperror.Conflictf("new and open ship with the application, and a lock runs out in them").
+				WithCode("unlockStateTypeShipped")
+		}
+	}
+
+	if err := s.unlockTypes.Replace(ctx, kinds); err != nil {
+		return nil, err
+	}
+
+	return s.unlockTypes.GetAll(ctx)
 }
 
 func (s *TicketCatalogApplicationService) ListPriorities(ctx context.Context) ([]*model.TicketPriority, error) {

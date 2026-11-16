@@ -25,6 +25,7 @@ type ticketFixture struct {
 	serviceOver   func(repository.TicketRepository) *service.TicketApplicationService
 	repo          *memory.TicketRepository
 	stateRepo     *memory.TicketStateRepository
+	unlockTypes   *memory.UnlockStateTypeRepository
 	queues        *memory.QueueRepository
 	levels        *memory.ServiceLevelRepository
 	calendars     *memory.CalendarRepository
@@ -64,6 +65,7 @@ func newTicketFixture(t *testing.T) ticketFixture {
 	f := ticketFixture{
 		repo:          memory.NewTicketRepository(),
 		stateRepo:     states,
+		unlockTypes:   memory.NewUnlockStateTypeRepository(),
 		priorities:    priorities,
 		contacts:      memory.NewContactRepository(),
 		organisations: memory.NewOrganisationRepository(),
@@ -110,7 +112,9 @@ func newTicketFixture(t *testing.T) ticketFixture {
 	f.levels = memory.NewServiceLevelRepository()
 	f.calendars = memory.NewCalendarRepository()
 
-	catalog := service.TicketCatalogRepositories{States: states, Priorities: priorities, Types: types}
+	catalog := service.TicketCatalogRepositories{
+		States: states, Priorities: priorities, Types: types, UnlockTypes: f.unlockTypes,
+	}
 	customers := service.TicketCustomerRepositories{Contacts: f.contacts, Organisations: f.organisations}
 	levels, calendars := f.levels, f.calendars
 

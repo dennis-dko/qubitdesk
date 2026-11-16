@@ -386,3 +386,58 @@ func listOf[M, R any](items []*M, respond func(*M) R) listResponse[R] {
 
 	return listResponse[R]{Items: out, TotalCount: uint(len(out))}
 }
+
+// UnlockStateTypeResponse is a state type a queue's unlock time frees a lock
+// in, and whether it ships with the application and so stays.
+type UnlockStateTypeResponse struct {
+	Type     string `json:"type"`
+	IsSystem bool   `json:"isSystem"`
+}
+
+// UnlockStateTypesRequest names every state type a lock is to run out in, the
+// shipped ones among them.
+type UnlockStateTypesRequest struct {
+	Types []string `json:"types"`
+}
+
+func unlockStateTypeList(kept []model.UnlockStateType) listResponse[UnlockStateTypeResponse] {
+	items := make([]UnlockStateTypeResponse, 0, len(kept))
+	for _, entry := range kept {
+		items = append(items, UnlockStateTypeResponse{Type: string(entry.Type), IsSystem: entry.IsSystem})
+	}
+
+	return listResponse[UnlockStateTypeResponse]{Items: items, TotalCount: uint(len(items))}
+}
+
+// ListUnlockStateTypes handles GET /api/v1/unlock-state-types.
+func (h *TicketCatalogHandler) ListUnlockStateTypes(c *gofr.Context) (any, error) {
+	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+		return nil, err
+	}
+
+	kept, err := h.catalog.ListUnlockStateTypes(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return unlockStateTypeList(kept), nil
+}
+
+// SetUnlockStateTypes handles PUT /api/v1/unlock-state-types.
+func (h *TicketCatalogHandler) SetUnlockStateTypes(c *gofr.Context) (any, error) {
+	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+		return nil, err
+	}
+
+	var req UnlockStateTypesRequest
+	if err := bind(c, &req); err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	kept, err := h.catalog.SetUnlockStateTypes(c, req.Types)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return unlockStateTypeList(kept), nil
+}

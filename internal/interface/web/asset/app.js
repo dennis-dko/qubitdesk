@@ -533,6 +533,7 @@ const FIELD_NAMES = {
   weekdays: 'Weekdays',
   times: 'Times',
   events: 'Events',
+  types: 'State types',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -6587,8 +6588,9 @@ const CATALOGS = {
 async function loadTicketSetup() {
   if (!can('queues:write')) return;
 
-  const [queues, states, priorities, types, levels] = await Promise.all(
-    ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path, '/service-levels']
+  const [queues, states, priorities, types, levels, unlocking] = await Promise.all(
+    ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path, '/service-levels',
+      '/unlock-state-types']
       .map((path) => api(path)),
   );
 
@@ -6614,8 +6616,48 @@ async function loadTicketSetup() {
     fillTable(tbody, lists[kind].map((entry) => catalogRow(kind, entry)), catalog.columns, catalog.empty());
   }
 
+  drawUnlockTypes(unlocking?.items ?? []);
   await loadCalendars();
   loadSlaCard();
+}
+
+/**
+ * The state types a lock runs out in, one switch each. The shipped ones are on
+ * and cannot be switched off, because the server refuses a list leaving them
+ * out. Not redrawn over a choice somebody is part way through.
+ */
+function drawUnlockTypes(kept) {
+  const form = $('#form-unlock-types');
+  if (!form || beingEdited(form)) return;
+
+  $('#unlock-types').replaceChildren(...Object.keys(STATE_TYPE_TITLES).map((type) => {
+    const entry = kept.find((candidate) => candidate.type === type);
+
+    return el('label', { class: `switch perm-switch${entry?.isSystem ? ' muted' : ''}` },
+      el('input', {
+        type: 'checkbox', name: 'types', value: type, checked: Boolean(entry), disabled: Boolean(entry?.isSystem),
+      }),
+      el('span', { class: 'switch-track' }),
+      el('span', { class: 'perm-name', text: stateTypeName(type) }));
+  }));
+}
+
+/** Wires the form that names the state types a lock runs out in. */
+function wireUnlockTypes() {
+  const form = $('#form-unlock-types');
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const types = [...form.querySelectorAll('input[name="types"]')]
+      .filter((box) => box.checked).map((box) => box.value);
+
+    mutate(
+      () => api('/unlock-state-types', { method: 'PUT', body: JSON.stringify({ types }) }),
+      t('msg.unlockTypesSaved', 'Saved where a lock runs out'),
+      refreshAll,
+    );
+  });
 }
 
 /** One value as a row of its card's table. */
@@ -8158,6 +8200,7 @@ const CHANGE_SENTENCES = {
   'serviceLevel.created': () => t('change.serviceLevelCreated', 'Created the service level {0}'),
   'serviceLevel.updated': () => t('change.serviceLevelUpdated', 'Changed the service level {0}'),
   'serviceLevel.deleted': () => t('change.serviceLevelDeleted', 'Deleted the service level {0}'),
+  'unlockStateTypes.changed': () => t('change.unlockStateTypesChanged', 'Changed where a lock runs out'),
   'macro.created': () => t('change.macroCreated', 'Created the macro {0}'),
   'macro.updated': () => t('change.macroUpdated', 'Changed the macro {0}'),
   'macro.deleted': () => t('change.macroDeleted', 'Deleted the macro {0}'),
@@ -9939,6 +9982,15 @@ const TOUR_STEPS = [
       'Every state has a type, and the type is what the application does with a ticket in it. '
       + 'Add the states your desk works with; the ones the application moves tickets into by '
       + 'itself ship with it and stay as they are.'),
+  },
+  {
+    target: '#unlock-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.unlockTypes.title', 'Where a lock runs out'),
+    text: () => t('tour.unlockTypes.text',
+      'The state types a queue\'s unlock time frees a lock in. New and open ship with the application; switch on '
+      + 'another, and a lock nobody uses runs out there too.'),
   },
   {
     target: '#priority-card',
@@ -14528,6 +14580,7 @@ function wireForms() {
   wireSysConfig();
   wireCalendars();
   wireSla();
+  wireUnlockTypes();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();

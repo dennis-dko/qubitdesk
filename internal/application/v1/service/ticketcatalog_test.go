@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,7 +31,9 @@ func newCatalogFixture() catalogFixture {
 		types:      memory.NewTicketTypeRepository(),
 	}
 
-	f.catalog = service.NewTicketCatalogApplicationService(f.states, f.priorities, f.types)
+	f.catalog = service.NewTicketCatalogApplicationService(service.TicketCatalogRepositories{
+		States: f.states, Priorities: f.priorities, Types: f.types, UnlockTypes: memory.NewUnlockStateTypeRepository(),
+	})
 
 	return f
 }
@@ -248,5 +251,41 @@ func TestAChangeLeavesWhatItDoesNotMention(t *testing.T) {
 
 	if _, err := f.catalog.GetState(ctx, 0); err == nil {
 		t.Error("the state with id 0 was looked up")
+	}
+}
+
+// The state types a lock runs out in are the installation's to add to: the ones
+// sent are kept, each once, beside new and open, which ship with it and stay -
+// a list leaving one of them out is refused rather than quietly put back, and
+// so is a type there is not.
+func TestTheStateTypesALockRunsOutInAreAddedToButKeepWhatShips(t *testing.T) {
+	ctx := context.Background()
+	f := newCatalogFixture()
+
+	kept, err := f.catalog.SetUnlockStateTypes(ctx, []string{"open", "pending-reminder", "new", "pending-reminder"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var named []string
+	for _, entry := range kept {
+		named = append(named, fmt.Sprintf("%s/%t", entry.Type, entry.IsSystem))
+	}
+
+	if want := "new/true open/true pending-reminder/false"; strings.Join(named, " ") != want {
+		t.Errorf("the state types read %q, want %q", strings.Join(named, " "), want)
+	}
+
+	_, err = f.catalog.SetUnlockStateTypes(ctx, []string{"open", "pending-reminder"})
+	if detail := refusal(t, err, "unlockStateTypeShipped"); len(detail.Values) != 0 {
+		t.Errorf("the refusal carries %v, and needs nothing to say what it says", detail.Values)
+	}
+
+	if _, err := f.catalog.SetUnlockStateTypes(ctx, []string{"new", "open", "asleep"}); apperror.KindOf(err) != apperror.KindInvalid {
+		t.Errorf("a type there is not was answered %v, want it refused", err)
+	}
+
+	if back, err := f.catalog.SetUnlockStateTypes(ctx, []string{"new", "open"}); err != nil || len(back) != 2 {
+		t.Errorf("taking the added type away again answered %v, %v", back, err)
 	}
 }

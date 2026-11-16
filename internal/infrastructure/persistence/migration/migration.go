@@ -162,7 +162,37 @@ func All(dialect string) map[int64]migration.Migrate {
 
 		// When the automation runs: execution plans.
 		20261116020300: {UP: func(d migration.Datasource) error { return createExecPlans(d, dialect) }},
+
+		// The state types a lock runs out in, new and open as shipped.
+		20261117010000: {UP: func(d migration.Datasource) error { return createUnlockStateTypes(d, dialect) }},
+		20261117010100: {UP: func(d migration.Datasource) error { return seedUnlockStateTypes(d, dialect) }},
 	}
+}
+
+// createUnlockStateTypes keeps the state types a queue's unlock time frees a
+// lock in, as KIX18's Ticket::UnlockStateType lists them - in the database
+// rather than in the code, so that an installation can add to them.
+func createUnlockStateTypes(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE unlock_state_types (
+		state_type VARCHAR(32) NOT NULL PRIMARY KEY,
+		is_system %[1]s NOT NULL DEFAULT %[2]s
+	)`, boolean(dialect), falseLiteral(dialect)))
+}
+
+// seedUnlockStateTypes ships new and open, as KIX18 does, marked as the
+// installation's own: a lock that could never run out on a ticket somebody is
+// working on would make a queue's unlock time mean nothing. Written out rather
+// than taken from the model, as every seed is.
+func seedUnlockStateTypes(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect, "INSERT INTO unlock_state_types (state_type, is_system) VALUES (?, ?)")
+
+	for _, kind := range []string{"new", "open"} {
+		if _, err := d.SQL.Exec(insert, kind, true); err != nil {
+			return fmt.Errorf("seeding the unlock state type %q: %w", kind, err)
+		}
+	}
+
+	return nil
 }
 
 // createExecPlans keeps when the jobs that name a plan run, as KIX18 keeps its

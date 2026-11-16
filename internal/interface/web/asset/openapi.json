@@ -3470,6 +3470,68 @@
           }
         }
       }
+    },
+    "/unlock-state-types": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the state types a lock runs out in",
+        "description": "The state types a queue's unlock time frees a lock in, as KIX18's Ticket::UnlockStateType lists them; `isSystem` marks new and open, which ship with the application and stay. Takes `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "The state types"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Name the state types a lock runs out in",
+        "description": "Every type a lock is to run out in, new and open among them; a list leaving one of those out is refused. Takes `queues:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "open",
+                        "pending-reminder",
+                        "pending-auto",
+                        "closed",
+                        "removed",
+                        "merged"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The state types as they now are"
+          },
+          "400": {
+            "description": "A type there is not"
+          },
+          "409": {
+            "description": "New or open left out"
+          }
+        }
+      }
     }
   },
   "components": {
