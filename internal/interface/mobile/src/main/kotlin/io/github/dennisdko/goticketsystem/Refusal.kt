@@ -23,6 +23,23 @@ class TokenRefused(message: String) : Refused(message)
  */
 val refusalValues: Map<String, Map<Int, String>> = mapOf(
     "notFound" to mapOf(0 to "entityName"),
+    "stateShipped" to mapOf(0 to "statusName"),
+    "stateInUse" to mapOf(0 to "statusName"),
+    "stateRetired" to mapOf(0 to "statusName"),
+    "priorityShipped" to mapOf(0 to "priorityName"),
+    "priorityInUse" to mapOf(0 to "priorityName"),
+    "priorityRetired" to mapOf(0 to "priorityName"),
+    "typeShipped" to mapOf(0 to "ticketTypeName"),
+    "typeInUse" to mapOf(0 to "ticketTypeName"),
+    "typeRetired" to mapOf(0 to "ticketTypeName"),
+    "systemRoleUnrenamable" to mapOf(0 to "roleTitle"),
+    "systemRoleRightsFixed" to mapOf(0 to "roleTitle"),
+    "systemRoleDescriptionFixed" to mapOf(0 to "roleTitle"),
+    "systemRoleUndeletable" to mapOf(0 to "roleTitle"),
+    "defaultRoleUndeletable" to mapOf(0 to "roleTitle"),
+    "roleStillAssigned" to mapOf(0 to "roleTitle"),
+    "directoryRoleAdministers" to mapOf(0 to "roleTitle"),
+    "adminRoleMustAdminister" to mapOf(0 to "roleTitle"),
 )
 
 /**
@@ -76,8 +93,9 @@ private fun Language.inPageWords(error: JSONObject): String? {
 
 /**
  * valuesOf writes the values of a refusal the way the page's REFUSAL_VALUES and
- * fillIn do: a status and a kind of record in its words, a day the way the
- * reader writes one, a whole number as it is and a fraction to two places.
+ * fillIn do: a state, a priority, a ticket type, a role and a kind of record in
+ * its words, a day the way the reader writes one, a whole number as it is and a
+ * fraction to two places.
  */
 private fun Language.valuesOf(code: String, values: JSONArray?): Array<String> {
     if (values == null) return emptyArray()
@@ -88,6 +106,9 @@ private fun Language.valuesOf(code: String, values: JSONArray?): Array<String> {
         when (val value = values.opt(i)) {
             is String -> when (named[i]) {
                 "statusName" -> pageWord("status.", value)
+                "priorityName" -> pageWord("priority.", value)
+                "ticketTypeName" -> pageWord("tickettype.", value)
+                "roleTitle" -> pageWord("role.name.", value)
                 "entityName" -> pageWord("entity.", value)
                 "fmtDate" -> runCatching { day(LocalDate.parse(value)) }.getOrDefault(value)
                 else -> value
