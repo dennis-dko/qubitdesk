@@ -656,6 +656,23 @@ function showRefusal(target, err) {
  */
 const REFUSAL_VALUES = {
   notFound: { 0: entityName },
+  stateShipped: { 0: statusName },
+  stateInUse: { 0: statusName },
+  stateRetired: { 0: statusName },
+  priorityShipped: { 0: priorityName },
+  priorityInUse: { 0: priorityName },
+  priorityRetired: { 0: priorityName },
+  typeShipped: { 0: ticketTypeName },
+  typeInUse: { 0: ticketTypeName },
+  typeRetired: { 0: ticketTypeName },
+  systemRoleUnrenamable: { 0: roleTitle },
+  systemRoleRightsFixed: { 0: roleTitle },
+  systemRoleDescriptionFixed: { 0: roleTitle },
+  systemRoleUndeletable: { 0: roleTitle },
+  defaultRoleUndeletable: { 0: roleTitle },
+  roleStillAssigned: { 0: roleTitle },
+  directoryRoleAdministers: { 0: roleTitle },
+  adminRoleMustAdminister: { 0: roleTitle },
 };
 
 /** The values of one refusal, each written the way the rest of the screen writes it. */

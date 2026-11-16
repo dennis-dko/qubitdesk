@@ -24,10 +24,14 @@ import (
 // this reads every WithCode call the server makes, and fails on one sending a day
 // or a state that the table does not name, and on a row nothing sends any more.
 //
-// The two kinds are recognised by how they are written, which is what the scan
+// The kinds are recognised by how they are written, which is what the scans
 // that found them saw: a day is a value formatted with time.DateOnly, a state is
-// a field called State or Status, or a model.State constant. A value spelled any
-// other way is not seen, and that is the limit of what this can promise -
+// a field called State or Status, or a model.State constant, and the name of a
+// state, a priority, a ticket type or a role is the Name of a variable the
+// services call state, priority, kind or role - each ships under an identifier
+// the screen translates, so "pending-auto-close" stood in a German refusal
+// beside a badge saying something else. A value spelled any other way is not
+// seen, and that is the limit of what this can promise -
 // TestTheRefusalScanRecognisesADayAndAState holds the recognising itself.
 func TestARefusalWritesItsValuesTheWayTheScreenDoes(t *testing.T) {
 	sent := refusalValueKinds(t)
@@ -98,8 +102,8 @@ func TestARefusalWritesItsValuesTheWayTheScreenDoes(t *testing.T) {
 }
 
 // refusalValueKinds reads every WithCode call under internal/ and answers, for
-// each value that is a day or a state, which function in app.js writes it:
-// "code#position" -> "fmtDate" or "statusName".
+// each value the screen writes in words of its own, which function in app.js
+// writes it: "code#position" -> "fmtDate", "statusName" and so on.
 //
 // The same files serverErrorCodes reads, for the same reasons: not the tests,
 // not apperror's own example, not the installer, which has a page of its own.
@@ -243,6 +247,12 @@ func writtenWith(value ast.Expr) string {
 			strings.HasPrefix(v.Sel.Name, "State") {
 			return "statusName"
 		}
+
+		if record, ok := v.X.(*ast.Ident); ok && v.Sel.Name == "Name" {
+			return map[string]string{
+				"state": "statusName", "priority": "priorityName", "kind": "ticketTypeName", "role": "roleTitle",
+			}[record.Name]
+		}
 	}
 
 	return ""
@@ -256,7 +266,8 @@ func TestTheRefusalScanRecognisesADayAndAState(t *testing.T) {
 	const source = `package p
 
 func f() {
-	_ = apperror.WithCode("c", day.Format(time.DateOnly), ticket.State, model.StateOpen, ticket.Title)
+	_ = apperror.WithCode("c", day.Format(time.DateOnly), ticket.State, model.StateOpen, ticket.Title,
+		state.Name, priority.Name, kind.Name, role.Name, queue.Name)
 }`
 
 	file, err := parser.ParseFile(token.NewFileSet(), "p.go", source, 0)
@@ -278,7 +289,8 @@ func f() {
 		return true
 	})
 
-	want := []string{"fmtDate", "statusName", "statusName", ""}
+	want := []string{"fmtDate", "statusName", "statusName", "", "statusName", "priorityName", "ticketTypeName",
+		"roleTitle", ""}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("the values were read as written by %q, want %q", got, want)
 	}

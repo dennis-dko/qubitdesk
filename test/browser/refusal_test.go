@@ -232,3 +232,46 @@ func TestAFailedConnectionSaysSoInGermanAndKeepsTheDetail(t *testing.T) {
 		t.Errorf("the expanded detail does not say what actually failed: %q", detail)
 	}
 }
+
+// A refusal naming a state or a role names it the way the rest of the screen
+// does. The server sends the word a value is stored under - "pending-reminder",
+// "admin" - and a German refusal that said so beside a badge saying "warten auf
+// Erinnerung" named something the reader could look for and find nowhere.
+// Asked of the server rather than made up, so the value is the one it sends.
+func TestARefusalNamesAStateAndARoleTheWayTheScreenDoes(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+	p.chooseLanguage("de")
+	p.waitForText(`.tab[data-view="settings"]`, "Mein Konto")
+
+	var said []string
+
+	p.awaitJSON(`(async () => {
+		const refusal = async (path) => {
+			try {
+				await api(path, { method: 'DELETE' });
+				return 'not refused: ' + path;
+			} catch (err) {
+				return describeRefusal(err);
+			}
+		};
+
+		const admin = (await api('/roles')).items.find((role) => role.name === 'admin');
+		const reminder = (await api('/ticket-states')).items.find((state) => state.name === 'pending-reminder');
+		const queue = (await api('/queues')).items[0];
+		const made = await api('/tickets', { method: 'POST', body: JSON.stringify(
+			{ title: 'Printer', queueId: queue.id, body: 'It jams.' }) });
+		await api('/tickets/' + made.id, { method: 'PUT', body: JSON.stringify(
+			{ stateId: reminder.id, pendingUntil: new Date(Date.now() + 86400000).toISOString() }) });
+
+		return [await refusal('/roles/' + admin.id), await refusal('/ticket-states/' + reminder.id)];
+	})()`, &said)
+
+	for i, want := range []string{"„Administrator“", "„warten auf Erinnerung“"} {
+		if i >= len(said) || !strings.Contains(said[i], want) {
+			t.Errorf("the refusals read %q; want the %d. naming %s", said, i+1, want)
+		}
+	}
+}
