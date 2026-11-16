@@ -215,6 +215,7 @@ func (r *TicketRepository) AddArticle(
 	minutes int,
 	history []model.HistoryEntry,
 	firstResponse *time.Time,
+	renewsLock bool,
 ) (*model.Article, error) {
 	var id uint
 
@@ -230,6 +231,13 @@ func (r *TicketRepository) AddArticle(
 
 		if !found {
 			return apperror.NotFound("ticket", strconv.FormatUint(uint64(article.TicketID), 10))
+		}
+
+		if renewsLock {
+			if _, err := tx.exec(ctx, "UPDATE tickets SET locked_at = ? WHERE id = ? AND locked = ?",
+				article.CreatedAt, article.TicketID, true); err != nil {
+				return apperror.Internal(err)
+			}
 		}
 
 		if id, err = insertArticle(ctx, tx, article, minutes); err != nil {

@@ -32,8 +32,10 @@ type TicketRepository interface {
 	// saying so, and marks the ticket changed at the article's moment.
 	// firstResponse is when the article answered the ticket for the first time
 	// where it did; a ticket already answered keeps the moment it was.
+	// renewsLock starts the time a locked ticket's lock runs for again, at the
+	// article's moment; a ticket not locked has none to start.
 	AddArticle(ctx context.Context, article *model.Article, minutes int,
-		history []model.HistoryEntry, firstResponse *time.Time) (*model.Article, error)
+		history []model.HistoryEntry, firstResponse *time.Time, renewsLock bool) (*model.Article, error)
 
 	Articles(ctx context.Context, ticketID uint) ([]*model.Article, error)
 
@@ -54,6 +56,30 @@ type TicketRepository interface {
 
 	// Delete removes a ticket and everything written in it or about it.
 	Delete(ctx context.Context, id uint) error
+
+	// PendingDue lists the tickets in one of the states whose waiting moment has
+	// come by now.
+	PendingDue(ctx context.Context, stateIDs []uint, now time.Time) ([]*model.Ticket, error)
+
+	// LockedTickets lists the tickets that are locked.
+	LockedTickets(ctx context.Context) ([]*model.Ticket, error)
+
+	// EndWait writes what the housekeeping changed on a ticket whose wait is
+	// over - its state, when it finished, that it waits no longer and when it
+	// changed - and with release frees its lock as well. It writes only while
+	// the ticket still waits in the state it was found in, for a moment that
+	// has come by now, and with release only while it is still locked: somebody
+	// may have changed it since it was found, and then their change stands and
+	// nothing is written. It answers whether it wrote.
+	EndWait(ctx context.Context, ticket *model.Ticket, from uint, release bool, now time.Time,
+		history []model.HistoryEntry) (bool, error)
+
+	// FreeLock frees a ticket's lock once it has run for the time given, up to
+	// now, provided the ticket is still locked and in one of the states named:
+	// a lock taken again or answered under since it was found, or a ticket put
+	// to wait, stays as it is. It answers whether it freed it.
+	FreeLock(ctx context.Context, id uint, working []uint, held time.Duration, now time.Time,
+		history []model.HistoryEntry) (bool, error)
 
 	// SetWatching records whether the account watches the ticket; watching twice
 	// is watching once.

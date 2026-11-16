@@ -56,6 +56,12 @@ const (
 	ConfigTicketHook         = "Ticket::Hook"
 	ConfigTicketHookDivider  = "Ticket::HookDivider"
 	ConfigTicketUnlockOnMove = "Ticket::UnlockOnMove"
+
+	// ConfigTicketStateAfterPending names the state a ticket waiting in a
+	// pending-auto state moves to once its moment has come. KIX18 keeps a map
+	// from each such state to its successor; with the one pending-auto state
+	// that ships, one successor for all of them says the same.
+	ConfigTicketStateAfterPending = "Ticket::StateAfterPending"
 )
 
 // ConfigOptions are every option there is, in the order a list shows them.
@@ -81,6 +87,12 @@ func ConfigOptions() []ConfigOption {
 			Default: "true",
 			Description: "Moving a ticket to another queue releases its lock, so that the agents of the queue " +
 				"it arrives in can take it up.",
+		},
+		{
+			Name: ConfigTicketStateAfterPending, Group: "Ticket", Type: ConfigString, Access: ConfigInternal,
+			Default: StateClosed, MaxLength: MaxCatalogNameLength,
+			Description: "The state, by its name, a ticket waiting to close by itself moves to once its moment " +
+				"has come.",
 		},
 	}
 }

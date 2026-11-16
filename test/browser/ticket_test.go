@@ -245,3 +245,34 @@ func TestASavedCorrectionLetsTheFormFollowTheTicket(t *testing.T) {
 		t.Errorf("correcting the priority after locking left the owner %v, want %d", saved.OwnerID, made.Me)
 	}
 }
+
+// A line the application wrote by itself names it as the one that did it, not
+// an account: the scheduler closing a ticket whose wait is over writes its
+// history as the system, which the API says as the actor "system" and the
+// integration suite holds it to.
+func TestTheHistoryNamesTheSystemForWhatItDidByItself(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+
+	var line string
+
+	p.awaitJSON(`(async () => {
+		const queue = (await api('/queues')).items[0];
+		const made = await api('/tickets', { method: 'POST', body: JSON.stringify(
+			{ title: 'Printer', queueId: queue.id, body: 'It jams.' }) });
+		const [ticket, articles, history] = await Promise.all([
+			api('/tickets/' + made.id), api('/tickets/' + made.id + '/articles'), api('/tickets/' + made.id + '/history'),
+		]);
+		drawTicketDetail(ticket, articles.items, [...history.items, {
+			at: new Date().toISOString(), actor: 'system', actorId: null, actorName: '',
+			event: 'state', oldValue: 'pending-auto-close', newValue: 'closed',
+		}]);
+		return [...document.querySelectorAll('#ticket-history-list li')].at(-1).textContent;
+	})()`, &line)
+
+	if !strings.Contains(line, "the system:") {
+		t.Errorf("the scheduler's line reads %q; want it naming the system", line)
+	}
+}

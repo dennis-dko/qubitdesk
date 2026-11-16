@@ -14,11 +14,26 @@ import (
 // stored in the settings table under model.SysConfigPrefix.
 type SysConfigService struct {
 	settings repository.SettingsRepository
+	checks   map[string]func(context.Context, string) error
 }
 
 // NewSysConfigService keeps its values beside the other settings.
 func NewSysConfigService(settings repository.SettingsRepository) *SysConfigService {
 	return &SysConfigService{settings: settings}
+}
+
+// WithCheck has a value of an option asked of the code that obeys it before it
+// is stored, for a value of the right type that code could still not use - a
+// state that is not there - and refused as the check refuses it. The default
+// is never asked: it is what the code was written against.
+func (s *SysConfigService) WithCheck(name string, check func(ctx context.Context, value string) error) *SysConfigService {
+	if s.checks == nil {
+		s.checks = map[string]func(context.Context, string) error{}
+	}
+
+	s.checks[name] = check
+
+	return s
 }
 
 // ConfigValue is an option with the value it has here, and whether that value
@@ -71,6 +86,12 @@ func (s *SysConfigService) Set(ctx context.Context, name string, value any) (Con
 		return s.Reset(ctx, name)
 	}
 
+	if check := s.checks[option.Name]; check != nil {
+		if err := check(ctx, canonical); err != nil {
+			return ConfigValue{}, err
+		}
+	}
+
 	if err := s.settings.Set(ctx, model.SysConfigPrefix+option.Name, canonical); err != nil {
 		return ConfigValue{}, err
 	}
@@ -105,6 +126,21 @@ func (s *SysConfigService) Bool(ctx context.Context, name string) (bool, error) 
 	}
 
 	return value.Value == "true", nil
+}
+
+// String reads an option of text, as the code that obeys it does.
+func (s *SysConfigService) String(ctx context.Context, name string) (string, error) {
+	option, ok := model.ConfigOptionNamed(name)
+	if !ok || option.Type != model.ConfigString {
+		return "", fmt.Errorf("no option of text in the system configuration is called %q", name)
+	}
+
+	value, err := s.valueOf(ctx, option)
+	if err != nil {
+		return option.Default, err
+	}
+
+	return value.Value, nil
 }
 
 // valueOf is the value an option has here: the one stored, or its default.

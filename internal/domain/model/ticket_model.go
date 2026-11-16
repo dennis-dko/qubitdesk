@@ -31,7 +31,8 @@ type Ticket struct {
 	OrganisationID *uint
 
 	// Locked keeps the ticket to its owner, so two agents do not answer it at
-	// once; LockedAt is when, which the queue's unlock time is counted from.
+	// once. LockedAt is when it was locked, or last answered for the customer to
+	// see while it was: what the queue's unlock time is counted from.
 	Locked   bool
 	LockedAt *time.Time
 
@@ -94,11 +95,16 @@ func AgentChannels() []Channel {
 }
 
 // Sender is who an article came from, or who did something to a ticket. The
-// customer and the application itself arrive with the portal and the mailboxes.
+// customer arrives with the portal and the mailboxes.
 type Sender string
 
-// SenderAgent is somebody on the staff side.
-const SenderAgent Sender = "agent"
+// The senders so far: somebody on the staff side, and the application itself -
+// its scheduler moving a ticket whose wait is over, or freeing a lock that has
+// run its time.
+const (
+	SenderAgent  Sender = "agent"
+	SenderSystem Sender = "system"
+)
 
 // Article is one thing written in a ticket: a note, a call, a message.
 type Article struct {

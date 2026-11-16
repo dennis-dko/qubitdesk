@@ -14,8 +14,9 @@ type Queue struct {
 	Description string
 	FollowUp    FollowUp
 
-	// UnlockMinutes is how long a ticket may be locked to an owner who does
-	// nothing with it before it is free for somebody else; zero never frees it.
+	// UnlockMinutes is how long a ticket may stay locked to its owner before it
+	// is free for somebody else, counted from the lock or from the last answer
+	// the customer was given under it, as KIX18 counts it; zero never frees it.
 	UnlockMinutes int
 
 	// ServiceLevelID is the service level a ticket opened in the queue starts

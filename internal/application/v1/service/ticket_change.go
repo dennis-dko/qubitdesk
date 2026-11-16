@@ -421,12 +421,19 @@ func (s *TicketApplicationService) nameOf(ctx context.Context, id *uint) string 
 type history struct {
 	ticketID uint
 	at       time.Time
+	by       model.Sender
 	actor    *uint
 	entries  []model.HistoryEntry
 }
 
 func historyOf(ticketID uint, at time.Time, caller *Principal) *history {
-	return &history{ticketID: ticketID, at: at, actor: callerID(caller)}
+	return &history{ticketID: ticketID, at: at, by: model.SenderAgent, actor: callerID(caller)}
+}
+
+// historyBySystem is the history of what the application did by itself, which
+// no account did.
+func historyBySystem(ticketID uint, at time.Time) *history {
+	return &history{ticketID: ticketID, at: at, by: model.SenderSystem}
 }
 
 func (h *history) add(event model.HistoryEvent, was, now string) {
@@ -435,7 +442,7 @@ func (h *history) add(event model.HistoryEvent, was, now string) {
 	}
 
 	h.entries = append(h.entries, model.HistoryEntry{
-		TicketID: h.ticketID, At: h.at, Actor: model.SenderAgent, ActorID: h.actor,
+		TicketID: h.ticketID, At: h.at, Actor: h.by, ActorID: h.actor,
 		Event: event, OldValue: was, NewValue: now,
 	})
 }

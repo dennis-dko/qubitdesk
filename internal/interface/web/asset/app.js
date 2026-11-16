@@ -6037,7 +6037,7 @@ function drawTicketDetail(ticket, articles, history) {
   )));
 
   $('#ticket-history-list').replaceChildren(...history.map((entry) => el('li', {
-    text: `${fmtMoment(entry.at)} ${entry.actorName || '–'}: ${describeHistory(entry)}`,
+    text: `${fmtMoment(entry.at)} ${entry.actor === 'system' ? t('history.bySystem', 'the system') : (entry.actorName || '–')}: ${describeHistory(entry)}`,
   })));
 }
 

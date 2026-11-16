@@ -654,6 +654,7 @@ func main() {
 
 			return place
 		})
+	sysConfig.WithCheck(model.ConfigTicketStateAfterPending, tickets.CanEndAWait)
 
 	// What this installation is called in a language, wherever it has to name
 	// itself: the prompt a passkey device shows.
@@ -1025,6 +1026,23 @@ func main() {
 		Levels: rest.NewServiceLevelHandler(
 			appservice.NewSLAApplicationService(levelRepo, calendarRepo),
 			authorizer),
+	})
+
+	// What a ticket is owed without anybody asking: a wait that is over moves
+	// the ticket on, and a lock that has run its time is freed. Every minute, as
+	// KIX18's daemon looks.
+	app.AddCronJob("* * * * *", "ticket-housekeeping", func(ctx *gofr.Context) {
+		moved, freed, err := tickets.Housekeep(ctx, time.Now())
+		if err != nil {
+			ctx.Logger.Errorf("ticket housekeeping: %v", err)
+
+			return
+		}
+
+		if moved > 0 || freed > 0 {
+			ctx.Logger.Infof("ticket housekeeping moved %d ticket(s) whose wait was over and freed %d lock(s)",
+				moved, freed)
+		}
 	})
 
 	// Expired sessions would otherwise accumulate forever.

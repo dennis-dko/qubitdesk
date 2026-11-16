@@ -143,9 +143,10 @@ type TicketCatalogRepositories struct {
 
 var _ TicketService = (*TicketApplicationService)(nil)
 
-// ConfigReader reads the switches of the system configuration a rule obeys.
+// ConfigReader reads the options of the system configuration a rule obeys.
 type ConfigReader interface {
 	Bool(ctx context.Context, name string) (bool, error)
+	String(ctx context.Context, name string) (string, error)
 }
 
 // WithConfig attaches the system configuration. Optional: without it every
@@ -473,13 +474,14 @@ func (s *TicketApplicationService) AddArticle(
 		change.add(model.HistoryTime, "", strconv.Itoa(minutes))
 	}
 
-	// The first article of an agent the customer sees answers the ticket.
+	// The first article of an agent the customer sees answers the ticket, and
+	// every one starts the time its lock runs for again, as KIX18 counts it.
 	var answered *time.Time
 	if article.CustomerVisible && ticket.FirstResponseAt == nil {
 		answered = &now
 	}
 
-	return s.tickets.AddArticle(ctx, article, minutes, change.entries, answered)
+	return s.tickets.AddArticle(ctx, article, minutes, change.entries, answered, article.CustomerVisible)
 }
 
 // reached reads a ticket and its queue for a caller, and answers "not found"

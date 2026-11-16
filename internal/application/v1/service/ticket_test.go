@@ -10,6 +10,7 @@ import (
 	"github.com/dennis-dko/go-ticket-system/internal/application/v1/command"
 	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
 	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/memory"
 	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
@@ -17,10 +18,13 @@ import (
 // ticketFixture is the ticket service over in-memory tables seeded as the
 // migrations seed a real database, with a queue the agents work in, one they
 // only read and one they do not reach - and a caller on each side of
-// queues:write.
+// queues:write. serviceOver builds the same service over another ticket
+// repository, for a case that has to come between the service and its tables.
 type ticketFixture struct {
 	tickets       *service.TicketApplicationService
+	serviceOver   func(repository.TicketRepository) *service.TicketApplicationService
 	repo          *memory.TicketRepository
+	stateRepo     *memory.TicketStateRepository
 	queues        *memory.QueueRepository
 	levels        *memory.ServiceLevelRepository
 	calendars     *memory.CalendarRepository
@@ -59,6 +63,7 @@ func newTicketFixture(t *testing.T) ticketFixture {
 
 	f := ticketFixture{
 		repo:          memory.NewTicketRepository(),
+		stateRepo:     states,
 		priorities:    priorities,
 		contacts:      memory.NewContactRepository(),
 		organisations: memory.NewOrganisationRepository(),
@@ -74,6 +79,7 @@ func newTicketFixture(t *testing.T) ticketFixture {
 		{Name: "new", Type: model.StateTypeNew, IsSystem: true},
 		{Name: "open", Type: model.StateTypeOpen, IsSystem: true},
 		{Name: "pending-reminder", Type: model.StateTypePendingReminder},
+		{Name: "pending-auto-close", Type: model.StateTypePendingAuto},
 		{Name: "closed", Type: model.StateTypeClosed, IsSystem: true},
 		{Name: "merged", Type: model.StateTypeMerged, IsSystem: true},
 	} {
@@ -104,11 +110,16 @@ func newTicketFixture(t *testing.T) ticketFixture {
 	f.levels = memory.NewServiceLevelRepository()
 	f.calendars = memory.NewCalendarRepository()
 
-	f.tickets = service.NewTicketApplicationService(f.repo, queues,
-		service.TicketCatalogRepositories{States: states, Priorities: priorities, Types: types},
-		service.TicketCustomerRepositories{Contacts: f.contacts, Organisations: f.organisations},
-		users, roles, func(context.Context) string { return "Europe/Berlin" }).
-		WithServiceLevels(f.levels, f.calendars, func(context.Context) string { return "" })
+	catalog := service.TicketCatalogRepositories{States: states, Priorities: priorities, Types: types}
+	customers := service.TicketCustomerRepositories{Contacts: f.contacts, Organisations: f.organisations}
+	levels, calendars := f.levels, f.calendars
+
+	f.serviceOver = func(tickets repository.TicketRepository) *service.TicketApplicationService {
+		return service.NewTicketApplicationService(tickets, queues, catalog, customers,
+			users, roles, func(context.Context) string { return "Europe/Berlin" }).
+			WithServiceLevels(levels, calendars, func(context.Context) string { return "" })
+	}
+	f.tickets = f.serviceOver(f.repo)
 
 	return f
 }

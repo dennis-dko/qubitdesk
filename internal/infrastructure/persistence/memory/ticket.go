@@ -148,6 +148,7 @@ func (r *TicketRepository) AddArticle(
 	minutes int,
 	history []model.HistoryEntry,
 	firstResponse *time.Time,
+	renewsLock bool,
 ) (*model.Article, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -162,6 +163,12 @@ func (r *TicketRepository) AddArticle(
 		answered := *firstResponse
 		ticket.FirstResponseAt = &answered
 	}
+
+	if renewsLock && ticket.Locked {
+		renewed := article.CreatedAt
+		ticket.LockedAt = &renewed
+	}
+
 	r.tickets[ticket.ID] = ticket
 
 	stored := *article
