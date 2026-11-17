@@ -567,6 +567,27 @@
         </div>
       </div>
 
+      <!-- What the notifications told this agent about the tickets around them. -->
+      <div class="card" id="told-card">
+        <div class="card-head">
+          <h2 data-i18n="told.title">What you were told</h2>
+          <button type="button" class="link" id="told-all-read" hidden data-i18n="told.allRead">mark all as read</button>
+        </div>
+        <p class="muted" data-i18n="told.hint">What the notifications told you about the tickets around you, the latest first. Opening a ticket from here marks it read.</p>
+        <div class="table-wrap">
+          <table id="table-told">
+            <thead>
+              <tr>
+                <th data-i18n="told.when">When</th>
+                <th data-i18n="told.what">What</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" id="ticket-detail" hidden>
         <h2 id="ticket-heading"></h2>
         <dl class="ticket-facts" id="ticket-facts"></dl>

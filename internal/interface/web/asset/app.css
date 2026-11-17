@@ -898,6 +898,12 @@ tbody tr.rejected td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .run-lines { margin: 0; padding-left: 18px; }
 .notification-message { border: 0; margin: 0 0 8px; padding: 0; }
 .notification-message legend { font-weight: 600; padding: 0; }
+
+/* What a notification said is read like a line in a list of mail: the ones not
+   read yet stand out, the ones read step back. */
+.told-subject { font-weight: 400; }
+tr.unread .told-subject { font-weight: 700; }
+.told-body { overflow-wrap: anywhere; white-space: pre-wrap; }
 .escalated { background: var(--danger); border-radius: 4px; color: #fff; font-size: 0.8em; margin-right: 6px; padding: 1px 6px; }
 .ticket-history ol { margin: 8px 0 0; padding-left: 20px; }
 

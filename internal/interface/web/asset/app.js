@@ -7038,6 +7038,7 @@ async function loadTickets() {
   }
 
   await loadTicketPage();
+  await loadTold();
 
   if (openTicketShown) await openTicket(openTicketShown.id, { keepPlace: true });
 }
@@ -7049,6 +7050,66 @@ function queueChoices(queues) {
   return queues
     .map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
     .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+// --------------------------------------------------------- what I was told
+
+/**
+ * Draws what the notifications told the reader, the latest first, the ones not
+ * read yet marked so, and offers to mark them all read while any are unread.
+ */
+async function loadTold() {
+  if (!can('tickets:read')) return;
+
+  const page = await api('/me/notifications');
+  const told = page?.items ?? [];
+
+  fillTable($('#table-told tbody'), told.map(toldRow), 3, t('told.empty', 'Nothing yet.'));
+  $('#told-all-read').hidden = !(page?.unread > 0);
+}
+
+/** One thing the reader was told, as a row: when, what, and the ticket it is about. */
+function toldRow(notification) {
+  const unread = !notification.readAt;
+  const actions = el('td', { class: 'actions' },
+    el('button', {
+      class: 'link',
+      text: t('told.open', 'open the ticket'),
+      onclick: () => openToldTicket(notification),
+    }));
+
+  if (unread) {
+    actions.append(el('button', {
+      class: 'link',
+      text: t('told.read', 'mark as read'),
+      onclick: () => mutate(() => api(`/me/notifications/${notification.id}/read`, { method: 'PUT' }), null, loadTold),
+    }));
+  }
+
+  return el('tr', unread ? { class: 'unread' } : {},
+    el('td', { text: fmtMoment(notification.createdAt) }),
+    el('td', { class: 'text' },
+      el('strong', { class: 'told-subject', text: notification.subject }),
+      el('div', { class: 'muted told-body', text: notification.body })),
+    actions);
+}
+
+/** Opens the ticket a notification is about, which reads the notification. */
+function openToldTicket(notification) {
+  const read = notification.readAt
+    ? Promise.resolve()
+    : api(`/me/notifications/${notification.id}/read`, { method: 'PUT' });
+
+  mutate(() => read, null, async () => {
+    await loadTold();
+    await openTicket(notification.ticketId);
+  });
+}
+
+/** Wires the card of what the reader was told. */
+function wireTold() {
+  $('#told-all-read').addEventListener('click', () => mutate(
+    () => api('/me/notifications/read', { method: 'PUT' }), null, loadTold));
 }
 
 /** Reads the page of tickets the filter asks for, and draws it. */
@@ -10775,6 +10836,7 @@ function forgetTheLastAccount() {
   cache.planEvents = [];
   cache.jobs = [];
   cache.notifying = notifyingNothing();
+  $('#told-all-read').hidden = true;
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -11238,6 +11300,15 @@ const TOUR_STEPS = [
     text: () => t('tour.contacts.text',
       'A ticket is for a contact, and for the organisation the contact belongs to unless it says otherwise. '
       + 'Deleting a contact keeps the tickets for them, for nobody.'),
+  },
+  {
+    target: '#told-card',
+    view: 'tickets',
+    permission: 'tickets:read',
+    title: () => t('tour.told.title', 'What you were told'),
+    text: () => t('tour.told.text',
+      'What the notifications tell you about the tickets around you waits here until you have read it. Opening a '
+      + 'ticket from here reads it, and where you let this browser, it is pushed to you as well.'),
   },
   {
     target: '#queue-card',
@@ -15552,6 +15623,10 @@ function switchView(name) {
   // offers them may have changed since it was last drawn.
   if (name === 'welcome') renderWelcome();
 
+  // And what the reader was told, which other people's changes add to while
+  // nothing on this page moves.
+  if (name === 'tickets') loadTold().catch((err) => toastFailure(err));
+
   // The log viewer polls, so it follows the screen it lives on rather than
   // running for as long as the tab is open.
   if (logViewerActive()) schedulePoll({ immediate: true });
@@ -15905,6 +15980,7 @@ function wireForms() {
   wireUnlockTypes();
   wireAutomation();
   wireNotifications();
+  wireTold();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();
