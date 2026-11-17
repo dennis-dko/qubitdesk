@@ -21,6 +21,7 @@ const cache = {
   plans: [], planEvents: [], jobs: [],
   notifying: notifyingNothing(),
   templates: [], templateQueues: [], ticketTemplates: [],
+  faqCategories: [], faqVisibilities: [],
 };
 
 /**
@@ -6531,6 +6532,320 @@ function wireTemplates() {
   article.elements.template.addEventListener('change', () => useTemplate(article));
 }
 
+// ----------------------------------------------------------- knowledge base
+
+/** Who may read an article, in words; the server names them as KIX18 does. */
+const FAQ_VISIBILITY_TITLES = {
+  internal: 'the staff alone',
+  external: 'customers signed in, and the staff',
+  public: 'anybody',
+};
+
+/** Who may read an article, in the reader's language. */
+function faqVisibilityName(visibility) {
+  return t(`faqvisibility.${visibility}`, FAQ_VISIBILITY_TITLES[visibility] ?? visibility);
+}
+
+/** A category of the knowledge base by the path of the categories above it. */
+function faqCategoryPath(id) {
+  const byId = new Map(cache.faqCategories.map((category) => [category.id, category]));
+  const category = byId.get(id);
+
+  return category ? queuePath(category, byId) : `#${id}`;
+}
+
+/**
+ * Fills the knowledge base's screen, for whoever reads it: the categories, the
+ * search's choices and what it finds, and - for whoever writes it - the forms
+ * where nobody is filling them in.
+ */
+async function loadFAQ() {
+  if (!can('faq:read')) return;
+
+  const categories = await api('/faq/categories');
+  cache.faqCategories = categories?.items ?? [];
+
+  const choices = cache.faqCategories
+    .map((category) => ({ value: String(category.id), label: faqCategoryPath(category.id) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const search = $('#form-faq-search');
+  if (search && !beingEdited(search)) {
+    fillSelect(search.elements.category, choices,
+      { placeholder: t('faq.everyCategory', 'every category'), labelKey: 'label', valueKey: 'value' });
+  }
+
+  drawFAQCategories();
+  await loadFAQArticles();
+
+  const form = $('#form-faq-article');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillFAQArticleForm(form, null);
+}
+
+/** Reads what the search finds, and draws it. */
+async function loadFAQArticles() {
+  const search = $('#form-faq-search');
+  const query = new URLSearchParams();
+
+  if (search?.elements.q.value.trim()) query.set('q', search.elements.q.value.trim());
+  if (search?.elements.category.value) query.set('category', search.elements.category.value);
+
+  const page = await api(`/faq/articles?${query}`);
+  cache.faqVisibilities = page?.visibilities ?? [];
+
+  fillTable($('#table-faq tbody'), (page?.items ?? []).map((article) => el('tr', {},
+    el('td', { class: 'text' },
+      el('button', { class: 'link', text: article.title, onclick: () => openFAQArticle(article.id) })),
+    el('td', { class: 'text', text: faqCategoryPath(article.categoryId) }),
+    el('td', { class: 'text', text: faqVisibilityName(article.visibility) }),
+    el('td', { text: fmtMoment(article.updatedAt) }),
+    el('td', { class: 'actions' }, ...(can('faq:write')
+      ? [
+        el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editFAQArticle(article) }),
+        deleteButton({
+          label: `${t('entity.faqarticle', 'Article')} "${article.title}"`,
+          path: `/faq/articles/${article.id}`,
+          message: t('msg.faqArticleDeleted', 'Article deleted'),
+          after: async () => { closeFAQArticle(); await loadFAQ(); },
+        }),
+      ]
+      : [])),
+  )), 5, t('faq.empty', 'Nothing found.'));
+}
+
+/** The article that is open, as the server last answered it, or none. */
+let faqArticleShown = null;
+
+/** Opens an article to read it: what it says, and what it is filed under. */
+async function openFAQArticle(id) {
+  const article = await api(`/faq/articles/${id}`);
+  if (!article) return;
+
+  faqArticleShown = article;
+
+  const fact = (term, value) => [el('dt', { text: term }), el('dd', { text: value })];
+
+  $('#faq-article-title').textContent = article.title;
+  $('#faq-article-facts').replaceChildren(
+    ...fact(t('field.categoryId', 'Category'), faqCategoryPath(article.categoryId)),
+    ...fact(t('field.visibility', 'Who may read it'), faqVisibilityName(article.visibility)),
+    ...(article.language ? fact(t('field.language', 'Language'), LANGUAGES[article.language] ?? article.language) : []),
+    ...(article.keywords ? fact(t('field.keywords', 'Keywords'), article.keywords) : []),
+    ...fact(t('faq.updated', 'Written'),
+      `${fmtMoment(article.updatedAt)}${article.updatedByName ? ` – ${article.updatedByName}` : ''}`),
+  );
+  $('#faq-article-body').textContent = article.body;
+  $('#faq-article').hidden = false;
+  $('#faq-article').scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+/** Puts the open article away. */
+function closeFAQArticle() {
+  faqArticleShown = null;
+  $('#faq-article').hidden = true;
+  $('#faq-article-title').textContent = '';
+  $('#faq-article-facts').replaceChildren();
+  $('#faq-article-body').textContent = '';
+}
+
+/**
+ * Fills the article form's choices: the categories still offered and the one
+ * the article is filed under, retired or not; who may read it, the staff alone
+ * for a new one; and its language, any for a new one.
+ */
+function fillFAQArticleForm(form, article) {
+  const offered = cache.faqCategories.filter((category) => category.valid || category.id === article?.categoryId);
+
+  fillSelect(form.elements.categoryId,
+    offered.map((category) => ({ value: String(category.id), label: faqCategoryPath(category.id) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    { labelKey: 'label', valueKey: 'value' });
+  fillSelect(form.elements.visibility,
+    (cache.faqVisibilities.length ? cache.faqVisibilities : Object.keys(FAQ_VISIBILITY_TITLES))
+      .map((visibility) => ({ value: visibility, label: faqVisibilityName(visibility) })),
+    { labelKey: 'label', valueKey: 'value' });
+  fillSelect(form.elements.language,
+    Object.entries(LANGUAGES).map(([code, name]) => ({ value: code, label: name })),
+    { placeholder: t('faq.everyLanguage', 'every language'), labelKey: 'label', valueKey: 'value' });
+
+  form.elements.categoryId.value = article ? String(article.categoryId) : (offered[0] ? String(offered[0].id) : '');
+  form.elements.visibility.value = article?.visibility ?? 'internal';
+  form.elements.language.value = article?.language ?? '';
+}
+
+/** Sends the article form, writing an article or correcting one. */
+function saveFAQArticle(form) {
+  const id = form.elements.id.value;
+  const body = JSON.stringify({
+    title: form.elements.title.value.trim(),
+    categoryId: Number(form.elements.categoryId.value),
+    visibility: form.elements.visibility.value,
+    language: form.elements.language.value,
+    keywords: form.elements.keywords.value.trim(),
+    body: form.elements.body.value.trim(),
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id ? api(`/faq/articles/${id}`, { method: 'PUT', body }) : api('/faq/articles', { method: 'POST', body })),
+    id ? t('msg.faqArticleSaved', 'Article saved') : t('msg.faqArticleCreated', 'Article written'),
+    async (written) => {
+      resetFAQArticleForm();
+      await loadFAQ();
+      if (written?.id) await openFAQArticle(written.id);
+    },
+  );
+}
+
+/** Opens the article that is shown in the form, to correct it. */
+function editFAQArticle(article) {
+  const form = $('#form-faq-article');
+
+  form.elements.id.value = String(article.id);
+  form.elements.title.value = article.title;
+  form.elements.keywords.value = article.keywords;
+  form.elements.body.value = article.body;
+  form.elements.valid.checked = article.valid;
+  fillFAQArticleForm(form, article);
+
+  // Drawn rather than declared with a key, because it carries the article's
+  // title; see editRole for why the key has to come off.
+  const heading = $('#faq-article-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('faqArticleFormTitle', () => {
+    heading.textContent = t('faq.edit', 'Edit the article {0}').replace('{0}', article.title);
+  });
+
+  swapTheLabel($('#faq-article-submit'), 'action.save', 'Save');
+  $('#faq-article-cancel').hidden = false;
+  form.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  form.elements.title.focus();
+}
+
+/** Puts the article form back to writing a new one. */
+function resetFAQArticleForm() {
+  const form = $('#form-faq-article');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillFAQArticleForm(form, null);
+
+  stopRedrawing('faqArticleFormTitle');
+  swapTheLabel($('#faq-article-form-title'), 'faq.create', 'Write an article');
+  swapTheLabel($('#faq-article-submit'), 'action.create', 'Create');
+  $('#faq-article-cancel').hidden = true;
+}
+
+/** Draws the categories' card, and its form where nobody is filling it in. */
+function drawFAQCategories() {
+  fillTable($('#table-faq-category tbody'), cache.faqCategories
+    .map((category) => ({ category, path: faqCategoryPath(category.id) }))
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map(({ category, path }) => el('tr', {},
+      el('td', { class: 'text', text: path }),
+      el('td', { class: 'text', text: category.description }),
+      el('td', { text: category.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+      el('td', { class: 'actions' },
+        el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editFAQCategory(category) }),
+        deleteButton({
+          label: `${t('entity.faqcategory', 'Category')} "${category.name}"`,
+          path: `/faq/categories/${category.id}`,
+          message: t('msg.faqCategoryDeleted', 'Category deleted'),
+          after: loadFAQ,
+        })),
+    )), 4, t('faq.categoriesEmpty', 'No categories yet.'));
+
+  const form = $('#form-faq-category');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillFAQParents(form, null);
+}
+
+/** Fills the category form's choice of parent: the top, or any other category. */
+function fillFAQParents(form, category) {
+  fillSelect(form.elements.parentId,
+    cache.faqCategories.filter((other) => other.id !== category?.id)
+      .map((other) => ({ value: String(other.id), label: faqCategoryPath(other.id) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    { placeholder: t('faq.top', 'nothing - at the top'), labelKey: 'label', valueKey: 'value' });
+  form.elements.parentId.value = category?.parentId ? String(category.parentId) : '';
+}
+
+/** Sends the category form, making a category or correcting one. */
+function saveFAQCategory(form) {
+  const id = form.elements.id.value;
+  const parent = form.elements.parentId.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    valid: form.elements.valid.checked,
+    ...(parent ? { parentId: Number(parent) } : { clearParent: true }),
+  });
+
+  mutate(
+    () => (id ? api(`/faq/categories/${id}`, { method: 'PUT', body }) : api('/faq/categories', { method: 'POST', body })),
+    id ? t('msg.faqCategorySaved', 'Category saved') : t('msg.faqCategoryCreated', 'Category created'),
+    async () => { resetFAQCategoryForm(); await loadFAQ(); },
+  );
+}
+
+/** Opens a category in the form, to correct it. */
+function editFAQCategory(category) {
+  const form = $('#form-faq-category');
+
+  form.elements.id.value = String(category.id);
+  form.elements.name.value = category.name;
+  form.elements.description.value = category.description;
+  form.elements.valid.checked = category.valid;
+  fillFAQParents(form, category);
+
+  const heading = $('#faq-category-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('faqCategoryFormTitle', () => {
+    heading.textContent = t('faq.categoryEdit', 'Edit the category {0}').replace('{0}', category.name);
+  });
+
+  swapTheLabel($('#faq-category-submit'), 'action.save', 'Save');
+  $('#faq-category-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the category form back to making a new one. */
+function resetFAQCategoryForm() {
+  const form = $('#form-faq-category');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillFAQParents(form, null);
+
+  stopRedrawing('faqCategoryFormTitle');
+  swapTheLabel($('#faq-category-form-title'), 'faq.categoryCreate', 'Add a category');
+  swapTheLabel($('#faq-category-submit'), 'action.create', 'Create');
+  $('#faq-category-cancel').hidden = true;
+}
+
+/** Wires the knowledge base's screen. */
+function wireFAQ() {
+  const search = $('#form-faq-search');
+  const article = $('#form-faq-article');
+  const category = $('#form-faq-category');
+
+  search.addEventListener('submit', (e) => {
+    e.preventDefault();
+    loadFAQArticles().catch((err) => toastFailure(err));
+  });
+  article.addEventListener('submit', (e) => { e.preventDefault(); saveFAQArticle(article); });
+  category.addEventListener('submit', (e) => { e.preventDefault(); saveFAQCategory(category); });
+  $('#faq-article-cancel').addEventListener('click', resetFAQArticleForm);
+  $('#faq-category-cancel').addEventListener('click', resetFAQCategoryForm);
+  $('#faq-article-close').addEventListener('click', closeFAQArticle);
+  $('#faq-article-edit').addEventListener('click', () => { if (faqArticleShown) editFAQArticle(faqArticleShown); });
+}
+
 // ---------------------------------------------------- system configuration
 
 /**
@@ -11057,6 +11372,9 @@ function forgetTheLastAccount() {
   cache.templates = [];
   cache.templateQueues = [];
   cache.ticketTemplates = [];
+  cache.faqCategories = [];
+  cache.faqVisibilities = [];
+  closeFAQArticle();
   $('#told-all-read').hidden = true;
 
   // Emptied rather than left to the next render, which may never come: a table
@@ -11142,6 +11460,8 @@ function forgetTheLastAccount() {
   resetJobForm();
   resetNotificationForm();
   resetTemplateForm();
+  resetFAQArticleForm();
+  resetFAQCategoryForm();
   resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
@@ -11531,6 +11851,33 @@ const TOUR_STEPS = [
     text: () => t('tour.told.text',
       'What the notifications tell you about the tickets around you waits here until you have read it. Opening a '
       + 'ticket from here reads it, and where you let this browser, it is pushed to you as well.'),
+  },
+  {
+    target: '#faq-card',
+    view: 'faq',
+    permission: 'faq:read',
+    title: () => t('tour.faq.title', 'What is known'),
+    text: () => t('tour.faq.text',
+      'The knowledge base, searched by the words in an article\'s title, keywords or text. Each article says who '
+      + 'may read it: the staff alone, customers signed in as well, or anybody.'),
+  },
+  {
+    target: '#form-faq-article',
+    view: 'faq',
+    permission: 'faq:write',
+    title: () => t('tour.faqArticle.title', 'Writing it down'),
+    text: () => t('tour.faqArticle.text',
+      'An article is for the staff alone unless you say otherwise. One that has stopped being true is made '
+      + 'invalid: then only those who write the knowledge base see it.'),
+  },
+  {
+    target: '#faq-category-card',
+    view: 'faq',
+    permission: 'faq:write',
+    title: () => t('tour.faqCategories.title', 'Where it is filed'),
+    text: () => t('tour.faqCategories.text',
+      'Categories are headings, each under one or none. One that holds articles is made invalid rather than '
+      + 'deleted.'),
   },
   {
     target: '#queue-card',
@@ -16135,6 +16482,7 @@ async function refreshAll() {
   await loadSysConfig();
   await loadTicketSetup();
   await loadCustomers();
+  await loadFAQ();
   await loadTickets();
   await loadUsers();
   await loadAutomation();
@@ -16213,6 +16561,7 @@ function wireForms() {
   wireNotifications();
   wireTold();
   wireTemplates();
+  wireFAQ();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();

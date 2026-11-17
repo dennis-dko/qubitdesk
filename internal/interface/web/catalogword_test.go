@@ -128,6 +128,7 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		{"planevent.", "PLAN_EVENT_TITLES", set("planevent.")},
 		{"runtrigger.", "RUN_TRIGGER_TITLES", set("runtrigger.")},
 		{"recipient.", "RECIPIENT_TITLES", set("recipient.")},
+		{"faqvisibility.", "FAQ_VISIBILITY_TITLES", set("faqvisibility.")},
 	} {
 		english := scriptTitles(t, family.titles)
 
@@ -190,8 +191,8 @@ func TestEveryConfigOptionIsDescribedInGerman(t *testing.T) {
 // own, by the prefix their keys share: the types a state can have, what an answer
 // to a closed ticket does, how far a role reaches into a queue, the channels an
 // agent writes through, the steps a macro can take, the events a plan can run on,
-// what started a job's run and who a notification is sent to - each as the model
-// has them. The model names the run triggers as constants and lists them nowhere,
+// what started a job's run, who a notification is sent to and who may read an
+// article of the knowledge base - each as the model has them. The model names the run triggers as constants and lists them nowhere,
 // because nothing but the screen asks for all three.
 func tableWords() map[string][]string {
 	words := map[string][]string{}
@@ -227,6 +228,10 @@ func tableWords() map[string][]string {
 
 	for _, recipient := range model.NotificationRecipients() {
 		add("recipient.", string(recipient))
+	}
+
+	for _, visibility := range model.FAQVisibilities() {
+		add("faqvisibility.", string(visibility))
 	}
 
 	return words
