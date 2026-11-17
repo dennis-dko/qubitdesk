@@ -433,3 +433,43 @@ func TestAnAgentFollowsTheQueuesTheyReach(t *testing.T) {
 		t.Errorf("a ticket in the desk told %v, want Bob, who follows it", told)
 	}
 }
+
+// What the scheduler does to a ticket is news as well: a wait that ends and a
+// lock that runs out tell the agents around the ticket, as the application, so
+// that none of them is left out as the one who made the change.
+func TestWhatTheSchedulerDoesIsSentToo(t *testing.T) {
+	ctx := context.Background()
+	n := newNotifying(t)
+	now := time.Now().UTC()
+	locked := true
+
+	n.waitingIn(t, n.states["pending-auto-close"], "Printer", now, false)
+
+	scanner := n.open(t, n.agent, n.desk, "Scanner")
+	if _, err := n.tickets.UpdateTicket(ctx, n.agent, scanner.ID, command.UpdateTicketCommand{Locked: &locked}); err != nil {
+		t.Fatal(err)
+	}
+
+	n.desk.UnlockMinutes = 30
+	if _, err := n.queues.Update(ctx, n.desk); err != nil {
+		t.Fatal(err)
+	}
+
+	n.define(t, command.NotificationDefinitionCommand{Name: ptr("Moved on"), Events: &[]string{"TicketStateUpdate"},
+		Recipients: &[]string{"AgentWritePermissions"}})
+	n.define(t, command.NotificationDefinitionCommand{Name: ptr("Unlocked"), Events: &[]string{"TicketLockUpdate"},
+		Recipients: &[]string{"AgentOwner"}})
+
+	if moved, freed, err := n.tickets.Housekeep(ctx, now.Add(2*time.Hour)); err != nil || moved != 1 || freed != 1 {
+		t.Fatalf("the housekeeping moved %d and freed %d, %v; want the printer moved on and the scanner freed",
+			moved, freed, err)
+	}
+
+	told := n.told(t)
+	slices.Sort(told)
+
+	want := []string{"Ada Admin: Moved on", "Agnes Agent: Moved on", "Agnes Agent: Unlocked", "Bob Agent: Moved on"}
+	if !slices.Equal(told, want) {
+		t.Errorf("the housekeeping told %v, want %v", told, want)
+	}
+}

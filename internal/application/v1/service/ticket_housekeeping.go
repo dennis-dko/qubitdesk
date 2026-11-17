@@ -82,6 +82,7 @@ func (s *TicketApplicationService) endWaits(ctx context.Context, states []*model
 
 		if wrote {
 			moved++
+			s.raise(ctx, theApplication(), ticket.ID, model.EventsOf(change.entries))
 		}
 	}
 
@@ -183,6 +184,7 @@ func (s *TicketApplicationService) freeLocks(ctx context.Context, states []*mode
 
 		if wrote {
 			freed++
+			s.raise(ctx, theApplication(), ticket.ID, model.EventsOf(change.entries))
 		}
 	}
 
