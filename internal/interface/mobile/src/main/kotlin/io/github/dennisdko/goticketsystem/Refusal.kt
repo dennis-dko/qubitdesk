@@ -41,6 +41,7 @@ val refusalValues: Map<String, Map<Int, String>> = mapOf(
     "roleStillAssigned" to mapOf(0 to "roleTitle"),
     "directoryRoleAdministers" to mapOf(0 to "roleTitle"),
     "adminRoleMustAdminister" to mapOf(0 to "roleTitle"),
+    "macroStepInvalid" to mapOf(1 to "fieldName"),
 )
 
 /**
@@ -94,9 +95,9 @@ private fun Language.inPageWords(error: JSONObject): String? {
 
 /**
  * valuesOf writes the values of a refusal the way the page's REFUSAL_VALUES and
- * fillIn do: a state, a priority, a ticket type, a role and a kind of record in
- * its words, a day the way the reader writes one, a whole number as it is and a
- * fraction to two places.
+ * fillIn do: a state, a priority, a ticket type, a role, a kind of record and a
+ * field in its words, a day the way the reader writes one, a whole number as it
+ * is and a fraction to two places.
  */
 private fun Language.valuesOf(code: String, values: JSONArray?): Array<String> {
     if (values == null) return emptyArray()
@@ -111,6 +112,7 @@ private fun Language.valuesOf(code: String, values: JSONArray?): Array<String> {
                 "ticketTypeName" -> pageWord("tickettype.", value)
                 "roleTitle" -> pageWord("role.name.", value)
                 "entityName" -> pageWord("entity.", value)
+                "fieldName" -> pageWord("field.", value)
                 "fmtDate" -> runCatching { day(LocalDate.parse(value)) }.getOrDefault(value)
                 else -> value
             }

@@ -312,8 +312,10 @@ func (s *MacroApplicationService) offered(ctx context.Context, kind model.MacroP
 }
 
 // refusedStep says which step of a macro cannot be taken, and which of its
-// parameters is why - its type, where the step names one there is not.
-func refusedStep(position int, parameter string) error {
-	return apperror.Invalidf("step %d of the macro cannot hold %s", position, parameter).
-		WithCode("macroStepInvalid", position, parameter)
+// fields is why - its type, where the step names one there is not. The field
+// travels by its name on the wire, which the screen writes as its form labels
+// it.
+func refusedStep(position int, field string) error {
+	return apperror.Invalidf("step %d of the macro cannot hold %s", position, field).
+		WithCode("macroStepInvalid", position, field)
 }

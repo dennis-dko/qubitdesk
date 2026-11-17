@@ -538,6 +538,9 @@ const FIELD_NAMES = {
   criteria: 'Which tickets',
   macroIds: 'Macros',
   planIds: 'Execution plans',
+  pendingMinutes: 'Waits for (minutes)',
+  locked: 'Locked',
+  customerVisible: 'The customer sees it',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -653,9 +656,9 @@ function showRefusal(target, err) {
  * fillIn writes a number the way the tables beside it do, and a string as it
  * arrives. Some strings arrive in a form nobody on this screen reads: a day in
  * the order the wire uses, a state as the word it is stored under, the kind of
- * record a "not found" names. So a German refusal would say "ist closed_successful"
- * beside a badge saying "erfolgreich geschlossen" - a word the reader could look
- * for and find nowhere.
+ * record a "not found" names, a field by its name on the wire. So a German
+ * refusal would say "ist closed_successful" beside a badge saying "erfolgreich
+ * geschlossen" - a word the reader could look for and find nowhere.
  *
  * Named by code and position, because on the wire the values are plain strings
  * and stay so: an API client reads them too. Which of them is a day or a state is
@@ -683,6 +686,7 @@ const REFUSAL_VALUES = {
   roleStillAssigned: { 0: roleTitle },
   directoryRoleAdministers: { 0: roleTitle },
   adminRoleMustAdminister: { 0: roleTitle },
+  macroStepInvalid: { 1: fieldName },
 };
 
 /** The values of one refusal, each written the way the rest of the screen writes it. */

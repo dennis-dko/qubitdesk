@@ -30,9 +30,12 @@ import (
 // state, a priority, a ticket type or a role is the Name of a variable the
 // services call state, priority, kind or role - each ships under an identifier
 // the screen translates, so "pending-auto-close" stood in a German refusal
-// beside a badge saying something else. A value spelled any other way is not
-// seen, and that is the limit of what this can promise -
-// TestTheRefusalScanRecognisesADayAndAState holds the recognising itself.
+// beside a badge saying something else. The name of a field a form asks for is
+// a variable the services call field, because it travels as the name the wire
+// gives it: a refused macro step said "stateId" about a box labelled Status. A
+// value spelled any other way is not seen, and that is the limit of what this
+// can promise - TestTheRefusalScanRecognisesADayAndAState holds the recognising
+// itself.
 func TestARefusalWritesItsValuesTheWayTheScreenDoes(t *testing.T) {
 	sent := refusalValueKinds(t)
 
@@ -238,6 +241,10 @@ func writtenWith(value ast.Expr) string {
 				return "fmtDate"
 			}
 		}
+	case *ast.Ident:
+		if v.Name == "field" {
+			return "fieldName"
+		}
 	case *ast.SelectorExpr:
 		if v.Sel.Name == "State" || v.Sel.Name == "Status" {
 			return "statusName"
@@ -267,7 +274,7 @@ func TestTheRefusalScanRecognisesADayAndAState(t *testing.T) {
 
 func f() {
 	_ = apperror.WithCode("c", day.Format(time.DateOnly), ticket.State, model.StateOpen, ticket.Title,
-		state.Name, priority.Name, kind.Name, role.Name, queue.Name)
+		state.Name, priority.Name, kind.Name, role.Name, queue.Name, field, name)
 }`
 
 	file, err := parser.ParseFile(token.NewFileSet(), "p.go", source, 0)
@@ -290,7 +297,7 @@ func f() {
 	})
 
 	want := []string{"fmtDate", "statusName", "statusName", "", "statusName", "priorityName", "ticketTypeName",
-		"roleTitle", ""}
+		"roleTitle", "", "fieldName", ""}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("the values were read as written by %q, want %q", got, want)
 	}

@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 )
 
 // Every reason the server names has a sentence, and every sentence names a reason
@@ -356,6 +358,7 @@ func rejectedFields(t *testing.T) map[string]struct{} {
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`InvalidFields\(([^)]*)\)`),
 		regexp.MustCompile(`append\((?:invalid|fields), ([^)]*)\)`),
+		regexp.MustCompile(`refusedStep\(([^)]*)\)`),
 	}
 	literal := regexp.MustCompile(`"([a-zA-Z][a-zA-Z0-9]*)"`)
 
@@ -387,6 +390,15 @@ func rejectedFields(t *testing.T) map[string]struct{} {
 		})
 	if err != nil {
 		t.Fatalf("walking the source: %v", err)
+	}
+
+	// A macro step is refused by the parameter it cannot hold, which the service
+	// reads off the step's definition rather than writing it out - so the names
+	// are taken from the definitions, where the service takes them.
+	for _, step := range model.MacroActionDefinitions() {
+		for _, parameter := range step.Parameters {
+			fields[parameter.Name] = struct{}{}
+		}
 	}
 
 	return fields
