@@ -645,7 +645,9 @@ func main() {
 		Catalog: catalogRepos, Customers: customerRepos, Queues: queueRepo, Users: userRepo,
 	}
 	sysConfig.WithCheck(model.ConfigTimeWorkingHours, calendars.CanBeTheInstallations)
-	tickets := appservice.NewTicketApplicationService(sqldb.NewTicketRepository(db, cfg.Dialect), queueRepo,
+	jobRepo := sqldb.NewJobRepository(db, cfg.Dialect)
+	ticketRepo := sqldb.NewTicketRepository(db, cfg.Dialect)
+	tickets := appservice.NewTicketApplicationService(ticketRepo, queueRepo,
 		catalogRepos, customerRepos, userRepo, roleRepo, func(ctx context.Context) string {
 			name, err := settingsService.Timezone(ctx)
 			if err != nil {
@@ -662,6 +664,8 @@ func main() {
 
 			return place
 		})
+	automation := appservice.NewAutomationService(jobRepo, macroRepo, sqldb.NewJobRunRepository(db, cfg.Dialect),
+		ticketRepo, tickets)
 
 	// What this installation is called in a language, wherever it has to name
 	// itself: the prompt a passkey device shows.
@@ -1036,8 +1040,7 @@ func main() {
 		Macros: rest.NewMacroHandler(appservice.NewMacroApplicationService(macroRepo, automationRefs), authorizer),
 		Plans:  rest.NewExecPlanHandler(appservice.NewExecPlanApplicationService(planRepo), authorizer),
 		Jobs: rest.NewJobHandler(
-			appservice.NewJobApplicationService(sqldb.NewJobRepository(db, cfg.Dialect), macroRepo, planRepo, automationRefs),
-			authorizer),
+			appservice.NewJobApplicationService(jobRepo, macroRepo, planRepo, automationRefs), automation, authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves
@@ -1054,6 +1057,20 @@ func main() {
 		if moved > 0 || freed > 0 {
 			ctx.Logger.Infof("ticket housekeeping moved %d ticket(s) whose wait was over and freed %d lock(s)",
 				moved, freed)
+		}
+	})
+
+	// A month of what the automation did, and no more.
+	app.AddCronJob("10 3 * * *", "prune-job-runs", func(ctx *gofr.Context) {
+		removed, err := automation.Prune(ctx)
+		if err != nil {
+			ctx.Logger.Errorf("pruning job runs: %v", err)
+
+			return
+		}
+
+		if removed > 0 {
+			ctx.Logger.Infof("pruned %d job run(s)", removed)
 		}
 	})
 

@@ -472,6 +472,10 @@ func (s *TicketApplicationService) AddArticle(
 	article.AuthorID = callerID(caller)
 	article.CreatedAt = now
 
+	if caller.System {
+		article.Sender = model.SenderSystem
+	}
+
 	change := historyOf(ticket.ID, now, caller)
 	change.add(model.HistoryArticle, "", string(article.Channel))
 

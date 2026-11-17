@@ -427,6 +427,10 @@ type history struct {
 }
 
 func historyOf(ticketID uint, at time.Time, caller *Principal) *history {
+	if caller != nil && caller.System {
+		return historyBySystem(ticketID, at)
+	}
+
 	return &history{ticketID: ticketID, at: at, by: model.SenderAgent, actor: callerID(caller)}
 }
 

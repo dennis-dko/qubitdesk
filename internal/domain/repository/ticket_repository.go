@@ -64,6 +64,10 @@ type TicketRepository interface {
 	// LockedTickets lists the tickets that are locked.
 	LockedTickets(ctx context.Context) ([]*model.Ticket, error)
 
+	// Matching lists the ids of the tickets the criteria take, the oldest first
+	// and at most limit of them.
+	Matching(ctx context.Context, criteria model.TicketCriteria, limit int) ([]uint, error)
+
 	// EndWait writes what the housekeeping changed on a ticket whose wait is
 	// over - its state, when it finished, that it waits no longer and when it
 	// changed - and with release frees its lock as well. It writes only while

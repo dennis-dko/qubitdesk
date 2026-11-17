@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
@@ -86,6 +87,22 @@ func (r *JobRepository) Update(_ context.Context, job *model.Job) (*model.Job, e
 	r.jobs[job.ID] = stored
 
 	return copyJob(stored), nil
+}
+
+func (r *JobRepository) RanAt(_ context.Context, id uint, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	job, ok := r.jobs[id]
+	if !ok {
+		return apperror.NotFound("job", strconv.FormatUint(uint64(id), 10))
+	}
+
+	ran := at
+	job.LastRunAt = &ran
+	r.jobs[id] = job
+
+	return nil
 }
 
 func (r *JobRepository) Delete(_ context.Context, id uint) error {

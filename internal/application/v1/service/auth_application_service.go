@@ -27,6 +27,18 @@ type Principal struct {
 	User        *model.User
 	Role        *model.Role
 	Permissions []string
+
+	// System marks the application itself acting - the automation running a
+	// job - which holds every right on the staff side, reaches every queue and
+	// is written into a ticket's history and articles as the system rather than
+	// as an account. It is made in this package, by theApplication, and never
+	// from a request.
+	System bool
+}
+
+// theApplication is the principal the automation acts as.
+func theApplication() *Principal {
+	return &Principal{Permissions: model.AdminPermissions(), System: true}
 }
 
 // Can reports whether the principal holds the permission.

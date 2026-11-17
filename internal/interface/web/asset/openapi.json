@@ -3764,6 +3764,40 @@
           }
         }
       }
+    },
+    "/jobs/{id}/run": {
+      "post": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Run a job now",
+        "description": "Runs the job once on the tickets its criteria take now - the oldest first, at most 500 - taking its macros through each as the application, so that every step meets the rules a person's change meets and is written into the history as the system's. A ticket whose step is refused is left there and the refusal kept among the run's `lines`, with its `code` and `values`; a retired macro is passed over and said so. Answers what the run did. Takes `automation:write`.",
+        "responses": {
+          "200": {
+            "description": "What the run did"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/jobs/{id}/runs": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "List a job's latest runs",
+        "description": "The latest twenty, the latest first, each with its lines; a run is kept for thirty days. Takes `automation:write`.",
+        "responses": {
+          "200": {
+            "description": "The runs"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     }
   },
   "components": {

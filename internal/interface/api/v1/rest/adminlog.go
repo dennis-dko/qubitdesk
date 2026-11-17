@@ -80,6 +80,7 @@ var administrativeChanges = []struct {
 	{http.MethodPost, "/api/v1/jobs", "job.created", "name"},
 	{http.MethodPut, "/api/v1/jobs/{id}", "job.updated", "name"},
 	{http.MethodDelete, "/api/v1/jobs/{id}", "job.deleted", ""},
+	{http.MethodPost, "/api/v1/jobs/{id}/run", "job.run", ""},
 	{http.MethodPut, "/api/v1/settings/sysconfig/{name}", "sysconfig.set", ""},
 	{http.MethodDelete, "/api/v1/settings/sysconfig/{name}", "sysconfig.reset", ""},
 }

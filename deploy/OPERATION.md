@@ -1507,8 +1507,9 @@ rather than letting it run on until the shutdown's deadline and closing the
 database under it - so the lines for whom it had removed are written before the
 process goes. What it had not reached yet, the next run does.
 
-Expired sessions are pruned at 03:00 daily, on the server's clock like the
-directory's schedule. That schedule is not configurable.
+Expired sessions are pruned at 03:00 daily, and the record of what the
+automation's jobs did at 03:10, keeping thirty days - both on the server's
+clock like the directory's schedule, and neither configurable.
 
 Once a minute the application looks after its tickets: one whose wait is over
 moves on to the state its waiting state names, and a lock that has run

@@ -8290,6 +8290,7 @@ const CHANGE_SENTENCES = {
   'job.created': () => t('change.jobCreated', 'Created the job {0}'),
   'job.updated': () => t('change.jobUpdated', 'Changed the job {0}'),
   'job.deleted': () => t('change.jobDeleted', 'Deleted the job {0}'),
+  'job.run': () => t('change.jobRun', 'Ran the job {0}'),
   'sysconfig.set': () => t('change.sysconfigSet', 'Changed the option {1}'),
   'sysconfig.reset': () => t('change.sysconfigReset', 'Put the option {1} back to its default'),
 };

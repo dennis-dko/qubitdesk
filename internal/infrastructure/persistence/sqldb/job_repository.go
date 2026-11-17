@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
@@ -170,9 +171,19 @@ func (r *JobRepository) Update(ctx context.Context, job *model.Job) (*model.Job,
 	return r.GetByID(ctx, job.ID)
 }
 
+func (r *JobRepository) RanAt(ctx context.Context, id uint, at time.Time) error {
+	if _, err := r.exec(ctx, "UPDATE jobs SET last_run_at = ? WHERE id = ?", at, id); err != nil {
+		return apperror.Internal(err)
+	}
+
+	return nil
+}
+
 func (r *JobRepository) Delete(ctx context.Context, id uint) error {
 	return r.withTx(ctx, func(tx base) error {
 		for _, query := range []string{
+			"DELETE FROM job_run_lines WHERE run_id IN (SELECT id FROM job_runs WHERE job_id = ?)",
+			"DELETE FROM job_runs WHERE job_id = ?",
 			"DELETE FROM job_macros WHERE job_id = ?",
 			"DELETE FROM job_plans WHERE job_id = ?",
 		} {

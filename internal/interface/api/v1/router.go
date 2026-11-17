@@ -287,6 +287,8 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.POST(base+"/jobs", h.Jobs.Create)
 	app.PUT(base+"/jobs/{id}", h.Jobs.Update)
 	app.DELETE(base+"/jobs/{id}", h.Jobs.Delete)
+	app.POST(base+"/jobs/{id}/run", h.Jobs.Run)
+	app.GET(base+"/jobs/{id}/runs", h.Jobs.Runs)
 
 	app.GET(base+"/ticket-types", h.Catalog.ListTypes)
 	app.GET(base+"/ticket-types/{id}", h.Catalog.GetType)

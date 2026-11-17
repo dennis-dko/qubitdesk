@@ -180,7 +180,48 @@ func All(dialect string) map[int64]migration.Migrate {
 			return createIndex(d, "idx_job_macros_job", "job_macros", "job_id")
 		}},
 		20261117020300: {UP: func(d migration.Datasource) error { return createJobPlans(d, dialect) }},
+
+		// What each run of a job did.
+		20261117030000: {UP: func(d migration.Datasource) error { return createJobRuns(d, dialect) }},
+		20261117030100: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_job_runs_job", "job_runs", "job_id")
+		}},
+		20261117030200: {UP: func(d migration.Datasource) error { return createJobRunLines(d, dialect) }},
+		20261117030300: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_job_run_lines_run", "job_run_lines", "run_id")
+		}},
 	}
+}
+
+// createJobRuns keeps what each run of a job did, as KIX18 keeps its job runs.
+func createJobRuns(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE job_runs (
+		%[1]s,
+		job_id %[2]s NOT NULL REFERENCES jobs(id),
+		run_trigger VARCHAR(16) NOT NULL,
+		started_at %[3]s NOT NULL,
+		finished_at %[3]s NOT NULL,
+		tickets INT NOT NULL,
+		changed INT NOT NULL,
+		failed INT NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
+}
+
+// createJobRunLines keeps what a run said about a ticket and a step, as KIX18's
+// automation log does. The ticket and the macro are ids without a key: the
+// ticket may be one the run itself deleted.
+func createJobRunLines(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE job_run_lines (
+		%[1]s,
+		run_id %[2]s NOT NULL REFERENCES job_runs(id),
+		ticket_id INT,
+		macro_id INT,
+		step INT NOT NULL,
+		code VARCHAR(64) NOT NULL DEFAULT '',
+		refusal_values VARCHAR(1000) NOT NULL DEFAULT '[]',
+		message VARCHAR(1000) NOT NULL DEFAULT '',
+		at %[3]s NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
 }
 
 // createJobs keeps what the automation does by itself, as KIX18 keeps its jobs:

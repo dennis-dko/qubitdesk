@@ -2,6 +2,7 @@ package sqldb_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -219,5 +220,41 @@ func TestALockIsFreedOnlyOnceItHasRunItsTime(t *testing.T) {
 	if read, err := tables.tickets.GetByID(ctx, scanner.ID); err != nil || read.Locked || read.LockedAt != nil ||
 		!read.UpdatedAt.Equal(freedAt) || read.Title != "Scanner" {
 		t.Errorf("the scanner reads %+v, %v; want it free as of the moment it was freed, under its title", read, err)
+	}
+}
+
+// A job's criteria find, in SQL, the tickets they take - in the values each
+// list names, locked or not where that is said - the oldest first and no more
+// than the limit.
+func TestAJobsCriteriaFindTheTicketsTheyTake(t *testing.T) {
+	ctx := context.Background()
+	tables := newTicketTables(t)
+	at := time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC)
+
+	printer := tables.create(t, "Printer", at, 0)
+	scanner := tables.create(t, "Scanner", at, 0)
+	monitor := tables.create(t, "Monitor", at, 0)
+
+	tables.set(t, "UPDATE tickets SET state_id = ? WHERE id = ?", tables.closed, monitor.ID)
+	tables.set(t, "UPDATE tickets SET locked = ?, locked_at = ? WHERE id = ?", true, at, scanner.ID)
+
+	locked, free := true, false
+
+	for name, tc := range map[string]struct {
+		criteria model.TicketCriteria
+		limit    int
+		want     []uint
+	}{
+		"the desk":          {model.TicketCriteria{QueueIDs: []uint{tables.desk}}, 10, []uint{printer.ID, scanner.ID, monitor.ID}},
+		"open in the desk":  {model.TicketCriteria{QueueIDs: []uint{tables.desk}, StateIDs: []uint{tables.open}}, 10, []uint{printer.ID, scanner.ID}},
+		"locked":            {model.TicketCriteria{Locked: &locked}, 10, []uint{scanner.ID}},
+		"free and closed":   {model.TicketCriteria{Locked: &free, StateIDs: []uint{tables.closed}}, 10, []uint{monitor.ID}},
+		"the two oldest":    {model.TicketCriteria{PriorityIDs: []uint{tables.normal}}, 2, []uint{printer.ID, scanner.ID}},
+		"a type nothing is": {model.TicketCriteria{TypeIDs: []uint{9999}}, 10, []uint{}},
+	} {
+		got, err := tables.tickets.Matching(ctx, tc.criteria, tc.limit)
+		if err != nil || !slices.Equal(got, tc.want) {
+			t.Errorf("%s found %v, %v; want %v", name, got, err, tc.want)
+		}
 	}
 }

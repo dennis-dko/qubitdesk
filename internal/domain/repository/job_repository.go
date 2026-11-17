@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 )
@@ -15,4 +16,7 @@ type JobRepository interface {
 	Save(ctx context.Context, job *model.Job) (*model.Job, error)
 	Update(ctx context.Context, job *model.Job) (*model.Job, error)
 	Delete(ctx context.Context, id uint) error
+
+	// RanAt keeps when the job last ran, which a time-based plan counts from.
+	RanAt(ctx context.Context, id uint, at time.Time) error
 }

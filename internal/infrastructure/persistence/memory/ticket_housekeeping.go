@@ -95,3 +95,24 @@ func (r *TicketRepository) LockedTickets(_ context.Context) ([]*model.Ticket, er
 
 	return found, nil
 }
+
+func (r *TicketRepository) Matching(_ context.Context, criteria model.TicketCriteria, limit int) ([]uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ids := make([]uint, 0)
+
+	for _, ticket := range r.tickets {
+		if criteria.Matches(&ticket) {
+			ids = append(ids, ticket.ID)
+		}
+	}
+
+	slices.Sort(ids)
+
+	if len(ids) > limit {
+		ids = ids[:limit]
+	}
+
+	return ids, nil
+}

@@ -13,13 +13,105 @@ import (
 // JobHandler serves the jobs, read and administered by whoever sets up the
 // automation.
 type JobHandler struct {
-	jobs  *service.JobApplicationService
-	authz *Authorizer
+	jobs       *service.JobApplicationService
+	automation *service.AutomationService
+	authz      *Authorizer
 }
 
 // NewJobHandler wires the handler.
-func NewJobHandler(jobs *service.JobApplicationService, authz *Authorizer) *JobHandler {
-	return &JobHandler{jobs: jobs, authz: authz}
+func NewJobHandler(
+	jobs *service.JobApplicationService,
+	automation *service.AutomationService,
+	authz *Authorizer,
+) *JobHandler {
+	return &JobHandler{jobs: jobs, automation: automation, authz: authz}
+}
+
+// JobRunResponse is what one run of a job did: how many tickets it found, on
+// how many every step was taken and on how many one was refused, and its lines.
+type JobRunResponse struct {
+	ID         uint              `json:"id"`
+	JobID      uint              `json:"jobId"`
+	Trigger    string            `json:"trigger"`
+	StartedAt  time.Time         `json:"startedAt"`
+	FinishedAt time.Time         `json:"finishedAt"`
+	Tickets    int               `json:"tickets"`
+	Changed    int               `json:"changed"`
+	Failed     int               `json:"failed"`
+	Lines      []RunLineResponse `json:"lines"`
+}
+
+// RunLineResponse is one thing a run said: about which ticket, which macro and
+// which of its steps, with the refusal's code and values as the API answers
+// them and its English.
+type RunLineResponse struct {
+	TicketID *uint     `json:"ticketId"`
+	MacroID  *uint     `json:"macroId"`
+	Step     int       `json:"step"`
+	Code     string    `json:"code"`
+	Values   []any     `json:"values"`
+	Message  string    `json:"message"`
+	At       time.Time `json:"at"`
+}
+
+func newJobRunResponse(run *model.JobRun) JobRunResponse {
+	lines := make([]RunLineResponse, 0, len(run.Lines))
+	for _, line := range run.Lines {
+		values := line.Values
+		if values == nil {
+			values = []any{}
+		}
+
+		lines = append(lines, RunLineResponse{
+			TicketID: line.TicketID, MacroID: line.MacroID, Step: line.Step, Code: line.Code, Values: values,
+			Message: line.Message, At: line.At,
+		})
+	}
+
+	return JobRunResponse{
+		ID: run.ID, JobID: run.JobID, Trigger: string(run.Trigger), StartedAt: run.StartedAt,
+		FinishedAt: run.FinishedAt, Tickets: run.Tickets, Changed: run.Changed, Failed: run.Failed, Lines: lines,
+	}
+}
+
+// Run handles POST /api/v1/jobs/{id}/run: the job runs once, now, and the
+// answer is what it did.
+func (h *JobHandler) Run(c *gofr.Context) (any, error) {
+	if _, err := h.authz.Require(c, model.PermAutomationWrite); err != nil {
+		return nil, err
+	}
+
+	id, err := pathID(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	run, err := h.automation.Run(c, id, model.RunManual)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return newJobRunResponse(run), nil
+}
+
+// Runs handles GET /api/v1/jobs/{id}/runs: the job's latest runs, the latest
+// first.
+func (h *JobHandler) Runs(c *gofr.Context) (any, error) {
+	if _, err := h.authz.Require(c, model.PermAutomationWrite); err != nil {
+		return nil, err
+	}
+
+	id, err := pathID(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	runs, err := h.automation.Runs(c, id)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return listOf(runs, newJobRunResponse), nil
 }
 
 // JobCriteriaBody is what a ticket has to be for a job to take it: in one of

@@ -131,3 +131,55 @@ func (r *TicketRepository) tickets(ctx context.Context, query string, args ...an
 
 	return found, nil
 }
+
+func (r *TicketRepository) Matching(ctx context.Context, criteria model.TicketCriteria, limit int) ([]uint, error) {
+	query := "SELECT id FROM tickets WHERE 1 = 1"
+	args := make([]any, 0)
+
+	for _, named := range []struct {
+		column string
+		ids    []uint
+	}{
+		{"queue_id", criteria.QueueIDs},
+		{"state_id", criteria.StateIDs},
+		{"priority_id", criteria.PriorityIDs},
+		{"type_id", criteria.TypeIDs},
+	} {
+		if len(named.ids) == 0 {
+			continue
+		}
+
+		query += " AND " + named.column + " IN " + marks(len(named.ids))
+		for _, id := range named.ids {
+			args = append(args, id)
+		}
+	}
+
+	if criteria.Locked != nil {
+		query += " AND locked = ?"
+		args = append(args, *criteria.Locked)
+	}
+
+	rows, err := r.db.QueryContext(ctx, r.rebind(query+" ORDER BY id LIMIT ?"), append(args, limit)...)
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	ids := make([]uint, 0)
+
+	for rows.Next() {
+		var id uint
+		if err := rows.Scan(&id); err != nil {
+			return nil, apperror.Internal(err)
+		}
+
+		ids = append(ids, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, apperror.Internal(err)
+	}
+
+	return ids, nil
+}
