@@ -53,21 +53,38 @@ var telephones = []telephone{
 // are the longer ones: a step that fits in English is the one that can need
 // scrolling in German. The language is chosen at a desktop's size, since on a
 // telephone the picker is folded away behind the burger.
+//
+// Each walk is a case of its own, with a page and a time budget of its own. The
+// six used to share one page and one budget, and the walk grows with every card
+// the tour names: it took 148 of its 150 seconds when one more card made it run
+// out.
 func TestEveryTourStepIsWhollyOnScreen(t *testing.T) {
 	t.Parallel()
 
-	p := open(t)
-	p.readyAdmin()
+	walk := func(screen telephone, german bool) func(*testing.T) {
+		return func(t *testing.T) {
+			t.Parallel()
 
-	for _, screen := range telephones {
-		p.walkTheTourOn(t, screen, screen.name)
+			p := open(t)
+			p.readyAdmin()
+
+			label := screen.name
+			if german {
+				p.chooseLanguage("de")
+
+				label += ", in German"
+			}
+
+			p.walkTheTourOn(t, screen, label)
+		}
 	}
 
-	p.run("back to a desktop", chromedp.EmulateReset())
-	p.chooseLanguage("de")
+	for _, screen := range telephones {
+		t.Run(screen.name, walk(screen, false))
+	}
 
 	for _, screen := range []telephone{telephones[0], telephones[3]} {
-		p.walkTheTourOn(t, screen, screen.name+", in German")
+		t.Run(screen.name+", in German", walk(screen, true))
 	}
 }
 
