@@ -1354,6 +1354,18 @@
           <button type="button" class="secondary" id="push-subscribe" data-i18n="push.subscribe">Push the notifications to this browser</button>
           <button type="button" class="secondary" id="push-unsubscribe" hidden data-i18n="push.unsubscribe">Stop pushing to this browser</button>
         </div>
+        <form method="post" id="form-notify-choices" class="form" data-perm="tickets:read">
+          <h3 data-i18n="notify.choices">What you are told</h3>
+          <h4 data-i18n="notify.followed">Queues you follow</h4>
+          <p class="muted" data-i18n="notify.followedHint">A notification sent to those who chose a ticket's queue reaches you for the queues switched on here.</p>
+          <div class="perm-grid" id="notify-queues"></div>
+          <h4 data-i18n="notify.taken">Notifications you take</h4>
+          <p class="muted" data-i18n="notify.takenHint">The notifications that let you may be switched off here; the rest reach everybody they name.</p>
+          <div class="perm-grid" id="notify-optional"></div>
+          <div class="row">
+            <button type="submit" data-i18n="action.save">Save</button>
+          </div>
+        </form>
         <p class="muted" id="push-state" hidden data-i18n="push.pushed">The notifications are pushed to this browser, even while no page of it is open. On a computer the browser has to be running for that, in the background will do; one that was closed shows them when it is started again within the hour, as long as they still hold.</p>
       </div>
 

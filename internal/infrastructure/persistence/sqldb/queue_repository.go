@@ -145,6 +145,26 @@ func (r *QueueRepository) Followers(ctx context.Context, id uint) ([]uint, error
 	return r.ids(ctx, "SELECT user_id FROM user_queues WHERE queue_id = ? ORDER BY user_id", id)
 }
 
+func (r *QueueRepository) FollowedBy(ctx context.Context, userID uint) ([]uint, error) {
+	return r.ids(ctx, "SELECT queue_id FROM user_queues WHERE user_id = ? ORDER BY queue_id", userID)
+}
+
+func (r *QueueRepository) SetFollowed(ctx context.Context, userID uint, queueIDs []uint) error {
+	return r.withTx(ctx, func(tx base) error {
+		if _, err := tx.exec(ctx, "DELETE FROM user_queues WHERE user_id = ?", userID); err != nil {
+			return apperror.Internal(err)
+		}
+
+		for _, id := range queueIDs {
+			if _, err := tx.exec(ctx, "INSERT INTO user_queues (user_id, queue_id) VALUES (?, ?)", userID, id); err != nil {
+				return apperror.Internal(err)
+			}
+		}
+
+		return nil
+	})
+}
+
 func (r *QueueRepository) Delete(ctx context.Context, id uint) error {
 	return r.withTx(ctx, func(tx base) error {
 		if _, err := tx.exec(ctx, "DELETE FROM queue_roles WHERE queue_id = ?", id); err != nil {

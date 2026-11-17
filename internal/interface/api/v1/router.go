@@ -172,6 +172,8 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.GET(base+"/me/notifications/{id}", h.Told.Get)
 	app.PUT(base+"/me/notifications/read", h.Told.MarkAllRead)
 	app.PUT(base+"/me/notifications/{id}/read", h.Told.MarkRead)
+	app.GET(base+"/me/notification-choices", h.Told.Choices)
+	app.PUT(base+"/me/notification-choices", h.Told.Choose)
 
 	app.GET(base+"/me/address", h.Auth.Address)
 

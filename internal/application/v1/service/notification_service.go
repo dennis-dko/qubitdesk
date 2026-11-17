@@ -235,10 +235,115 @@ func (s *NotificationService) MarkAllRead(ctx context.Context, caller *Principal
 	return s.sent.MarkAllRead(ctx, caller.User.ID, s.now().UTC())
 }
 
+// NotificationChoices is what an agent may choose about what they are told: the
+// notifications that let them switch them off, with the ones they did, and the
+// queues they reach, with the ones they chose as theirs.
+type NotificationChoices struct {
+	Optional    []*model.NotificationDefinition
+	SwitchedOff []uint
+	Queues      []*model.Queue
+	Followed    []uint
+}
+
+// Choices is what the caller may choose about what they are told, and what they
+// chose.
+func (s *NotificationService) Choices(ctx context.Context, caller *Principal) (NotificationChoices, error) {
+	choices := NotificationChoices{
+		Optional: []*model.NotificationDefinition{}, SwitchedOff: []uint{}, Queues: []*model.Queue{}, Followed: []uint{},
+	}
+
+	if caller == nil || caller.User == nil {
+		return choices, nil
+	}
+
+	optional, queues, err := s.choosable(ctx, caller)
+	if err != nil {
+		return choices, err
+	}
+
+	choices.Optional, choices.Queues = optional, queues
+
+	if choices.SwitchedOff, err = s.sent.SwitchedOff(ctx, caller.User.ID); err != nil {
+		return choices, err
+	}
+
+	if choices.Followed, err = s.refs.Queues.FollowedBy(ctx, caller.User.ID); err != nil {
+		return choices, err
+	}
+
+	return choices, nil
+}
+
+// Choose keeps what the caller chose: the notifications they switched off -
+// only one that lets them, and is sent at all - and the queues they chose as
+// theirs, only among the ones they reach. Each takes the place of what they had.
+func (s *NotificationService) Choose(ctx context.Context, caller *Principal, switchedOff, followed []uint) error {
+	if caller == nil || caller.User == nil {
+		return nil
+	}
+
+	optional, queues, err := s.choosable(ctx, caller)
+	if err != nil {
+		return err
+	}
+
+	var invalid []string
+
+	if slices.ContainsFunc(switchedOff, func(id uint) bool {
+		return !slices.ContainsFunc(optional, func(d *model.NotificationDefinition) bool { return d.ID == id })
+	}) {
+		invalid = append(invalid, "switchedOff")
+	}
+
+	if slices.ContainsFunc(followed, func(id uint) bool {
+		return !slices.ContainsFunc(queues, func(q *model.Queue) bool { return q.ID == id })
+	}) {
+		invalid = append(invalid, "followed")
+	}
+
+	if len(invalid) > 0 {
+		return apperror.InvalidFields(invalid...)
+	}
+
+	if err := s.sent.SetSwitchedOff(ctx, caller.User.ID, distinct(switchedOff)); err != nil {
+		return err
+	}
+
+	return s.refs.Queues.SetFollowed(ctx, caller.User.ID, distinct(followed))
+}
+
+// choosable are the notifications an agent may switch off - those sent that let
+// them - and the queues they may choose, the ones their role reaches.
+func (s *NotificationService) choosable(
+	ctx context.Context,
+	caller *Principal,
+) ([]*model.NotificationDefinition, []*model.Queue, error) {
+	definitions, err := s.definitions.GetAll(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	optional := slices.DeleteFunc(definitions, func(d *model.NotificationDefinition) bool { return !d.Valid || !d.Optional })
+
+	queues, err := s.refs.Queues.GetAll(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	reached := slices.DeleteFunc(queues, func(queue *model.Queue) bool {
+		_, ok := Reach(caller, queue)
+
+		return !ok
+	})
+
+	return optional, reached, nil
+}
+
 // toldBy is who a notification tells about a ticket: the recipients it names,
 // each once, less the account that made the change, the built-in administrator,
-// whoever cannot read the ticket, and - for one sent once a day - whoever it has
-// told about the ticket today, as KIX18 leaves each of them out.
+// whoever cannot read the ticket, whoever switched it off where it lets them,
+// and - for one sent once a day - whoever it has told about the ticket today, as
+// KIX18 leaves each of them out.
 func (s *NotificationService) toldBy(
 	ctx context.Context,
 	definition *model.NotificationDefinition,
@@ -255,10 +360,19 @@ func (s *NotificationService) toldBy(
 		}
 	}
 
+	var off []uint
+
+	if definition.Optional {
+		var err error
+		if off, err = s.sent.SwitchedOffBy(ctx, definition.ID); err != nil {
+			return nil, err
+		}
+	}
+
 	told := make([]*model.User, 0, len(named))
 
 	for _, user := range around.users {
-		if !named[user.ID] || user.ID == by || user.IsSystem || !around.reads[user.ID] {
+		if !named[user.ID] || user.ID == by || user.IsSystem || !around.reads[user.ID] || slices.Contains(off, user.ID) {
 			continue
 		}
 

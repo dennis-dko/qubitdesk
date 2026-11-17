@@ -28,4 +28,10 @@ type QueueRepository interface {
 	// Followers are the agents who chose the queue as one of theirs, to be told
 	// about what happens in it.
 	Followers(ctx context.Context, id uint) ([]uint, error)
+
+	// FollowedBy are the queues the agent chose as theirs.
+	FollowedBy(ctx context.Context, userID uint) ([]uint, error)
+
+	// SetFollowed puts the queues the agent chose in place of the ones they had.
+	SetFollowed(ctx context.Context, userID uint, queueIDs []uint) error
 }

@@ -104,6 +104,77 @@ func (h *NotificationHandler) MarkRead(c *gofr.Context) (any, error) {
 	return map[string]string{"status": "read"}, nil
 }
 
+// NotificationChoiceResponse is what an agent may choose about what they are
+// told, and what they chose.
+type NotificationChoiceResponse struct {
+	Optional    []NotificationChoiceItem `json:"optional"`
+	SwitchedOff []uint                   `json:"switchedOff"`
+	Queues      []NotificationChoiceItem `json:"queues"`
+	Followed    []uint                   `json:"followed"`
+}
+
+// NotificationChoiceItem is a notification or a queue an agent may choose.
+type NotificationChoiceItem struct {
+	ID          uint   `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	ParentID    *uint  `json:"parentId,omitempty"`
+}
+
+// NotificationChoiceRequest is what an agent chose: the notifications switched
+// off and the queues followed, each in place of what they had.
+type NotificationChoiceRequest struct {
+	SwitchedOff []uint `json:"switchedOff"`
+	Followed    []uint `json:"followed"`
+}
+
+// Choices handles GET /api/v1/me/notification-choices.
+func (h *NotificationHandler) Choices(c *gofr.Context) (any, error) {
+	caller, err := h.authz.Require(c, model.PermTicketRead)
+	if err != nil {
+		return nil, err
+	}
+
+	choices, err := h.notifications.Choices(c, caller)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	response := NotificationChoiceResponse{
+		Optional: make([]NotificationChoiceItem, 0, len(choices.Optional)), SwitchedOff: choices.SwitchedOff,
+		Queues: make([]NotificationChoiceItem, 0, len(choices.Queues)), Followed: choices.Followed,
+	}
+
+	for _, d := range choices.Optional {
+		response.Optional = append(response.Optional, NotificationChoiceItem{ID: d.ID, Name: d.Name, Description: d.Description})
+	}
+
+	for _, q := range choices.Queues {
+		response.Queues = append(response.Queues, NotificationChoiceItem{ID: q.ID, Name: q.Name, ParentID: q.ParentID})
+	}
+
+	return response, nil
+}
+
+// Choose handles PUT /api/v1/me/notification-choices.
+func (h *NotificationHandler) Choose(c *gofr.Context) (any, error) {
+	caller, err := h.authz.Require(c, model.PermTicketRead)
+	if err != nil {
+		return nil, err
+	}
+
+	var req NotificationChoiceRequest
+	if err := bind(c, &req); err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	if err := h.notifications.Choose(c, caller, req.SwitchedOff, req.Followed); err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return map[string]string{"status": "chosen"}, nil
+}
+
 // MarkAllRead handles PUT /api/v1/me/notifications/read.
 func (h *NotificationHandler) MarkAllRead(c *gofr.Context) (any, error) {
 	caller, err := h.authz.Require(c, model.PermTicketRead)

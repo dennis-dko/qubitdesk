@@ -4084,6 +4084,62 @@
           }
         }
       }
+    },
+    "/me/notification-choices": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Read what I chose about what I am told",
+        "description": "Under `optional` the notifications that let the caller switch them off and under `switchedOff` the ones they did; under `queues` the queues they reach and under `followed` the ones they chose as theirs, which notifications sent to those who chose a ticket's queue go by. Takes `tickets:read`.",
+        "responses": {
+          "200": {
+            "description": "The choices"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Choose what I am told",
+        "description": "Each list takes the place of what the caller had. A notification that does not let them switch it off, or a queue they do not reach, is refused. Takes `tickets:read`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "switchedOff": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  },
+                  "followed": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chosen"
+          },
+          "400": {
+            "description": "A choice that cannot be made"
+          }
+        }
+      }
     }
   },
   "components": {

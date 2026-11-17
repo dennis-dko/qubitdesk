@@ -36,4 +36,14 @@ type NotificationRepository interface {
 
 	// MarkSent marks notifications as having left.
 	MarkSent(ctx context.Context, ids []uint) error
+
+	// SwitchedOff are the notifications the agent switched off for themselves.
+	SwitchedOff(ctx context.Context, userID uint) ([]uint, error)
+
+	// SetSwitchedOff puts the notifications the agent switched off in place of
+	// the ones they had.
+	SetSwitchedOff(ctx context.Context, userID uint, definitionIDs []uint) error
+
+	// SwitchedOffBy are the agents who switched the notification off.
+	SwitchedOffBy(ctx context.Context, definitionID uint) ([]uint, error)
 }

@@ -4,7 +4,9 @@ package integration
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -127,5 +129,103 @@ func TestAnOpenedTicketIsSentToTheAgentsAroundIt(t *testing.T) {
 
 	if len(told.Items) != 2 || told.Items[0].Subject != "Daily" {
 		t.Errorf("two new titles told Agnes %+v; want the daily notification once", told.Items)
+	}
+}
+
+// An agent chooses over HTTP what they are told: a notification that lets them
+// is switched off and tells them no more, a queue they reach is followed and a
+// notification for those who chose it reaches them, a notification that does
+// not let them is refused, and the account's export hands the choices over.
+func TestAnAgentChoosesWhatTheyAreToldOverHTTP(t *testing.T) {
+	t.Parallel()
+
+	a := start(t)
+	admin := a.signInAsAdmin("a-much-better-password")
+	agnes := a.signInAsAgent(admin, "Agnes", "agnes@example.com")
+
+	var optional, mine struct {
+		ID uint `json:"id"`
+	}
+
+	for name, made := range map[string]any{"Optional": &optional, "Mine": &mine} {
+		recipients, isOptional := []string{"AgentWritePermissions"}, true
+		if name == "Mine" {
+			recipients, isOptional = []string{"AgentMyQueues"}, false
+		}
+
+		admin.must(admin.api(http.MethodPost, "/notification-definitions", map[string]any{
+			"name": name, "events": []string{"TicketCreate"}, "recipients": recipients, "optional": isOptional,
+			"messages": []map[string]string{{"language": "en", "subject": name, "body": name}},
+		}), http.StatusCreated).Data(t, made)
+	}
+
+	var choices struct {
+		Optional []struct {
+			ID   uint   `json:"id"`
+			Name string `json:"name"`
+		} `json:"optional"`
+		SwitchedOff []uint `json:"switchedOff"`
+		Queues      []struct {
+			ID   uint   `json:"id"`
+			Name string `json:"name"`
+		} `json:"queues"`
+		Followed []uint `json:"followed"`
+	}
+
+	agnes.must(agnes.api(http.MethodGet, "/me/notification-choices", nil), http.StatusOK).Data(t, &choices)
+
+	var desk uint
+
+	for _, queue := range choices.Queues {
+		if queue.Name == "Service Desk" {
+			desk = queue.ID
+		}
+	}
+
+	if len(choices.Optional) != 1 || choices.Optional[0].ID != optional.ID || desk == 0 {
+		t.Fatalf("Agnes may choose %+v; want the optional notification and the desk", choices)
+	}
+
+	agnes.must(agnes.api(http.MethodPut, "/me/notification-choices", map[string]any{
+		"switchedOff": []uint{mine.ID},
+	}), http.StatusBadRequest)
+	agnes.must(agnes.api(http.MethodPut, "/me/notification-choices", map[string]any{
+		"switchedOff": []uint{optional.ID}, "followed": []uint{desk},
+	}), http.StatusOK)
+
+	admin.must(admin.api(http.MethodPost, "/tickets", map[string]any{
+		"title": "Printer", "queueId": desk, "body": "It jams.",
+	}), http.StatusCreated)
+
+	var told notificationList
+
+	agnes.must(agnes.api(http.MethodGet, "/me/notifications", nil), http.StatusOK).Data(t, &told)
+
+	if len(told.Items) != 1 || told.Items[0].Subject != "Mine" {
+		t.Errorf("Agnes was told %+v; want the notification for those who chose the desk alone", told.Items)
+	}
+
+	agnes.must(agnes.api(http.MethodGet, "/me/notification-choices", nil), http.StatusOK).Data(t, &choices)
+
+	if !slices.Equal(choices.SwitchedOff, []uint{optional.ID}) || !slices.Equal(choices.Followed, []uint{desk}) {
+		t.Errorf("Agnes's choices read back as %+v", choices)
+	}
+
+	if export := agnes.api(http.MethodGet, "/me/export", nil); export.Status != http.StatusOK ||
+		!strings.Contains(string(export.Body), "notifications-switched-off") {
+		t.Errorf("the export was answered %d without the notifications switched off", export.Status)
+	}
+
+	// And they go with her: on PostgreSQL a choice left behind would refuse the
+	// erasure outright.
+	var users listOf[userResponse]
+
+	admin.must(admin.api(http.MethodGet, "/users", nil), http.StatusOK).Data(t, &users)
+
+	for _, user := range users.Items {
+		if user.Email == "agnes@example.com" {
+			admin.must(admin.api(http.MethodDelete, "/users/"+strconv.FormatUint(uint64(user.ID), 10), nil),
+				http.StatusOK, http.StatusNoContent)
+		}
 	}
 }

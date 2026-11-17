@@ -210,8 +210,13 @@ func (r *NotificationDefinitionRepository) Update(
 
 func (r *NotificationDefinitionRepository) Delete(ctx context.Context, id uint) error {
 	return r.withTx(ctx, func(tx base) error {
-		if _, err := tx.exec(ctx, "DELETE FROM notification_messages WHERE definition_id = ?", id); err != nil {
-			return apperror.Internal(err)
+		for _, query := range []string{
+			"DELETE FROM notification_messages WHERE definition_id = ?",
+			"DELETE FROM notification_opt_outs WHERE definition_id = ?",
+		} {
+			if _, err := tx.exec(ctx, query, id); err != nil {
+				return apperror.Internal(err)
+			}
 		}
 
 		affected, err := tx.exec(ctx, "DELETE FROM notification_definitions WHERE id = ?", id)

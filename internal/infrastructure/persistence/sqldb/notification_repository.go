@@ -168,6 +168,31 @@ func (r *NotificationRepository) MarkSent(ctx context.Context, ids []uint) error
 	return nil
 }
 
+func (r *NotificationRepository) SwitchedOff(ctx context.Context, userID uint) ([]uint, error) {
+	return r.ids(ctx, "SELECT definition_id FROM notification_opt_outs WHERE user_id = ? ORDER BY definition_id", userID)
+}
+
+func (r *NotificationRepository) SetSwitchedOff(ctx context.Context, userID uint, definitionIDs []uint) error {
+	return r.withTx(ctx, func(tx base) error {
+		if _, err := tx.exec(ctx, "DELETE FROM notification_opt_outs WHERE user_id = ?", userID); err != nil {
+			return apperror.Internal(err)
+		}
+
+		for _, id := range definitionIDs {
+			if _, err := tx.exec(ctx, "INSERT INTO notification_opt_outs (user_id, definition_id) VALUES (?, ?)",
+				userID, id); err != nil {
+				return apperror.Internal(err)
+			}
+		}
+
+		return nil
+	})
+}
+
+func (r *NotificationRepository) SwitchedOffBy(ctx context.Context, definitionID uint) ([]uint, error) {
+	return r.ids(ctx, "SELECT user_id FROM notification_opt_outs WHERE definition_id = ? ORDER BY user_id", definitionID)
+}
+
 func (r *NotificationRepository) SentSince(
 	ctx context.Context,
 	definitionID, ticketID, userID uint,

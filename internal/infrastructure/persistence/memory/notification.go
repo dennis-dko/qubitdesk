@@ -18,12 +18,46 @@ type NotificationRepository struct {
 	mu     sync.Mutex
 	sent   []model.Notification
 	pushed map[uint]bool
+	off    map[uint][]uint
 	next   uint
 }
 
 // NewNotificationRepository creates an empty notification repository.
 func NewNotificationRepository() *NotificationRepository {
-	return &NotificationRepository{pushed: map[uint]bool{}, next: 1}
+	return &NotificationRepository{pushed: map[uint]bool{}, off: map[uint][]uint{}, next: 1}
+}
+
+func (r *NotificationRepository) SwitchedOff(_ context.Context, userID uint) ([]uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return slices.Clone(r.off[userID]), nil
+}
+
+func (r *NotificationRepository) SetSwitchedOff(_ context.Context, userID uint, definitionIDs []uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.off[userID] = slices.Clone(definitionIDs)
+
+	return nil
+}
+
+func (r *NotificationRepository) SwitchedOffBy(_ context.Context, definitionID uint) ([]uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	users := make([]uint, 0)
+
+	for userID, off := range r.off {
+		if slices.Contains(off, definitionID) {
+			users = append(users, userID)
+		}
+	}
+
+	slices.Sort(users)
+
+	return users, nil
 }
 
 var _ repository.NotificationRepository = (*NotificationRepository)(nil)

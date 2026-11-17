@@ -41,6 +41,38 @@ func (r *QueueRepository) Followers(_ context.Context, id uint) ([]uint, error) 
 	return slices.Clone(r.followers[id]), nil
 }
 
+func (r *QueueRepository) FollowedBy(_ context.Context, userID uint) ([]uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	followed := make([]uint, 0)
+
+	for queueID, followers := range r.followers {
+		if slices.Contains(followers, userID) {
+			followed = append(followed, queueID)
+		}
+	}
+
+	slices.Sort(followed)
+
+	return followed, nil
+}
+
+func (r *QueueRepository) SetFollowed(_ context.Context, userID uint, queueIDs []uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for queueID, followers := range r.followers {
+		r.followers[queueID] = slices.DeleteFunc(followers, func(id uint) bool { return id == userID })
+	}
+
+	for _, queueID := range queueIDs {
+		r.followers[queueID] = append(r.followers[queueID], userID)
+	}
+
+	return nil
+}
+
 var _ repository.QueueRepository = (*QueueRepository)(nil)
 
 // UseInTickets makes the queue with this id look as if it held count tickets.

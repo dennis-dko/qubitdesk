@@ -195,7 +195,19 @@ func All(dialect string) map[int64]migration.Migrate {
 		// words.
 		20261117040000: {UP: func(d migration.Datasource) error { return createNotificationDefinitions(d, dialect) }},
 		20261117040100: {UP: func(d migration.Datasource) error { return createNotificationMessages(d, dialect) }},
+		20261117040200: {UP: func(d migration.Datasource) error { return createNotificationOptOuts(d, dialect) }},
 	}
+}
+
+// createNotificationOptOuts keeps the notifications each agent switched off for
+// themselves, where a notification lets them. Both ends are keys, so the table
+// is on the erasure's list and in the account's export.
+func createNotificationOptOuts(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE notification_opt_outs (
+		user_id %[1]s NOT NULL REFERENCES users(id),
+		definition_id %[1]s NOT NULL REFERENCES notification_definitions(id),
+		PRIMARY KEY (user_id, definition_id)
+	)`, foreignKeyID(dialect)))
 }
 
 // createNotificationDefinitions keeps the notifications the installation sends,

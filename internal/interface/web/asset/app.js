@@ -546,6 +546,8 @@ const FIELD_NAMES = {
   customerVisible: 'The customer sees it',
   recipients: 'Recipients',
   messages: 'Texts',
+  switchedOff: 'Notifications you take',
+  followed: 'Queues you follow',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -7039,6 +7041,7 @@ async function loadTickets() {
 
   await loadTicketPage();
   await loadTold();
+  await loadNotifyChoices();
 
   if (openTicketShown) await openTicket(openTicketShown.id, { keepPlace: true });
 }
@@ -7106,10 +7109,53 @@ function openToldTicket(notification) {
   });
 }
 
-/** Wires the card of what the reader was told. */
+/**
+ * Draws what the reader may choose about what they are told: a switch for every
+ * queue they reach, on where they follow it, and one for every notification that
+ * lets them switch it off, on where they take it. Not over choices somebody is
+ * part way through.
+ */
+async function loadNotifyChoices() {
+  const form = $('#form-notify-choices');
+  if (!form || !can('tickets:read') || beingEdited(form)) return;
+
+  const choices = await api('/me/notification-choices');
+  const queues = choices?.queues ?? [];
+  const byId = new Map(queues.map((queue) => [queue.id, queue]));
+
+  $('#notify-queues').replaceChildren(...queues
+    .map((queue) => ({ id: queue.id, words: queuePath(queue, byId) }))
+    .sort((a, b) => a.words.localeCompare(b.words))
+    .map((queue) => choiceSwitch({ 'data-followed': String(queue.id) }, queue.words,
+      (choices?.followed ?? []).includes(queue.id))));
+
+  $('#notify-optional').replaceChildren(...(choices?.optional ?? []).map((definition) =>
+    choiceSwitch({ 'data-taken': String(definition.id) }, definition.name,
+      !(choices?.switchedOff ?? []).includes(definition.id))));
+}
+
+/** Sends what the reader chose about what they are told. */
+function saveNotifyChoices(form) {
+  const ids = (mark, on) => $$(`[data-${mark}]`, form).filter((box) => box.checked === on)
+    .map((box) => Number(box.getAttribute(`data-${mark}`)));
+
+  mutate(
+    () => api('/me/notification-choices', {
+      method: 'PUT',
+      body: JSON.stringify({ followed: ids('followed', true), switchedOff: ids('taken', false) }),
+    }),
+    t('msg.notifyChosen', 'Saved what you are told'),
+    async () => { form.reset(); await loadNotifyChoices(); },
+  );
+}
+
+/** Wires the card of what the reader was told, and their choices about it. */
 function wireTold() {
+  const choices = $('#form-notify-choices');
+
   $('#told-all-read').addEventListener('click', () => mutate(
     () => api('/me/notifications/read', { method: 'PUT' }), null, loadTold));
+  choices.addEventListener('submit', (e) => { e.preventDefault(); saveNotifyChoices(choices); });
 }
 
 /** Reads the page of tickets the filter asks for, and draws it. */

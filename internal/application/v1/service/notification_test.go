@@ -362,3 +362,74 @@ func TestWhatAnAgentIsToldIsPushedOnce(t *testing.T) {
 		t.Errorf("a push that failed was tried again: %d sent", sent)
 	}
 }
+
+// An agent switches off a notification that lets them and is no longer told by
+// it; one that does not let them is refused, and goes on reaching them.
+func TestAnAgentSwitchesOffWhatLetsThem(t *testing.T) {
+	ctx := context.Background()
+	n := newNotifying(t)
+	writers := &[]string{"AgentWritePermissions"}
+	opened := &[]string{"TicketCreate"}
+
+	n.define(t, command.NotificationDefinitionCommand{Name: ptr("Optional"), Events: opened, Recipients: writers,
+		Optional: ptr(true)})
+	n.define(t, command.NotificationDefinitionCommand{Name: ptr("Mandatory"), Events: opened, Recipients: writers})
+
+	bob := &service.Principal{User: n.bob, Role: n.agent.Role, Permissions: n.agent.Permissions}
+
+	choices, err := n.notifications.Choices(ctx, bob)
+	if err != nil || len(choices.Optional) != 1 || choices.Optional[0].Name != "Optional" {
+		t.Fatalf("Bob may switch off %+v, %v; want the optional notification alone", choices.Optional, err)
+	}
+
+	if err := n.notifications.Choose(ctx, bob, []uint{choices.Optional[0].ID}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	all, _ := n.definitions.List(ctx)
+	mandatory := all[0].ID
+
+	err = n.notifications.Choose(ctx, bob, []uint{mandatory}, nil)
+	if detail, ok := apperror.Detail(err); !ok || strings.Join(detail.Fields, ",") != "switchedOff" {
+		t.Errorf("switching off a notification that does not let him was answered %v", err)
+	}
+
+	n.open(t, n.agent, n.desk, "Printer")
+
+	told := n.told(t)
+	slices.Sort(told)
+
+	if want := []string{"Ada Admin: Mandatory", "Ada Admin: Optional", "Bob Agent: Mandatory"}; !slices.Equal(told, want) {
+		t.Errorf("opening a ticket told %v, want %v", told, want)
+	}
+}
+
+// An agent follows the queues they reach, and a notification sent to those who
+// chose a ticket's queue reaches them for those; a queue they do not reach is
+// refused.
+func TestAnAgentFollowsTheQueuesTheyReach(t *testing.T) {
+	ctx := context.Background()
+	n := newNotifying(t)
+	bob := &service.Principal{User: n.bob, Role: n.agent.Role, Permissions: n.agent.Permissions}
+
+	err := n.notifications.Choose(ctx, bob, nil, []uint{n.hidden.ID})
+	if detail, ok := apperror.Detail(err); !ok || strings.Join(detail.Fields, ",") != "followed" {
+		t.Errorf("following a queue he does not reach was answered %v", err)
+	}
+
+	if err := n.notifications.Choose(ctx, bob, nil, []uint{n.desk.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	if choices, _ := n.notifications.Choices(ctx, bob); !slices.Equal(choices.Followed, []uint{n.desk.ID}) {
+		t.Errorf("Bob follows %v, want the desk", choices.Followed)
+	}
+
+	n.define(t, command.NotificationDefinitionCommand{Name: ptr("Mine"), Events: &[]string{"TicketCreate"},
+		Recipients: &[]string{"AgentMyQueues"}})
+	n.open(t, n.admin, n.desk, "Printer")
+
+	if told := n.told(t); !slices.Equal(told, []string{"Bob Agent: Mine"}) {
+		t.Errorf("a ticket in the desk told %v, want Bob, who follows it", told)
+	}
+}
