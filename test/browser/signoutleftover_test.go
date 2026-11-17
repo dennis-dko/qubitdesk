@@ -145,6 +145,7 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		await send('/calendars', { name: 'Office', hours: [{ weekday: 1, from: '08:00', to: '17:00' }] });
 		await send('/service-levels', { name: 'Gold', solutionMinutes: 480 });
 		await send('/macros', { name: 'Escalate', actions: [] });
+		await send('/exec-plans', { name: 'Mornings', type: 'TimeBased', weekdays: [1], times: ['08:00'] });
 		await refreshAll();
 		return true;
 	})()`, &made)
@@ -167,6 +168,7 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		"form-calendar":     `#table-calendar tbody td.actions button.link:not(.danger)`,
 		"form-sla":          `#table-sla tbody td.actions button.link:not(.danger)`,
 		"form-macro":        `#table-macro tbody td.actions button.link:not(.danger)`,
+		"form-plan":         `#table-plan tbody td.actions button.link:not(.danger)`,
 	}
 
 	for form, opener := range openers {

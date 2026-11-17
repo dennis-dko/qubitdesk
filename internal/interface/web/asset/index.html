@@ -1111,6 +1111,50 @@
           </div>
         </form>
       </div>
+
+      <div class="card" id="plan-card">
+        <h2 data-i18n="plan.title">Execution plans</h2>
+        <p class="muted" data-i18n="plan.hint">When the jobs that name a plan run: at times of day on the weekdays it names, in the installation's timezone, or when something happens to a ticket.</p>
+        <div class="table-wrap">
+          <table id="table-plan">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="plan.when">When</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-plan" class="form">
+          <h3 id="plan-form-title" data-i18n="plan.create">Add an execution plan</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="120" required></label>
+            <label data-i18n="plan.kind">Runs<select name="type">
+              <option value="TimeBased" data-i18n="plantype.TimeBased">at times of day</option>
+              <option value="EventBased" data-i18n="plantype.EventBased">when something happens to a ticket</option>
+            </select></label>
+            <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <fieldset class="perms" id="plan-time">
+            <legend data-i18n="field.weekdays">Weekdays</legend>
+            <div class="perm-grid" id="plan-weekdays"></div>
+            <label data-i18n="field.times">Times<input type="text" name="times" maxlength="700" pattern="[0-9]{2}:[0-9]{2}( *, *[0-9]{2}:[0-9]{2})*" placeholder="08:00, 12:30" required></label>
+          </fieldset>
+          <fieldset class="perms" id="plan-event" hidden>
+            <legend data-i18n="field.events">Events</legend>
+            <div class="perm-grid" id="plan-events"></div>
+          </fieldset>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="automation.offered">Offered for jobs</span></label>
+          <div class="row">
+            <button type="submit" id="plan-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="plan-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
     </section>
 
     <!-- My account -->

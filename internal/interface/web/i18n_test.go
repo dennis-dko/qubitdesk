@@ -347,6 +347,14 @@ func TestNoTranslationIsUnused(t *testing.T) {
 				}
 			}
 
+			// The events a plan can run on, looked up as t(`planevent.${event}`)
+			// from the events the server lists.
+			if event, isEvent := strings.CutPrefix(key, "planevent."); isEvent {
+				if slices.Contains(model.TicketEvents(), model.TicketEvent(event)) {
+					continue
+				}
+			}
+
 			// What an option of the system configuration does, looked up as
 			// t(`sysconfig.${option.name}`) from the listing the server sent.
 			// TestEveryConfigOptionIsDescribedInGerman holds them to the options.

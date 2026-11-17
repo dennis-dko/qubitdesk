@@ -128,6 +128,11 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		steps[string(step.Type)] = struct{}{}
 	}
 
+	events := map[string]struct{}{}
+	for _, event := range model.TicketEvents() {
+		events[string(event)] = struct{}{}
+	}
+
 	for _, family := range []struct {
 		prefix, titles string
 		shipped        map[string]struct{}
@@ -140,6 +145,7 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		{"queueaccess.", "ACCESS_TITLES", levels},
 		{"channel.", "CHANNEL_TITLES", channels},
 		{"macrostep.", "MACRO_STEP_TITLES", steps},
+		{"planevent.", "PLAN_EVENT_TITLES", events},
 	} {
 		english := scriptTitles(t, family.titles)
 

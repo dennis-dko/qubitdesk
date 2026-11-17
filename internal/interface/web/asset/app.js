@@ -18,6 +18,7 @@ const cache = {
   ticketQueues: [], states: [], priorities: [], types: [],
   found: {}, sysconfig: [], calendars: [], levels: [],
   macros: [], macroSteps: [], stepChoices: { queues: [], states: [], priorities: [], types: [] },
+  plans: [], planEvents: [],
 };
 
 /**
@@ -3344,6 +3345,7 @@ const PATTERN_MESSAGES = {
   [HOURS_PATTERN]: () => t('calendar.hoursFormat', 'Write the hours as 08:00–12:00, 13:00–17:00.'),
   '[0-9]{6}': () => t('valid.code', 'Please enter the six digits your authenticator app shows.'),
   '[A-Za-z]{3}': () => t('valid.currency', 'Please enter the three letters of a currency, such as EUR.'),
+  '[0-9]{2}:[0-9]{2}( *, *[0-9]{2}:[0-9]{2})*': () => t('plan.timesFormat', 'Write the times as 08:00, 12:30.'),
 };
 
 /** What a field's rule says about its value, or nothing where it has no objection. */
@@ -4869,10 +4871,10 @@ function swapTheLabel(node, key, english) {
 /** The weekdays in the order a working week is written, Monday first; 0 is Sunday. */
 const CALENDAR_WEEK = [1, 2, 3, 4, 5, 6, 0];
 
-/** A weekday's name in the reader's language. */
-function weekdayName(weekday) {
+/** A weekday's name in the reader's language, in full or as short as it is written. */
+function weekdayName(weekday, width = 'long') {
   // The 7th of January 2024 was a Sunday, so the 7th plus the weekday is that day.
-  return new Intl.DateTimeFormat(activeLocale(), { weekday: 'long', timeZone: 'UTC' })
+  return new Intl.DateTimeFormat(activeLocale(), { weekday: width, timeZone: 'UTC' })
     .format(new Date(Date.UTC(2024, 0, 7 + weekday)));
 }
 
@@ -5242,6 +5244,8 @@ async function loadAutomation() {
   if (!can('automation:write')) {
     cache.macros = [];
     cache.macroSteps = [];
+    cache.plans = [];
+    cache.planEvents = [];
 
     return;
   }
@@ -5249,12 +5253,14 @@ async function loadAutomation() {
   const named = can('tickets:read') || can('queues:write')
     ? ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path]
     : [];
-  const [macros, queues, states, priorities, types] = await Promise.all(
-    ['/macros', ...named].map((path) => api(path)),
+  const [macros, plans, queues, states, priorities, types] = await Promise.all(
+    ['/macros', '/exec-plans', ...named].map((path) => api(path)),
   );
 
   cache.macros = macros?.items ?? [];
   cache.macroSteps = macros?.steps ?? [];
+  cache.plans = plans?.items ?? [];
+  cache.planEvents = plans?.events ?? [];
   cache.stepChoices = {
     queues: queues?.items ?? [],
     states: states?.items ?? [],
@@ -5270,6 +5276,11 @@ async function loadAutomation() {
   const form = $('#form-macro');
   if (form && !beingEdited(form) && !form.elements.id.value) fillMacroSteps([]);
   showStepBound();
+
+  fillTable($('#table-plan tbody'), cache.plans.map(planRow), 4, t('plan.empty', 'No execution plans yet.'));
+
+  const planForm = $('#form-plan');
+  if (planForm && !beingEdited(planForm) && !planForm.elements.id.value) fillPlanForm(planForm, null);
 }
 
 /** One macro as a row of its card's table, its steps named in their order. */
@@ -5657,9 +5668,169 @@ function resetMacroForm() {
   $('#macro-cancel').hidden = true;
 }
 
+/**
+ * What each event a plan can run on is called. The server names them as KIX18
+ * names its ticket events.
+ */
+const PLAN_EVENT_TITLES = {
+  TicketCreate: 'Ticket opened',
+  TicketTitleUpdate: 'Title changed',
+  TicketQueueUpdate: 'Moved to another queue',
+  TicketStateUpdate: 'State changed',
+  TicketPriorityUpdate: 'Priority changed',
+  TicketTypeUpdate: 'Type changed',
+  TicketOwnerUpdate: 'Owner changed',
+  TicketResponsibleUpdate: 'Responsible changed',
+  TicketCustomerUpdate: 'Contact or organisation changed',
+  TicketLockUpdate: 'Locked or unlocked',
+  TicketPendingTimeUpdate: 'Waiting time changed',
+  ArticleCreate: 'Article added',
+};
+
+/** An event a plan can run on, in the reader's language. */
+function planEventName(event) {
+  return t(`planevent.${event}`, PLAN_EVENT_TITLES[event] ?? event);
+}
+
+/** When a plan runs, in words: its weekdays and times, or the events it waits for. */
+function planWhen(plan) {
+  if (plan.type === 'EventBased') return plan.events.map(planEventName).join(', ');
+
+  const days = CALENDAR_WEEK.filter((day) => plan.weekdays.includes(day)).map((day) => weekdayName(day, 'short'));
+
+  return fillIn(t('plan.atTimes', '{0} at {1}'), [days.join(', '), plan.times.join(', ')]);
+}
+
+/** One plan as a row of its card's table. */
+function planRow(plan) {
+  return el('tr', {},
+    el('td', { class: 'text', text: plan.name }),
+    el('td', { class: 'text', text: planWhen(plan) }),
+    el('td', { text: plan.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editPlan(plan) }),
+      deleteButton({
+        label: `${t('entity.plan', 'Execution plan')} "${plan.name}"`,
+        path: `/exec-plans/${plan.id}`,
+        message: t('msg.planDeleted', 'Execution plan deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/**
+ * Fills the plan form from a plan, or for a new one: a switch for each weekday,
+ * Monday first, and one for each event the server lists, on as the plan has
+ * them. The switches carry no name, for the reason the steps of a macro carry
+ * none.
+ */
+function fillPlanForm(form, plan) {
+  form.elements.type.value = plan?.type ?? 'TimeBased';
+  form.elements.times.value = (plan?.times ?? []).join(', ');
+
+  $('#plan-weekdays').replaceChildren(...CALENDAR_WEEK.map((day) =>
+    choiceSwitch({ 'data-weekday': String(day) }, weekdayName(day), plan?.weekdays.includes(day) ?? false)));
+  $('#plan-events').replaceChildren(...cache.planEvents.map((event) =>
+    choiceSwitch({ 'data-event': event }, planEventName(event), plan?.events.includes(event) ?? false)));
+
+  showPlanKind(form);
+}
+
+/** One switch of a form's choice of several - a weekday, an event - on or off, told apart by its mark. */
+function choiceSwitch(mark, words, on) {
+  return el('label', { class: 'switch perm-switch' },
+    el('input', { type: 'checkbox', checked: on, ...mark }),
+    el('span', { class: 'switch-track' }),
+    el('span', { class: 'perm-name', text: words }));
+}
+
+/**
+ * Shows what the plan's kind reads and puts the other kind's away. A hidden
+ * field that is still required cannot be submitted past, so the times are
+ * required only while they are on screen.
+ */
+function showPlanKind(form) {
+  const timed = form.elements.type.value === 'TimeBased';
+
+  $('#plan-time').hidden = !timed;
+  $('#plan-event').hidden = timed;
+  form.elements.times.required = timed;
+}
+
+/**
+ * Sends the plan form, making a plan or correcting one. The other kind's values
+ * go as nothing, because the server refuses them for a plan they do not apply
+ * to rather than keeping them to look as if they did.
+ */
+function savePlan(form) {
+  const id = form.elements.id.value;
+  const timed = form.elements.type.value === 'TimeBased';
+  const on = (selector) => $$(selector, form).filter((box) => box.checked);
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    type: form.elements.type.value,
+    weekdays: timed ? on('[data-weekday]').map((box) => Number(box.dataset.weekday)) : [],
+    times: timed ? form.elements.times.value.split(',').map((time) => time.trim()).filter(Boolean) : [],
+    events: timed ? [] : on('[data-event]').map((box) => box.dataset.event),
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id ? api(`/exec-plans/${id}`, { method: 'PUT', body }) : api('/exec-plans', { method: 'POST', body })),
+    id ? t('msg.planSaved', 'Execution plan saved') : t('msg.planCreated', 'Execution plan created'),
+    async () => { resetPlanForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a plan in the form, to correct it. */
+function editPlan(plan) {
+  const form = $('#form-plan');
+
+  form.elements.id.value = String(plan.id);
+  form.elements.name.value = plan.name;
+  form.elements.description.value = plan.description;
+  form.elements.valid.checked = plan.valid;
+  fillPlanForm(form, plan);
+
+  // Drawn rather than declared with a key, because it carries the plan's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#plan-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('planFormTitle', () => {
+    heading.textContent = t('plan.edit', 'Edit the execution plan {0}').replace('{0}', plan.name);
+  });
+
+  swapTheLabel($('#plan-submit'), 'action.save', 'Save');
+  $('#plan-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the plan form back to making a new one. */
+function resetPlanForm() {
+  const form = $('#form-plan');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillPlanForm(form, null);
+
+  stopRedrawing('planFormTitle');
+  swapTheLabel($('#plan-form-title'), 'plan.create', 'Add an execution plan');
+  swapTheLabel($('#plan-submit'), 'action.create', 'Create');
+  $('#plan-cancel').hidden = true;
+}
+
 /** Wires the automation screen's forms. */
 function wireAutomation() {
   const macroForm = $('#form-macro');
+  const planForm = $('#form-plan');
+
+  planForm.addEventListener('submit', (e) => { e.preventDefault(); savePlan(planForm); });
+  planForm.elements.type.addEventListener('change', () => showPlanKind(planForm));
+  $('#plan-cancel').addEventListener('click', resetPlanForm);
 
   macroForm.addEventListener('submit', (e) => { e.preventDefault(); saveMacro(macroForm); });
   $('#macro-cancel').addEventListener('click', resetMacroForm);
@@ -10073,6 +10244,8 @@ function forgetTheLastAccount() {
   cache.macros = [];
   cache.macroSteps = [];
   cache.stepChoices = { queues: [], states: [], priorities: [], types: [] };
+  cache.plans = [];
+  cache.planEvents = [];
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -10153,6 +10326,7 @@ function forgetTheLastAccount() {
   resetCalendarForm();
   resetSlaForm();
   resetMacroForm();
+  resetPlanForm();
   resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
@@ -10795,6 +10969,15 @@ const TOUR_STEPS = [
     text: () => t('tour.macros.text',
       'A macro is a run of steps taken on a ticket, in order. A job runs macros on the tickets it finds, as the '
       + 'application, so every step meets the rules a person\'s change meets and is written down with the ticket.'),
+  },
+  {
+    target: '#plan-card',
+    view: 'automation',
+    permission: 'automation:write',
+    title: () => t('tour.plans.title', 'When jobs run'),
+    text: () => t('tour.plans.text',
+      'An execution plan runs the jobs that name it at times of day on the weekdays it names, in the '
+      + 'installation\'s timezone, or when something happens to a ticket - once a person\'s change is written.'),
   },
   {
     target: '#sysconfig-card',
