@@ -17,6 +17,7 @@ const cache = {
   users: [], roles: [], permissions: [], queues: [],
   ticketQueues: [], states: [], priorities: [], types: [],
   found: {}, sysconfig: [], calendars: [], levels: [],
+  macros: [], macroSteps: [], stepChoices: { queues: [], states: [], priorities: [], types: [] },
 };
 
 /**
@@ -5197,6 +5198,483 @@ function wireSla() {
   $('#sla-cancel').addEventListener('click', resetSlaForm);
 }
 
+// -------------------------------------------------------------- automation
+
+/**
+ * What each step a macro can take is called. The server names them as KIX18
+ * names its ticket macro actions, which is right for the wire and nobody's word
+ * on a screen.
+ */
+const MACRO_STEP_TITLES = {
+  StateSet: 'Set the state',
+  PrioritySet: 'Set the priority',
+  TypeSet: 'Set the type',
+  TeamSet: 'Move to a queue',
+  OwnerSet: 'Set the owner',
+  ResponsibleSet: 'Set the responsible',
+  LockSet: 'Lock or unlock',
+  TitleSet: 'Set the title',
+  ContactSet: 'Set the contact',
+  OrganisationSet: 'Set the organisation',
+  ArticleCreate: 'Add an article',
+  TicketDelete: 'Delete the ticket',
+};
+
+/** A step a macro can take, in the reader's language. */
+function macroStepName(type) {
+  return t(`macrostep.${type}`, MACRO_STEP_TITLES[type] ?? type);
+}
+
+/**
+ * How many steps one macro holds, as model.MaxMacroActions says. Written here
+ * because the form needs it before it has asked anything;
+ * TestTheRowsAFormAddsStopWhereTheServerDoes holds the two together.
+ */
+const MAX_MACRO_STEPS = 50;
+
+/**
+ * Fills the automation screen, for whoever may set it up. What a step can name
+ * is read here as well, through the rights that read it, so that a role allowed
+ * the automation and not the tickets is offered nothing to name rather than a
+ * screenful of refusals.
+ */
+async function loadAutomation() {
+  if (!can('automation:write')) {
+    cache.macros = [];
+    cache.macroSteps = [];
+
+    return;
+  }
+
+  const named = can('tickets:read') || can('queues:write')
+    ? ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path]
+    : [];
+  const [macros, queues, states, priorities, types] = await Promise.all(
+    ['/macros', ...named].map((path) => api(path)),
+  );
+
+  cache.macros = macros?.items ?? [];
+  cache.macroSteps = macros?.steps ?? [];
+  cache.stepChoices = {
+    queues: queues?.items ?? [],
+    states: states?.items ?? [],
+    priorities: priorities?.items ?? [],
+    types: types?.items ?? [],
+  };
+
+  fillTable($('#table-macro tbody'), cache.macros.map(macroRow), 4, t('macro.empty', 'No macros yet.'));
+  fillSelect($('#macro-step-kind'),
+    cache.macroSteps.map((step) => ({ value: step.type, label: macroStepName(step.type) })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  const form = $('#form-macro');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillMacroSteps([]);
+  showStepBound();
+}
+
+/** One macro as a row of its card's table, its steps named in their order. */
+function macroRow(macro) {
+  const steps = macro.actions.map((action) => macroStepName(action.type)).join(', ');
+
+  return el('tr', {},
+    el('td', { class: 'text', text: macro.name }),
+    el('td', { class: 'text', text: steps || t('macro.noSteps', 'none') }),
+    el('td', { text: macro.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editMacro(macro) }),
+      deleteButton({
+        label: `${t('entity.macro', 'Macro')} "${macro.name}"`,
+        path: `/macros/${macro.id}`,
+        message: t('msg.macroDeleted', 'Macro deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/** Puts a macro's steps into the form in their order, or none for a new one. */
+function fillMacroSteps(actions) {
+  $('#macro-steps').replaceChildren(...actions.map((action) => macroStepRow(action.type, action.parameters)));
+  showStepBound();
+}
+
+/**
+ * Turns the button that adds a step off once the macro holds as many as the
+ * server keeps, rather than letting somebody fill one more in and be refused the
+ * whole macro on Save.
+ */
+function showStepBound() {
+  const button = $('#macro-add-step');
+  if (!button) return;
+
+  button.disabled = !cache.macroSteps.length || $$('#macro-steps > li').length >= MAX_MACRO_STEPS;
+}
+
+/**
+ * Marks a form as being filled in once the rows it keeps in order change.
+ * Adding, moving and taking out a row raise no input event, and a reload would
+ * otherwise put the form back to what the server holds and take the rows with
+ * it.
+ */
+function rowsChanged(form) {
+  form.dataset.editing = 'yes';
+  showStepBound();
+}
+
+/**
+ * One step of the macro form: what it does, a field for each value it reads in
+ * the order its definition gives them, and the buttons that move it and take it
+ * out. A step stays the kind it was added as; another kind is another step.
+ */
+function macroStepRow(type, parameters = {}) {
+  const definition = cache.macroSteps.find((step) => step.type === type);
+  const row = el('li', { 'data-step': type });
+  const name = el('strong', {});
+
+  // Declared with its key, so that a change of language reaches a step drawn
+  // before it.
+  swapTheLabel(name, `macrostep.${type}`, MACRO_STEP_TITLES[type] ?? type);
+
+  row.append(
+    orderedHead(row, name, '#macro-step-kind'),
+    el('div', { class: 'grid' },
+      ...(definition?.parameters ?? []).map((parameter) => stepField(parameter, parameters[parameter.name] ?? ''))),
+  );
+
+  if (type === 'StateSet') showWaiting(row);
+
+  return row;
+}
+
+/**
+ * The line heading a row of a list a form keeps in order: what the row is, and
+ * the buttons that move it and take it out. The buttons are declared with their
+ * keys, so that a change of language reaches a row drawn before it; a row taken
+ * out hands the focus to the choice of the next one to add.
+ */
+function orderedHead(row, name, next) {
+  const button = (mark, press) => {
+    const made = el('button', { type: 'button', class: `link ${mark}` });
+    made.addEventListener('click', () => press(made));
+
+    return made;
+  };
+  const up = button('ordered-up', (pressed) => moveRow(row, pressed, -1));
+  const down = button('ordered-down', (pressed) => moveRow(row, pressed, 1));
+  const out = button('ordered-remove', () => {
+    const form = row.closest('form');
+
+    row.remove();
+    rowsChanged(form);
+    $(next).focus();
+  });
+
+  swapTheLabel(up, 'macro.up', 'move up');
+  swapTheLabel(down, 'macro.down', 'move down');
+  swapTheLabel(out, 'macro.removeStep', 'remove');
+
+  return el('div', { class: 'row ordered-head' }, name, up, down, out);
+}
+
+/**
+ * Moves a row one place up or down. Moving a node takes the focus off it, so the
+ * button that was pressed is given it back: somebody moving a row from the
+ * keyboard presses again to move it further.
+ */
+function moveRow(row, button, by) {
+  const neighbour = by < 0 ? row.previousElementSibling : row.nextElementSibling;
+  if (!neighbour) return;
+
+  if (by < 0) neighbour.before(row);
+  else neighbour.after(row);
+
+  button.focus();
+  rowsChanged(row.closest('form'));
+}
+
+/**
+ * A step's field for one value it reads, as the value's kind asks: a record
+ * chosen by its id, a channel, a switch, a number of minutes or a text, bounded
+ * as the server bounds it. A person, a contact or an organisation can be left
+ * empty, which is how a step takes the ticket's away; a record a step needs is
+ * chosen rather than defaulted to whichever comes first.
+ *
+ * The fields carry no name, so that a draft of the form leaves them alone: a
+ * step is a row the script makes, and a draft can only put values back into
+ * fields that are there.
+ */
+function stepField(parameter, value) {
+  if (parameter.kind === 'switch') return stepSwitch(parameter, value);
+  if (parameter.kind === 'contact' || parameter.kind === 'organisation') return searchedStep(parameter, value);
+
+  let control;
+
+  if (parameter.kind === 'text') {
+    control = el('input', { type: 'text', maxlength: String(parameter.max), required: parameter.required, value });
+  } else if (parameter.kind === 'longText') {
+    control = el('textarea', { rows: '4', maxlength: String(parameter.max), required: parameter.required });
+    control.value = value;
+  } else if (parameter.kind === 'minutes') {
+    control = el('input', {
+      type: 'number', min: '0', max: String(parameter.max), step: '1', required: parameter.required, value,
+    });
+  } else {
+    let placeholder = t('ticket.nobody', 'nobody');
+    if (parameter.required) placeholder = parameter.kind === 'channel' ? undefined : t('macro.choose', 'Choose one');
+
+    control = el('select', { required: parameter.required });
+    fillSelect(control, stepChoices(parameter.kind, value), { placeholder, labelKey: 'label', valueKey: 'value' });
+    if (value || placeholder) control.value = value;
+  }
+
+  control.dataset.parameter = parameter.name;
+
+  return fieldLabelled(parameter.name, control, parameter.kind === 'longText');
+}
+
+/** A label naming a field as FIELD_NAMES does, around its control. */
+function fieldLabelled(name, control, wide = false) {
+  const label = el('label', wide ? { class: 'wide' } : {});
+
+  swapTheLabel(label, `field.${name}`, FIELD_NAMES[name] ?? name);
+  label.append(control);
+
+  return label;
+}
+
+/**
+ * What a step can name of one kind: the records still offered, and the one it
+ * names already, retired or not, so that opening a macro does not quietly change
+ * it - the server refuses a retired one on Save and says which step names it.
+ */
+function stepChoices(kind, current) {
+  const { queues, states, priorities, types } = cache.stepChoices;
+  const kept = (items) => items.filter((item) => item.valid || String(item.id) === current);
+  const byId = new Map(queues.map((queue) => [queue.id, queue]));
+
+  const choices = {
+    state: () => kept(states).filter((state) => state.type !== 'merged')
+      .map((state) => ({ value: String(state.id), label: statusName(state.name) })),
+    priority: () => kept(priorities)
+      .map((priority) => ({ value: String(priority.id), label: priorityName(priority.name) })),
+    type: () => kept(types).map((type) => ({ value: String(type.id), label: ticketTypeName(type.name) })),
+    queue: () => kept(queues).map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    user: () => cache.users.map((user) => ({ value: String(user.id), label: user.name || user.email })),
+    channel: () => Object.keys(CHANNEL_TITLES).map((channel) => ({ value: channel, label: channelName(channel) })),
+  }[kind]?.() ?? [];
+
+  if (current && !choices.some((choice) => choice.value === current)) {
+    choices.unshift({ value: current, label: `#${current}` });
+  }
+
+  return choices;
+}
+
+/** A step's switch, which the server reads as "true" or "false". */
+function stepSwitch(parameter, value) {
+  const box = el('input', { type: 'checkbox', checked: value === 'true' });
+  const words = el('span', { class: 'switch-label' });
+
+  box.dataset.parameter = parameter.name;
+  swapTheLabel(words, `field.${parameter.name}`, FIELD_NAMES[parameter.name] ?? parameter.name);
+
+  return el('label', { class: 'switch' }, box, el('span', { class: 'switch-track' }), words);
+}
+
+/** What the search beside a step's contact or organisation is called. */
+const STEP_SEARCHES = {
+  contact: { label: ['ticket.contactSearch', 'Find the contact'], hint: ['ticket.contactSearchHint', 'name or address'] },
+  organisation: {
+    label: ['customer.organisationSearch', 'Find the organisation'],
+    hint: ['customer.organisationSearchHint', 'name or number'],
+  },
+};
+
+/**
+ * A step's choice of contact or organisation, each of which runs to thousands:
+ * a box to search in and a select of what it finds, as every such choice is -
+ * see SEARCHED_KINDS. The one the step names is kept among the options whatever
+ * a search finds, and named once its record has been read. Without the right to
+ * read customers there is nothing to search, and the choice keeps what the step
+ * names by its number.
+ */
+function searchedStep(parameter, value) {
+  const kind = SEARCHED_KINDS[parameter.kind];
+  const words = STEP_SEARCHES[parameter.kind];
+  const select = el('select', {});
+  const reads = can('customers:read');
+  let asked = 0;
+  let typing;
+
+  select.dataset.parameter = parameter.name;
+
+  const offer = (entries, keep) => {
+    const choices = entries.map((entry) => ({ value: String(entry.id), label: kind.describe(entry) }));
+    if (keep && !choices.some((choice) => choice.value === keep.value)) choices.unshift(keep);
+
+    fillSelect(select, choices, { placeholder: t('ticket.nobody', 'nobody'), labelKey: 'label', valueKey: 'value' });
+    select.value = keep?.value ?? '';
+  };
+
+  offer([], keptEntry(value, ''));
+
+  if (value && reads) {
+    api(`${kind.path}/${value}`)
+      .then((record) => { if (record && select.value === value) offer([], keptEntry(value, kind.describe(record))); })
+      .catch((err) => toastFailure(err));
+  }
+
+  if (!reads) return fieldLabelled(parameter.name, select);
+
+  const search = el('input', {
+    type: 'search',
+    maxlength: '255',
+    placeholder: t(...words.hint),
+    'data-i18n-placeholder': words.hint[0],
+    'data-i18n-placeholder-source': words.hint[1],
+  });
+  const searchLabel = el('label', {});
+
+  swapTheLabel(searchLabel, ...words.label);
+  searchLabel.append(search);
+
+  search.addEventListener('input', () => {
+    clearTimeout(typing);
+    typing = setTimeout(async () => {
+      const mine = ++asked;
+      const query = new URLSearchParams({ limit: String(SEARCH_OFFERS), valid: 'true' });
+      if (search.value.trim()) query.set('q', search.value.trim());
+
+      try {
+        const entries = (await api(`${kind.path}?${query}`))?.items ?? [];
+        const kept = select.value
+          ? { value: select.value, label: select.selectedOptions[0]?.textContent ?? `#${select.value}` }
+          : null;
+
+        // A later search, or a form put back in the meantime, has the say.
+        if (mine === asked && select.isConnected) offer(entries, kept);
+      } catch (err) {
+        toastFailure(err);
+      }
+    }, 300);
+  });
+
+  return el('div', { class: 'grid-passthrough' }, searchLabel, fieldLabelled(parameter.name, select));
+}
+
+/**
+ * Shows the minutes a waiting state waits for beside a state that waits, and
+ * asks for them there: the server wants them for such a state and refuses them
+ * for any other.
+ */
+function showWaiting(row) {
+  const state = $('[data-parameter="stateId"]', row);
+  const minutes = $('[data-parameter="pendingMinutes"]', row);
+  if (!state || !minutes) return;
+
+  const show = () => {
+    const chosen = cache.stepChoices.states.find((candidate) => String(candidate.id) === state.value);
+    const waits = chosen?.type === 'pending-reminder' || chosen?.type === 'pending-auto';
+
+    minutes.closest('label').hidden = !waits;
+    minutes.required = waits;
+    minutes.min = waits ? '1' : '0';
+    if (!waits) minutes.value = '';
+  };
+
+  state.addEventListener('change', show);
+  show();
+}
+
+/** The steps the form holds, in order, with what each of their fields says. */
+function macroStepsOf() {
+  return $$('#macro-steps > li').map((row) => {
+    const parameters = {};
+
+    for (const field of $$('[data-parameter]', row)) {
+      const value = field.type === 'checkbox' ? String(field.checked) : field.value.trim();
+      if (value) parameters[field.dataset.parameter] = value;
+    }
+
+    return { type: row.dataset.step, parameters };
+  });
+}
+
+/** Sends the macro form, making a macro or correcting one. */
+function saveMacro(form) {
+  const id = form.elements.id.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    actions: macroStepsOf(),
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id ? api(`/macros/${id}`, { method: 'PUT', body }) : api('/macros', { method: 'POST', body })),
+    id ? t('msg.macroSaved', 'Macro saved') : t('msg.macroCreated', 'Macro created'),
+    async () => { resetMacroForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a macro in the form, to correct it. */
+function editMacro(macro) {
+  const form = $('#form-macro');
+
+  form.elements.id.value = String(macro.id);
+  form.elements.name.value = macro.name;
+  form.elements.description.value = macro.description;
+  form.elements.valid.checked = macro.valid;
+  fillMacroSteps(macro.actions);
+
+  // Drawn rather than declared with a key, because it carries the macro's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#macro-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('macroFormTitle', () => {
+    heading.textContent = t('macro.edit', 'Edit the macro {0}').replace('{0}', macro.name);
+  });
+
+  swapTheLabel($('#macro-submit'), 'action.save', 'Save');
+  $('#macro-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the macro form back to making a new one. */
+function resetMacroForm() {
+  const form = $('#form-macro');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillMacroSteps([]);
+
+  stopRedrawing('macroFormTitle');
+  swapTheLabel($('#macro-form-title'), 'macro.create', 'Add a macro');
+  swapTheLabel($('#macro-submit'), 'action.create', 'Create');
+  $('#macro-cancel').hidden = true;
+}
+
+/** Wires the automation screen's forms. */
+function wireAutomation() {
+  const macroForm = $('#form-macro');
+
+  macroForm.addEventListener('submit', (e) => { e.preventDefault(); saveMacro(macroForm); });
+  $('#macro-cancel').addEventListener('click', resetMacroForm);
+
+  $('#macro-add-step').addEventListener('click', () => {
+    const type = $('#macro-step-kind').value;
+    if (!type) return;
+
+    const row = macroStepRow(type);
+    $('#macro-steps').append(row);
+    rowsChanged(macroForm);
+    $('select, input, textarea', row)?.focus();
+  });
+}
+
 // ---------------------------------------------------- system configuration
 
 /**
@@ -9592,6 +10070,9 @@ function forgetTheLastAccount() {
   cache.sysconfig = [];
   cache.calendars = [];
   cache.levels = [];
+  cache.macros = [];
+  cache.macroSteps = [];
+  cache.stepChoices = { queues: [], states: [], priorities: [], types: [] };
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -9671,6 +10152,7 @@ function forgetTheLastAccount() {
   resetSysConfigForm();
   resetCalendarForm();
   resetSlaForm();
+  resetMacroForm();
   resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
@@ -10304,6 +10786,15 @@ const TOUR_STEPS = [
       'Minutes until the first answer and until the solution, counted in the level\'s calendar, in the installation\'s '
       + 'where it names none, or around the clock. A queue '
       + 'names the level its new tickets start with, and a ticket past its moment is marked overdue.'),
+  },
+  {
+    target: '#macro-card',
+    view: 'automation',
+    permission: 'automation:write',
+    title: () => t('tour.macros.title', 'What the application does by itself'),
+    text: () => t('tour.macros.text',
+      'A macro is a run of steps taken on a ticket, in order. A job runs macros on the tickets it finds, as the '
+      + 'application, so every step meets the rules a person\'s change meets and is written down with the ticket.'),
   },
   {
     target: '#sysconfig-card',
@@ -14599,6 +15090,7 @@ async function refreshAll() {
   await loadCustomers();
   await loadTickets();
   await loadUsers();
+  await loadAutomation();
   await loadAdmin();
   await loadTokens();
   await loadAndroidCode();
@@ -14670,6 +15162,7 @@ function wireForms() {
   wireCalendars();
   wireSla();
   wireUnlockTypes();
+  wireAutomation();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();

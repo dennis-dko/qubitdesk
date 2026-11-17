@@ -76,7 +76,7 @@ func scriptTitles(t *testing.T, table string) map[string]struct{} {
 
 	titles := map[string]struct{}{}
 
-	for _, match := range regexp.MustCompile(`(?m)^\s*'?([a-z-]+)'?:`).FindAllStringSubmatch(body[1], -1) {
+	for _, match := range regexp.MustCompile(`(?m)^\s*'?([A-Za-z-]+)'?:`).FindAllStringSubmatch(body[1], -1) {
 		titles[match[1]] = struct{}{}
 	}
 
@@ -123,6 +123,11 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		channels[string(channel)] = struct{}{}
 	}
 
+	steps := map[string]struct{}{}
+	for _, step := range model.MacroActionDefinitions() {
+		steps[string(step.Type)] = struct{}{}
+	}
+
 	for _, family := range []struct {
 		prefix, titles string
 		shipped        map[string]struct{}
@@ -134,6 +139,7 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		{"followup.", "FOLLOW_UP_TITLES", followUps},
 		{"queueaccess.", "ACCESS_TITLES", levels},
 		{"channel.", "CHANNEL_TITLES", channels},
+		{"macrostep.", "MACRO_STEP_TITLES", steps},
 	} {
 		english := scriptTitles(t, family.titles)
 

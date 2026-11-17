@@ -158,6 +158,9 @@ func TestTheFormLimitsAreTheOnesTheServerEnforces(t *testing.T) {
 		"form-contact/email":        model.MaxEmailLength,
 		"form-contact/phone":        model.MaxPhoneLength,
 		"form-contact/note":         model.MaxDescriptionLength,
+
+		"form-macro/name":        model.MaxCatalogNameLength,
+		"form-macro/description": model.MaxDescriptionLength,
 	} {
 		t.Run(key, func(t *testing.T) {
 			field, found := fields[key]
@@ -179,5 +182,30 @@ func TestTheFormLimitsAreTheOnesTheServerEnforces(t *testing.T) {
 				t.Errorf("the form allows %d characters and the server allows %d", written, limit)
 			}
 		})
+	}
+}
+
+// A form that adds rows stops where the server does.
+//
+// The macro form adds a step at a time, and a step past the server's bound would
+// be filled in and then refused with the whole macro on Save. The bound is a
+// constant in the script, because the form needs it before it has asked the
+// server anything, and this holds the constant to the model.
+func TestTheRowsAFormAddsStopWhereTheServerDoes(t *testing.T) {
+	js := asset(t, "/app.js")
+
+	for name, limit := range map[string]int{
+		"MAX_MACRO_STEPS": model.MaxMacroActions,
+	} {
+		found := regexp.MustCompile(`const ` + name + ` = (\d+);`).FindStringSubmatch(js)
+		if found == nil {
+			t.Errorf("app.js does not declare %s", name)
+
+			continue
+		}
+
+		if written, _ := strconv.Atoi(found[1]); written != limit {
+			t.Errorf("%s is %d and the server keeps %d", name, written, limit)
+		}
 	}
 }

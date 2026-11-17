@@ -74,6 +74,11 @@
         <circle cx="15" cy="7" r="2"/>
         <circle cx="9" cy="17" r="2"/>
       </symbol>
+      <symbol id="icon-automation" viewBox="0 0 24 24">
+        <path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/>
+        <path d="M19.5 4.5v3.6h-3.6"/>
+        <path d="m10 8.8 5 3.2-5 3.2z"/>
+      </symbol>
       <symbol id="icon-account" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="9"/>
         <circle cx="12" cy="9.8" r="3.2"/>
@@ -203,6 +208,7 @@
       <button class="tab" data-view="users" data-perm="users:read" data-i18n="nav.users">Users<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-users"/></svg></button>
       <button class="tab" data-view="roles" data-perm="roles:read" data-i18n="nav.roles">Roles<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-roles"/></svg></button>
       <button class="tab" data-view="ticketsetup" data-perm="queues:write" data-i18n="nav.ticketSetup">Ticket setup<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-ticketsetup"/></svg></button>
+      <button class="tab" data-view="automation" data-perm="automation:write" data-i18n="nav.automation">Automation<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-automation"/></svg></button>
       <button class="tab" data-view="settings" data-i18n="nav.settings">My account<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-account"/></svg></button>
       <button class="tab" data-view="admin" id="tab-admin" hidden data-perm="settings:manage" data-i18n="nav.admin">Settings<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-admin"/></svg></button>
     </nav>
@@ -1061,6 +1067,47 @@
           <div class="row">
             <button type="submit" id="sla-submit" data-i18n="action.create">Create</button>
             <button type="button" class="link" id="sla-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- What the application does to tickets by itself: the macros, when they
+         run, and the jobs that run them on the tickets they find. -->
+    <section id="view-automation" class="view" hidden>
+      <div class="card" id="macro-card">
+        <h2 data-i18n="macro.title">Macros</h2>
+        <p class="muted" data-i18n="macro.hint">Steps taken on a ticket, in order. A job runs them on every ticket it finds, as the application, so each step meets the rules a person's change meets.</p>
+        <div class="table-wrap">
+          <table id="table-macro">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="field.actions">Steps</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-macro" class="form">
+          <h3 id="macro-form-title" data-i18n="macro.create">Add a macro</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="120" required></label>
+            <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <h4 data-i18n="field.actions">Steps</h4>
+          <ol id="macro-steps" class="ordered"></ol>
+          <div class="row ordered-new">
+            <label data-i18n="macro.stepKind">Add a step<select id="macro-step-kind" data-not-an-edit></select></label>
+            <button type="button" class="secondary" id="macro-add-step" data-i18n="macro.addStep">Add</button>
+          </div>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="automation.offered">Offered for jobs</span></label>
+          <div class="row">
+            <button type="submit" id="macro-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="macro-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
           </div>
         </form>
       </div>

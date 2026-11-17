@@ -339,6 +339,14 @@ func TestNoTranslationIsUnused(t *testing.T) {
 				}
 			}
 
+			// The steps a macro can take, looked up as t(`macrostep.${type}`) from the
+			// definitions the server lists.
+			if step, isStep := strings.CutPrefix(key, "macrostep."); isStep {
+				if _, known := model.MacroActionDefinitionOf(model.MacroActionType(step)); known {
+					continue
+				}
+			}
+
 			// What an option of the system configuration does, looked up as
 			// t(`sysconfig.${option.name}`) from the listing the server sent.
 			// TestEveryConfigOptionIsDescribedInGerman holds them to the options.
