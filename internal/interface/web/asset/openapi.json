@@ -3268,13 +3268,16 @@
           "automation"
         ],
         "summary": "Delete a macro",
-        "description": "Takes `automation:write`.",
+        "description": "One a job uses is refused with how many: make it invalid instead. Takes `automation:write`.",
         "responses": {
           "204": {
             "description": "Deleted"
           },
           "404": {
             "description": "Not found"
+          },
+          "409": {
+            "description": "Jobs use it"
           }
         }
       }
@@ -3460,13 +3463,16 @@
           "automation"
         ],
         "summary": "Delete an execution plan",
-        "description": "Takes `automation:write`.",
+        "description": "One a job uses is refused with how many: make it invalid instead. Takes `automation:write`.",
         "responses": {
           "204": {
             "description": "Deleted"
           },
           "404": {
             "description": "Not found"
+          },
+          "409": {
+            "description": "Jobs use it"
           }
         }
       }
@@ -3529,6 +3535,232 @@
           },
           "409": {
             "description": "New or open left out"
+          }
+        }
+      }
+    },
+    "/jobs": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "List the jobs",
+        "description": "Each with its criteria, the macros it runs in order, the plans that say when and when it last ran. Takes `automation:write`.",
+        "responses": {
+          "200": {
+            "description": "The jobs"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Create a job",
+        "description": "Needs a `name`, `criteria` naming something - a job that would take every ticket there is is refused - and at least one macro. What it names has to be there, and a retired macro or plan is not named anew. Takes `automation:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  },
+                  "criteria": {
+                    "type": "object",
+                    "description": "What a ticket has to be for the job to take it; a list naming none takes every one, and criteria naming nothing at all are refused",
+                    "properties": {
+                      "queueIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
+                      "stateIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
+                      "priorityIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
+                      "typeIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
+                      "locked": {
+                        "type": "boolean",
+                        "description": "Locked or not, where it is said"
+                      }
+                    }
+                  },
+                  "macroIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "description": "The macros the job runs on each ticket, in order; one may come twice"
+                  },
+                  "planIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "description": "The execution plans that say when the job runs; none runs it only by hand"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the job cannot be stored with"
+          },
+          "409": {
+            "description": "Another job has that name"
+          }
+        }
+      }
+    },
+    "/jobs/{id}": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Read a job",
+        "description": "Takes `automation:write`.",
+        "responses": {
+          "200": {
+            "description": "The job"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Change a job",
+        "description": "A field left out stays as it was; `criteria`, `macroIds` and `planIds`, sent, take the place of what the job had. A retired macro or plan it already named is kept. Takes `automation:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  },
+                  "criteria": {
+                    "type": "object",
+                    "description": "What a ticket has to be for the job to take it; a list naming none takes every one, and criteria naming nothing at all are refused",
+                    "properties": {
+                      "queueIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
+                      "stateIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
+                      "priorityIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
+                      "typeIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
+                      "locked": {
+                        "type": "boolean",
+                        "description": "Locked or not, where it is said"
+                      }
+                    }
+                  },
+                  "macroIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "description": "The macros the job runs on each ticket, in order; one may come twice"
+                  },
+                  "planIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "description": "The execution plans that say when the job runs; none runs it only by hand"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the job cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another job has that name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Delete a job",
+        "description": "Takes `automation:write`.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
           }
         }
       }

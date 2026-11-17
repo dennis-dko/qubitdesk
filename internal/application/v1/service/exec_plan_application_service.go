@@ -73,9 +73,22 @@ func (s *ExecPlanApplicationService) Update(ctx context.Context, id uint, cmd co
 	return s.plans.Update(ctx, plan)
 }
 
+// Delete deletes a plan no job names. One a job names is refused, with how
+// many, and is retired instead - made invalid - so that it runs nothing and the
+// jobs keep it.
 func (s *ExecPlanApplicationService) Delete(ctx context.Context, id uint) error {
-	if id == 0 {
-		return apperror.InvalidFields("id")
+	plan, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	jobs, err := s.plans.CountJobs(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if jobs > 0 {
+		return apperror.Conflictf("%d job(s) run on the plan %q", jobs, plan.Name).WithCode("planInUse", plan.Name, jobs)
 	}
 
 	return s.plans.Delete(ctx, id)

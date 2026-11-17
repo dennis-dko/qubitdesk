@@ -171,7 +171,50 @@ func All(dialect string) map[int64]migration.Migrate {
 		// ships.
 		20261117010200: {UP: func(d migration.Datasource) error { return addStateNextState(d, dialect) }},
 		20261117010300: {UP: func(d migration.Datasource) error { return seedPendingCloseNextState(d, dialect) }},
+
+		// What the automation runs: jobs, the macros each runs in order, and the
+		// plans that say when.
+		20261117020000: {UP: func(d migration.Datasource) error { return createJobs(d, dialect) }},
+		20261117020100: {UP: func(d migration.Datasource) error { return createJobMacros(d, dialect) }},
+		20261117020200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_job_macros_job", "job_macros", "job_id")
+		}},
+		20261117020300: {UP: func(d migration.Datasource) error { return createJobPlans(d, dialect) }},
 	}
+}
+
+// createJobs keeps what the automation does by itself, as KIX18 keeps its jobs:
+// the criteria a ticket has to meet, as a JSON object, and when the job last
+// ran, which a time-based plan counts from.
+func createJobs(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE jobs (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		criteria %[4]s NOT NULL,
+		last_run_at %[5]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), longText(dialect), timestamp(dialect)))
+}
+
+// createJobMacros keeps the macros a job runs, in the order it runs them; one
+// may come twice.
+func createJobMacros(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE job_macros (
+		%[1]s,
+		job_id %[2]s NOT NULL REFERENCES jobs(id),
+		macro_id %[2]s NOT NULL REFERENCES macros(id),
+		position INT NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect)))
+}
+
+// createJobPlans keeps the plans that say when a job runs, each once.
+func createJobPlans(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE job_plans (
+		job_id %[1]s NOT NULL REFERENCES jobs(id),
+		plan_id %[1]s NOT NULL REFERENCES exec_plans(id),
+		PRIMARY KEY (job_id, plan_id)
+	)`, foreignKeyID(dialect)))
 }
 
 // addStateNextState names, for a state that waits to move a ticket on by

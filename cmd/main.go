@@ -639,6 +639,11 @@ func main() {
 	sysConfig := appservice.NewSysConfigService(settingsRepo)
 	calendarRepo := sqldb.NewCalendarRepository(db, cfg.Dialect)
 	calendars := appservice.NewCalendarApplicationService(calendarRepo).WithConfig(sysConfig)
+	macroRepo := sqldb.NewMacroRepository(db, cfg.Dialect)
+	planRepo := sqldb.NewExecPlanRepository(db, cfg.Dialect)
+	automationRefs := appservice.MacroReferences{
+		Catalog: catalogRepos, Customers: customerRepos, Queues: queueRepo, Users: userRepo,
+	}
 	sysConfig.WithCheck(model.ConfigTimeWorkingHours, calendars.CanBeTheInstallations)
 	tickets := appservice.NewTicketApplicationService(sqldb.NewTicketRepository(db, cfg.Dialect), queueRepo,
 		catalogRepos, customerRepos, userRepo, roleRepo, func(ctx context.Context) string {
@@ -1028,13 +1033,11 @@ func main() {
 		Levels: rest.NewServiceLevelHandler(
 			appservice.NewSLAApplicationService(levelRepo, calendarRepo),
 			authorizer),
-		Macros: rest.NewMacroHandler(
-			appservice.NewMacroApplicationService(sqldb.NewMacroRepository(db, cfg.Dialect), appservice.MacroReferences{
-				Catalog: catalogRepos, Customers: customerRepos, Queues: queueRepo, Users: userRepo,
-			}),
+		Macros: rest.NewMacroHandler(appservice.NewMacroApplicationService(macroRepo, automationRefs), authorizer),
+		Plans:  rest.NewExecPlanHandler(appservice.NewExecPlanApplicationService(planRepo), authorizer),
+		Jobs: rest.NewJobHandler(
+			appservice.NewJobApplicationService(sqldb.NewJobRepository(db, cfg.Dialect), macroRepo, planRepo, automationRefs),
 			authorizer),
-		Plans: rest.NewExecPlanHandler(
-			appservice.NewExecPlanApplicationService(sqldb.NewExecPlanRepository(db, cfg.Dialect)), authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves

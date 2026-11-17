@@ -36,6 +36,7 @@ type Handlers struct {
 	Levels    *rest.ServiceLevelHandler
 	Macros    *rest.MacroHandler
 	Plans     *rest.ExecPlanHandler
+	Jobs      *rest.JobHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -280,6 +281,12 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.POST(base+"/exec-plans", h.Plans.Create)
 	app.PUT(base+"/exec-plans/{id}", h.Plans.Update)
 	app.DELETE(base+"/exec-plans/{id}", h.Plans.Delete)
+
+	app.GET(base+"/jobs", h.Jobs.List)
+	app.GET(base+"/jobs/{id}", h.Jobs.Get)
+	app.POST(base+"/jobs", h.Jobs.Create)
+	app.PUT(base+"/jobs/{id}", h.Jobs.Update)
+	app.DELETE(base+"/jobs/{id}", h.Jobs.Delete)
 
 	app.GET(base+"/ticket-types", h.Catalog.ListTypes)
 	app.GET(base+"/ticket-types/{id}", h.Catalog.GetType)

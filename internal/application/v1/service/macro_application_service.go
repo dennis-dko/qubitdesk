@@ -74,9 +74,21 @@ func (s *MacroApplicationService) Update(ctx context.Context, id uint, cmd comma
 	return s.macros.Update(ctx, macro)
 }
 
+// Delete deletes a macro no job runs. One a job runs is refused, with how many,
+// and is retired instead - made invalid - so that the jobs keep it and skip it.
 func (s *MacroApplicationService) Delete(ctx context.Context, id uint) error {
-	if id == 0 {
-		return apperror.InvalidFields("id")
+	macro, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	jobs, err := s.macros.CountJobs(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if jobs > 0 {
+		return apperror.Conflictf("%d job(s) run the macro %q", jobs, macro.Name).WithCode("macroInUse", macro.Name, jobs)
 	}
 
 	return s.macros.Delete(ctx, id)

@@ -17,6 +17,7 @@ type ExecPlanRepository struct {
 	mu    sync.Mutex
 	plans map[uint]model.ExecPlan
 	next  uint
+	jobs  map[uint]int
 }
 
 // NewExecPlanRepository creates an empty plan repository.
@@ -119,4 +120,24 @@ func copyPlan(plan model.ExecPlan) *model.ExecPlan {
 	copied.Events = slices.Clone(plan.Events)
 
 	return &copied
+}
+
+// UseInJobs says how many jobs use the record, since the jobs are kept
+// elsewhere.
+func (r *ExecPlanRepository) UseInJobs(id uint, count int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.jobs == nil {
+		r.jobs = map[uint]int{}
+	}
+
+	r.jobs[id] = count
+}
+
+func (r *ExecPlanRepository) CountJobs(_ context.Context, id uint) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.jobs[id], nil
 }

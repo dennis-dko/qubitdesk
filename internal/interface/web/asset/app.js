@@ -535,6 +535,9 @@ const FIELD_NAMES = {
   events: 'Events',
   types: 'State types',
   nextStateId: 'Moves on to',
+  criteria: 'Which tickets',
+  macroIds: 'Macros',
+  planIds: 'Execution plans',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -8284,6 +8287,9 @@ const CHANGE_SENTENCES = {
   'execPlan.created': () => t('change.execPlanCreated', 'Created the execution plan {0}'),
   'execPlan.updated': () => t('change.execPlanUpdated', 'Changed the execution plan {0}'),
   'execPlan.deleted': () => t('change.execPlanDeleted', 'Deleted the execution plan {0}'),
+  'job.created': () => t('change.jobCreated', 'Created the job {0}'),
+  'job.updated': () => t('change.jobUpdated', 'Changed the job {0}'),
+  'job.deleted': () => t('change.jobDeleted', 'Deleted the job {0}'),
   'sysconfig.set': () => t('change.sysconfigSet', 'Changed the option {1}'),
   'sysconfig.reset': () => t('change.sysconfigReset', 'Put the option {1} back to its default'),
 };

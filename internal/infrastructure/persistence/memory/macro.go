@@ -18,6 +18,7 @@ type MacroRepository struct {
 	mu     sync.Mutex
 	macros map[uint]model.Macro
 	next   uint
+	jobs   map[uint]int
 }
 
 // NewMacroRepository creates an empty macro repository.
@@ -125,4 +126,24 @@ func copyMacro(macro model.Macro) *model.Macro {
 	}
 
 	return &copied
+}
+
+// UseInJobs says how many jobs use the record, since the jobs are kept
+// elsewhere.
+func (r *MacroRepository) UseInJobs(id uint, count int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.jobs == nil {
+		r.jobs = map[uint]int{}
+	}
+
+	r.jobs[id] = count
+}
+
+func (r *MacroRepository) CountJobs(_ context.Context, id uint) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.jobs[id], nil
 }

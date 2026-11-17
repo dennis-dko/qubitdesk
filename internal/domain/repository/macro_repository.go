@@ -14,4 +14,8 @@ type MacroRepository interface {
 	Save(ctx context.Context, macro *model.Macro) (*model.Macro, error)
 	Update(ctx context.Context, macro *model.Macro) (*model.Macro, error)
 	Delete(ctx context.Context, id uint) error
+
+	// CountJobs reports how many jobs run the macro, so that one in use is
+	// retired rather than deleted from under them.
+	CountJobs(ctx context.Context, id uint) (int, error)
 }

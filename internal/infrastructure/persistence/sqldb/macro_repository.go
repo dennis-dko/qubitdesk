@@ -219,3 +219,14 @@ func translateMacroErr(err error, name string) error {
 
 	return apperror.Internal(err)
 }
+
+func (r *MacroRepository) CountJobs(ctx context.Context, id uint) (int, error) {
+	var count int
+
+	if err := r.db.QueryRowContext(ctx, r.rebind("SELECT COUNT(DISTINCT job_id) FROM job_macros WHERE macro_id = ?"), id).
+		Scan(&count); err != nil {
+		return 0, apperror.Internal(err)
+	}
+
+	return count, nil
+}
