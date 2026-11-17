@@ -355,6 +355,14 @@ func TestNoTranslationIsUnused(t *testing.T) {
 				}
 			}
 
+			// What started a job's run, looked up as t(`runtrigger.${trigger}`) from
+			// the runs the server lists.
+			if trigger, isTrigger := strings.CutPrefix(key, "runtrigger."); isTrigger {
+				if slices.Contains(runTriggers(), model.RunTrigger(trigger)) {
+					continue
+				}
+			}
+
 			// What an option of the system configuration does, looked up as
 			// t(`sysconfig.${option.name}`) from the listing the server sent.
 			// TestEveryConfigOptionIsDescribedInGerman holds them to the options.

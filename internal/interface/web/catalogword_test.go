@@ -133,6 +133,11 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		events[string(event)] = struct{}{}
 	}
 
+	triggers := map[string]struct{}{}
+	for _, trigger := range runTriggers() {
+		triggers[string(trigger)] = struct{}{}
+	}
+
 	for _, family := range []struct {
 		prefix, titles string
 		shipped        map[string]struct{}
@@ -146,6 +151,7 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		{"channel.", "CHANNEL_TITLES", channels},
 		{"macrostep.", "MACRO_STEP_TITLES", steps},
 		{"planevent.", "PLAN_EVENT_TITLES", events},
+		{"runtrigger.", "RUN_TRIGGER_TITLES", triggers},
 	} {
 		english := scriptTitles(t, family.titles)
 
@@ -202,4 +208,10 @@ func TestEveryConfigOptionIsDescribedInGerman(t *testing.T) {
 			}
 		}
 	}
+}
+
+// runTriggers are what can start a job's run. The model names them as constants
+// and lists them nowhere, because nothing but the screen asks for all three.
+func runTriggers() []model.RunTrigger {
+	return []model.RunTrigger{model.RunManual, model.RunTime, model.RunEvent}
 }

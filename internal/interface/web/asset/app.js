@@ -18,7 +18,7 @@ const cache = {
   ticketQueues: [], states: [], priorities: [], types: [],
   found: {}, sysconfig: [], calendars: [], levels: [],
   macros: [], macroSteps: [], stepChoices: { queues: [], states: [], priorities: [], types: [] },
-  plans: [], planEvents: [],
+  plans: [], planEvents: [], jobs: [],
 };
 
 /**
@@ -5246,6 +5246,7 @@ async function loadAutomation() {
     cache.macroSteps = [];
     cache.plans = [];
     cache.planEvents = [];
+    cache.jobs = [];
 
     return;
   }
@@ -5253,14 +5254,15 @@ async function loadAutomation() {
   const named = can('tickets:read') || can('queues:write')
     ? ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path]
     : [];
-  const [macros, plans, queues, states, priorities, types] = await Promise.all(
-    ['/macros', '/exec-plans', ...named].map((path) => api(path)),
+  const [macros, plans, jobs, queues, states, priorities, types] = await Promise.all(
+    ['/macros', '/exec-plans', '/jobs', ...named].map((path) => api(path)),
   );
 
   cache.macros = macros?.items ?? [];
   cache.macroSteps = macros?.steps ?? [];
   cache.plans = plans?.items ?? [];
   cache.planEvents = plans?.events ?? [];
+  cache.jobs = jobs?.items ?? [];
   cache.stepChoices = {
     queues: queues?.items ?? [],
     states: states?.items ?? [],
@@ -5275,12 +5277,25 @@ async function loadAutomation() {
 
   const form = $('#form-macro');
   if (form && !beingEdited(form) && !form.elements.id.value) fillMacroSteps([]);
-  showStepBound();
 
   fillTable($('#table-plan tbody'), cache.plans.map(planRow), 4, t('plan.empty', 'No execution plans yet.'));
 
   const planForm = $('#form-plan');
   if (planForm && !beingEdited(planForm) && !planForm.elements.id.value) fillPlanForm(planForm, null);
+
+  fillTable($('#table-job tbody'), cache.jobs.map(jobRow), 6, t('job.empty', 'No jobs yet.'));
+  fillSelect($('#job-macro-kind'),
+    cache.macros.filter((macro) => macro.valid).map((macro) => ({ value: String(macro.id), label: macro.name })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  const jobForm = $('#form-job');
+  if (jobForm && !beingEdited(jobForm) && !jobForm.elements.id.value) fillJobForm(jobForm, null);
+  showRowBounds();
+
+  fillSelect($('#form-run')?.elements.job,
+    cache.jobs.map((job) => ({ value: String(job.id), label: job.name })),
+    { labelKey: 'label', valueKey: 'value' });
+  await loadRuns();
 }
 
 /** One macro as a row of its card's table, its steps named in their order. */
@@ -5305,19 +5320,23 @@ function macroRow(macro) {
 /** Puts a macro's steps into the form in their order, or none for a new one. */
 function fillMacroSteps(actions) {
   $('#macro-steps').replaceChildren(...actions.map((action) => macroStepRow(action.type, action.parameters)));
-  showStepBound();
+  showRowBounds();
 }
 
 /**
- * Turns the button that adds a step off once the macro holds as many as the
- * server keeps, rather than letting somebody fill one more in and be refused the
- * whole macro on Save.
+ * Turns a button that adds a row off once its list holds as many as the server
+ * keeps - a macro's steps, a job's macros - rather than letting somebody add one
+ * more and be refused the whole record on Save, and while there is nothing to
+ * add.
  */
-function showStepBound() {
-  const button = $('#macro-add-step');
-  if (!button) return;
-
-  button.disabled = !cache.macroSteps.length || $$('#macro-steps > li').length >= MAX_MACRO_STEPS;
+function showRowBounds() {
+  for (const [button, choice, rows, most] of [
+    ['#macro-add-step', '#macro-step-kind', '#macro-steps > li', MAX_MACRO_STEPS],
+    ['#job-add-macro', '#job-macro-kind', '#job-macros > li', MAX_JOB_MACROS],
+  ]) {
+    const add = $(button);
+    if (add) add.disabled = !$(choice)?.options.length || $$(rows).length >= most;
+  }
 }
 
 /**
@@ -5328,7 +5347,7 @@ function showStepBound() {
  */
 function rowsChanged(form) {
   form.dataset.editing = 'yes';
-  showStepBound();
+  showRowBounds();
 }
 
 /**
@@ -5823,10 +5842,285 @@ function resetPlanForm() {
   $('#plan-cancel').hidden = true;
 }
 
+/**
+ * How many macros one job runs, as model.MaxJobMacros says; written here for
+ * the reason MAX_MACRO_STEPS is.
+ */
+const MAX_JOB_MACROS = 20;
+
+/** What started a run, in words. */
+const RUN_TRIGGER_TITLES = {
+  manual: 'by hand',
+  time: "at its plan's time",
+  event: 'on an event',
+};
+
+/** What started a run, in the reader's language. */
+function runTriggerName(trigger) {
+  return t(`runtrigger.${trigger}`, RUN_TRIGGER_TITLES[trigger] ?? trigger);
+}
+
+/** A macro's name, or its number where it is gone. */
+function macroName(id) {
+  return cache.macros.find((macro) => macro.id === id)?.name ?? `#${id}`;
+}
+
+/** One job as a row of its card's table. */
+function jobRow(job) {
+  const planName = (id) => cache.plans.find((plan) => plan.id === id)?.name ?? `#${id}`;
+
+  return el('tr', {},
+    el('td', { class: 'text', text: job.name }),
+    el('td', { class: 'text', text: job.macroIds.map(macroName).join(', ') }),
+    el('td', { class: 'text', text: job.planIds.map(planName).join(', ') || t('job.byHandOnly', 'by hand only') }),
+    el('td', { text: fmtMoment(job.lastRunAt) }),
+    el('td', { text: job.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editJob(job) }),
+      el('button', { class: 'link', text: t('job.run', 'run now'), onclick: (e) => runJob(job, e.currentTarget) }),
+      deleteButton({
+        label: `${t('entity.job', 'Job')} "${job.name}"`,
+        path: `/jobs/${job.id}`,
+        message: t('msg.jobDeleted', 'Job deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/**
+ * Runs a job now, says what it did, and shows its runs below. The button is off
+ * while the run takes its time, which on a few hundred tickets is a while; see
+ * holdFocus for why it is asked first.
+ */
+function runJob(job, button) {
+  const back = holdFocus(button);
+  button.disabled = true;
+
+  mutate(
+    () => api(`/jobs/${job.id}/run`, { method: 'POST' }),
+    null,
+    async (run) => {
+      toast(fillIn(t('job.ran', 'The job ran on {0} ticket(s): {1} changed, {2} refused.'),
+        [run.tickets, run.changed, run.failed]), 'ok');
+      $('#form-run').elements.job.value = String(job.id);
+      await refreshAll();
+    },
+  ).finally(() => {
+    button.disabled = false;
+    back();
+  });
+}
+
+/**
+ * Fills the job form from a job, or for a new one: a switch for every queue,
+ * state, priority and type a ticket can be taken by - retired ones among them,
+ * because a job may well be for the tickets still carrying one - the macros in
+ * the order the job runs them, and a switch for every plan still offered and
+ * every plan the job already names.
+ */
+function fillJobForm(form, job) {
+  const { queues, states, priorities, types } = cache.stepChoices;
+  const byId = new Map(queues.map((queue) => [queue.id, queue]));
+  const on = (list, id) => (job?.criteria[list] ?? []).includes(id);
+  const locked = job?.criteria.locked;
+
+  $('#job-queues').replaceChildren(...queues
+    .map((queue) => ({ id: queue.id, words: queuePath(queue, byId) }))
+    .sort((a, b) => a.words.localeCompare(b.words))
+    .map((queue) => choiceSwitch({ 'data-queue': String(queue.id) }, queue.words, on('queueIds', queue.id))));
+  $('#job-states').replaceChildren(...states.map((state) =>
+    choiceSwitch({ 'data-state': String(state.id) }, statusName(state.name), on('stateIds', state.id))));
+  $('#job-priorities').replaceChildren(...priorities.map((priority) =>
+    choiceSwitch({ 'data-priority': String(priority.id) }, priorityName(priority.name),
+      on('priorityIds', priority.id))));
+  $('#job-types').replaceChildren(...types.map((type) =>
+    choiceSwitch({ 'data-type': String(type.id) }, ticketTypeName(type.name), on('typeIds', type.id))));
+
+  form.elements.locked.value = locked === true || locked === false ? String(locked) : '';
+
+  $('#job-macros').replaceChildren(...(job?.macroIds ?? []).map(jobMacroRow));
+  $('#job-plans').replaceChildren(...cache.plans
+    .filter((plan) => plan.valid || job?.planIds.includes(plan.id))
+    .map((plan) => choiceSwitch({ 'data-plan': String(plan.id) }, plan.name, job?.planIds.includes(plan.id) ?? false)));
+
+  showRowBounds();
+}
+
+/** One macro of the job form, in the place the job runs it. */
+function jobMacroRow(id) {
+  const row = el('li', { 'data-macro': String(id) });
+
+  row.append(orderedHead(row, el('strong', { text: macroName(id) }), '#job-macro-kind'));
+
+  return row;
+}
+
+/**
+ * Sends the job form, making a job or correcting one. A list of criteria with
+ * nothing switched on goes as nothing, which takes any.
+ */
+function saveJob(form) {
+  const id = form.elements.id.value;
+  const on = (mark) => $$(`[data-${mark}]`, form).filter((box) => box.checked)
+    .map((box) => Number(box.getAttribute(`data-${mark}`)));
+  const locked = form.elements.locked.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    criteria: {
+      queueIds: on('queue'),
+      stateIds: on('state'),
+      priorityIds: on('priority'),
+      typeIds: on('type'),
+      locked: locked ? locked === 'true' : null,
+    },
+    macroIds: $$('#job-macros > li').map((row) => Number(row.dataset.macro)),
+    planIds: on('plan'),
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id ? api(`/jobs/${id}`, { method: 'PUT', body }) : api('/jobs', { method: 'POST', body })),
+    id ? t('msg.jobSaved', 'Job saved') : t('msg.jobCreated', 'Job created'),
+    async () => { resetJobForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a job in the form, to correct it. */
+function editJob(job) {
+  const form = $('#form-job');
+
+  form.elements.id.value = String(job.id);
+  form.elements.name.value = job.name;
+  form.elements.description.value = job.description;
+  form.elements.valid.checked = job.valid;
+  fillJobForm(form, job);
+
+  // Drawn rather than declared with a key, because it carries the job's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#job-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('jobFormTitle', () => {
+    heading.textContent = t('job.edit', 'Edit the job {0}').replace('{0}', job.name);
+  });
+
+  swapTheLabel($('#job-submit'), 'action.save', 'Save');
+  $('#job-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the job form back to making a new one. */
+function resetJobForm() {
+  const form = $('#form-job');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillJobForm(form, null);
+
+  stopRedrawing('jobFormTitle');
+  swapTheLabel($('#job-form-title'), 'job.create', 'Add a job');
+  swapTheLabel($('#job-submit'), 'action.create', 'Create');
+  $('#job-cancel').hidden = true;
+}
+
+/**
+ * Draws what the chosen job's latest runs did: when each ran, what started it,
+ * how many tickets it took and changed, and every step it could not take, in
+ * the reader's words. Drawn again from the answer in hand when the language
+ * changes, and dropped when a later choice of job has the say.
+ */
+async function loadRuns() {
+  const tbody = $('#table-run tbody');
+  const id = $('#form-run')?.elements.job.value;
+  if (!tbody) return;
+
+  if (!id) {
+    stopRedrawing('jobRuns');
+    fillTable(tbody, [], 6, t('run.noJob', 'There is no job yet.'));
+
+    return;
+  }
+
+  const runs = (await api(`/jobs/${id}/runs`))?.items ?? [];
+  if ($('#form-run').elements.job.value !== id) return;
+
+  redrawable('jobRuns', () => fillTable(tbody, runs.map(runRow), 6, t('run.empty', 'This job has not run yet.')));
+}
+
+/** One run as a row of its card's table, with every line it kept. */
+function runRow(run) {
+  const lines = run.lines.map((line) => {
+    const where = [
+      line.macroId ? macroName(line.macroId) : '',
+      line.step ? fillIn(t('run.step', 'step {0}'), [line.step]) : '',
+    ].filter(Boolean).join(' · ');
+    const said = el('span', {});
+
+    showRefusal(said, runLineRefusal(line));
+
+    return el('li', {},
+      line.ticketId
+        ? el('button', {
+          type: 'button',
+          class: 'link',
+          text: fillIn(t('run.ticket', 'Ticket {0}'), [`#${line.ticketId}`]),
+          onclick: () => { switchView('tickets'); openTicket(line.ticketId); },
+        })
+        : null,
+      el('span', { text: line.ticketId ? ` · ${where}: ` : `${where}: ` }),
+      said);
+  });
+
+  return el('tr', {},
+    el('td', { text: fmtMoment(run.startedAt) }),
+    el('td', { class: 'text', text: runTriggerName(run.trigger) }),
+    el('td', { text: String(run.tickets) }),
+    el('td', { text: String(run.changed) }),
+    el('td', { text: String(run.failed) }),
+    el('td', { class: 'text' }, lines.length ? el('ul', { class: 'run-lines' }, ...lines) : '–'),
+  );
+}
+
+/**
+ * A line of a run as the refusal it keeps, shaped as the API would have
+ * answered it, so that it is said the way any other refusal is: the fields of
+ * an invalid request named as their form names them, a code in the reader's
+ * words with its values written as the screen writes them, and the English of a
+ * failure nobody translated folded away under it.
+ */
+function runLineRefusal(line) {
+  if (line.code === 'invalidFields') return { param: line.values };
+
+  return {
+    code: line.code, values: line.values, message: line.message, detail: line.code === 'internal' ? line.message : '',
+  };
+}
+
 /** Wires the automation screen's forms. */
 function wireAutomation() {
   const macroForm = $('#form-macro');
   const planForm = $('#form-plan');
+  const jobForm = $('#form-job');
+  const runForm = $('#form-run');
+
+  jobForm.addEventListener('submit', (e) => { e.preventDefault(); saveJob(jobForm); });
+  $('#job-cancel').addEventListener('click', resetJobForm);
+  $('#job-add-macro').addEventListener('click', () => {
+    const id = Number($('#job-macro-kind').value);
+    if (!id) return;
+
+    const row = jobMacroRow(id);
+    $('#job-macros').append(row);
+    rowsChanged(jobForm);
+    $('button', row)?.focus();
+  });
+
+  // A choice of what to look at rather than something to send.
+  runForm.addEventListener('submit', (e) => e.preventDefault());
+  runForm.elements.job.addEventListener('change', () => loadRuns().catch((err) => toastFailure(err)));
 
   planForm.addEventListener('submit', (e) => { e.preventDefault(); savePlan(planForm); });
   planForm.elements.type.addEventListener('change', () => showPlanKind(planForm));
@@ -10246,6 +10540,7 @@ function forgetTheLastAccount() {
   cache.stepChoices = { queues: [], states: [], priorities: [], types: [] };
   cache.plans = [];
   cache.planEvents = [];
+  cache.jobs = [];
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -10327,6 +10622,7 @@ function forgetTheLastAccount() {
   resetSlaForm();
   resetMacroForm();
   resetPlanForm();
+  resetJobForm();
   resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
@@ -10978,6 +11274,24 @@ const TOUR_STEPS = [
     text: () => t('tour.plans.text',
       'An execution plan runs the jobs that name it at times of day on the weekdays it names, in the '
       + 'installation\'s timezone, or when something happens to a ticket - once a person\'s change is written.'),
+  },
+  {
+    target: '#job-card',
+    view: 'automation',
+    permission: 'automation:write',
+    title: () => t('tour.jobs.title', 'What runs the macros'),
+    text: () => t('tour.jobs.text',
+      'A job takes the tickets its criteria name - by queue, state, priority, type and lock - and runs its macros '
+      + 'on each in order, when one of its plans says so or when you run it here.'),
+  },
+  {
+    target: '#run-card',
+    view: 'automation',
+    permission: 'automation:write',
+    title: () => t('tour.runs.title', 'What the jobs did'),
+    text: () => t('tour.runs.text',
+      'Every run is kept for thirty days with the steps it could not take, each with the reason a person would '
+      + 'have been given.'),
   },
   {
     target: '#sysconfig-card',

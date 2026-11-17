@@ -144,7 +144,8 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		await send('/tickets', { title: 'Printer', queueId: queue.id, body: 'It jams.', contactId: ann.id });
 		await send('/calendars', { name: 'Office', hours: [{ weekday: 1, from: '08:00', to: '17:00' }] });
 		await send('/service-levels', { name: 'Gold', solutionMinutes: 480 });
-		await send('/macros', { name: 'Escalate', actions: [] });
+		const escalate = await send('/macros', { name: 'Escalate', actions: [] });
+		await send('/jobs', { name: 'Escalate the desk', criteria: { queueIds: [queue.id] }, macroIds: [escalate.id] });
 		await send('/exec-plans', { name: 'Mornings', type: 'TimeBased', weekdays: [1], times: ['08:00'] });
 		await refreshAll();
 		return true;
@@ -169,6 +170,7 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		"form-sla":          `#table-sla tbody td.actions button.link:not(.danger)`,
 		"form-macro":        `#table-macro tbody td.actions button.link:not(.danger)`,
 		"form-plan":         `#table-plan tbody td.actions button.link:not(.danger)`,
+		"form-job":          `#table-job tbody td.actions button.link:not(.danger)`,
 	}
 
 	for form, opener := range openers {

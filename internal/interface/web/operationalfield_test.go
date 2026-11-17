@@ -163,6 +163,8 @@ func TestTheFormLimitsAreTheOnesTheServerEnforces(t *testing.T) {
 		"form-macro/description": model.MaxDescriptionLength,
 		"form-plan/name":         model.MaxCatalogNameLength,
 		"form-plan/description":  model.MaxDescriptionLength,
+		"form-job/name":          model.MaxCatalogNameLength,
+		"form-job/description":   model.MaxDescriptionLength,
 	} {
 		t.Run(key, func(t *testing.T) {
 			field, found := fields[key]
@@ -189,15 +191,17 @@ func TestTheFormLimitsAreTheOnesTheServerEnforces(t *testing.T) {
 
 // A form that adds rows stops where the server does.
 //
-// The macro form adds a step at a time, and a step past the server's bound would
-// be filled in and then refused with the whole macro on Save. The bound is a
-// constant in the script, because the form needs it before it has asked the
-// server anything, and this holds the constant to the model.
+// The macro form adds a step at a time and the job form a macro at a time, and
+// a row past the server's bound would be filled in and then refused with the
+// whole record on Save. The bound is a constant in the script, because the form
+// needs it before it has asked the server anything, and this holds the constant
+// to the model.
 func TestTheRowsAFormAddsStopWhereTheServerDoes(t *testing.T) {
 	js := asset(t, "/app.js")
 
 	for name, limit := range map[string]int{
 		"MAX_MACRO_STEPS": model.MaxMacroActions,
+		"MAX_JOB_MACROS":  model.MaxJobMacros,
 	} {
 		found := regexp.MustCompile(`const ` + name + ` = (\d+);`).FindStringSubmatch(js)
 		if found == nil {

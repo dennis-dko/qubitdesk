@@ -1155,6 +1155,96 @@
           </div>
         </form>
       </div>
+
+      <div class="card" id="job-card">
+        <h2 data-i18n="job.title">Jobs</h2>
+        <p class="muted" data-i18n="job.hint">A job takes the tickets its criteria name and runs its macros on each, in order - when one of its execution plans says so, or when somebody runs it here.</p>
+        <div class="table-wrap">
+          <table id="table-job">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="field.macroIds">Macros</th>
+                <th data-i18n="field.planIds">Execution plans</th>
+                <th data-i18n="job.lastRun">Last run</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-job" class="form">
+          <h3 id="job-form-title" data-i18n="job.create">Add a job</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="120" required></label>
+            <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <fieldset class="perms">
+            <legend data-i18n="field.criteria">Which tickets</legend>
+            <p class="muted" data-i18n="job.criteriaHint">A ticket is taken when it is in one of the queues, states, priorities and types switched on; a list with none switched on takes any. Something has to be said, or a job deleting tickets would delete every one.</p>
+            <h4 data-i18n="catalog.queues">Queues</h4>
+            <div class="perm-grid" id="job-queues"></div>
+            <h4 data-i18n="catalog.states">Ticket states</h4>
+            <div class="perm-grid" id="job-states"></div>
+            <h4 data-i18n="catalog.priorities">Priorities</h4>
+            <div class="perm-grid" id="job-priorities"></div>
+            <h4 data-i18n="catalog.types">Ticket types</h4>
+            <div class="perm-grid" id="job-types"></div>
+            <div class="grid">
+              <label data-i18n="field.locked">Locked<select name="locked">
+                <option value="" data-i18n="job.lockedAny">either way</option>
+                <option value="true" data-i18n="job.lockedYes">locked</option>
+                <option value="false" data-i18n="job.lockedNo">not locked</option>
+              </select></label>
+            </div>
+          </fieldset>
+          <fieldset class="perms">
+            <legend data-i18n="field.macroIds">Macros</legend>
+            <ol id="job-macros" class="ordered"></ol>
+            <div class="row ordered-new">
+              <label data-i18n="job.macroKind">Add a macro<select id="job-macro-kind" data-not-an-edit></select></label>
+              <button type="button" class="secondary" id="job-add-macro" data-i18n="macro.addStep">Add</button>
+            </div>
+          </fieldset>
+          <fieldset class="perms">
+            <legend data-i18n="field.planIds">Execution plans</legend>
+            <p class="muted" data-i18n="job.plansHint">A job no execution plan starts runs only when somebody runs it here.</p>
+            <div class="perm-grid" id="job-plans"></div>
+          </fieldset>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="job.offered">Started by its execution plans</span></label>
+          <div class="row">
+            <button type="submit" id="job-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="job-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card" id="run-card">
+        <h2 data-i18n="run.title">What the jobs did</h2>
+        <p class="muted" data-i18n="run.hint">A job's latest runs, the latest first, each with every step it could not take and why. Runs are kept for thirty days.</p>
+        <form method="post" id="form-run" class="form">
+          <div class="grid">
+            <label data-i18n="run.job">Job<select name="job"></select></label>
+          </div>
+        </form>
+        <div class="table-wrap">
+          <table id="table-run">
+            <thead>
+              <tr>
+                <th data-i18n="run.when">When</th>
+                <th data-i18n="run.how">How</th>
+                <th data-i18n="run.tickets">Tickets</th>
+                <th data-i18n="run.changed">Changed</th>
+                <th data-i18n="run.failed">Refused</th>
+                <th data-i18n="run.lines">What it could not do</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- My account -->
