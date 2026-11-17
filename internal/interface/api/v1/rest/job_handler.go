@@ -162,12 +162,24 @@ func nonNil(ids []uint) []uint {
 func newJobResponse(job *model.Job) JobResponse {
 	return JobResponse{
 		ID: job.ID, Name: job.Name, Description: job.Description, Valid: job.Valid,
-		Criteria: JobCriteriaBody{
-			QueueIDs: nonNil(job.Criteria.QueueIDs), StateIDs: nonNil(job.Criteria.StateIDs),
-			PriorityIDs: nonNil(job.Criteria.PriorityIDs), TypeIDs: nonNil(job.Criteria.TypeIDs),
-			Locked: job.Criteria.Locked,
-		},
+		Criteria: newJobCriteriaBody(job.Criteria),
 		MacroIDs: nonNil(job.MacroIDs), PlanIDs: nonNil(job.PlanIDs), LastRunAt: job.LastRunAt,
+	}
+}
+
+// newJobCriteriaBody is criteria as the API hands them out, a list naming
+// nothing written as an empty list.
+func newJobCriteriaBody(criteria model.TicketCriteria) JobCriteriaBody {
+	return JobCriteriaBody{
+		QueueIDs: nonNil(criteria.QueueIDs), StateIDs: nonNil(criteria.StateIDs),
+		PriorityIDs: nonNil(criteria.PriorityIDs), TypeIDs: nonNil(criteria.TypeIDs), Locked: criteria.Locked,
+	}
+}
+
+// command is criteria as they were sent.
+func (b JobCriteriaBody) command() *command.JobCriteriaCommand {
+	return &command.JobCriteriaCommand{
+		QueueIDs: b.QueueIDs, StateIDs: b.StateIDs, PriorityIDs: b.PriorityIDs, TypeIDs: b.TypeIDs, Locked: b.Locked,
 	}
 }
 
@@ -177,10 +189,7 @@ func (r JobRequest) command() command.JobCommand {
 	}
 
 	if r.Criteria != nil {
-		cmd.Criteria = &command.JobCriteriaCommand{
-			QueueIDs: r.Criteria.QueueIDs, StateIDs: r.Criteria.StateIDs, PriorityIDs: r.Criteria.PriorityIDs,
-			TypeIDs: r.Criteria.TypeIDs, Locked: r.Criteria.Locked,
-		}
+		cmd.Criteria = r.Criteria.command()
 	}
 
 	return cmd

@@ -37,6 +37,8 @@ type Handlers struct {
 	Macros    *rest.MacroHandler
 	Plans     *rest.ExecPlanHandler
 	Jobs      *rest.JobHandler
+
+	Notifications *rest.NotificationDefinitionHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -289,6 +291,12 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.DELETE(base+"/jobs/{id}", h.Jobs.Delete)
 	app.POST(base+"/jobs/{id}/run", h.Jobs.Run)
 	app.GET(base+"/jobs/{id}/runs", h.Jobs.Runs)
+
+	app.GET(base+"/notification-definitions", h.Notifications.List)
+	app.GET(base+"/notification-definitions/{id}", h.Notifications.Get)
+	app.POST(base+"/notification-definitions", h.Notifications.Create)
+	app.PUT(base+"/notification-definitions/{id}", h.Notifications.Update)
+	app.DELETE(base+"/notification-definitions/{id}", h.Notifications.Delete)
 
 	app.GET(base+"/ticket-types", h.Catalog.ListTypes)
 	app.GET(base+"/ticket-types/{id}", h.Catalog.GetType)

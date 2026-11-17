@@ -3798,6 +3798,224 @@
           }
         }
       }
+    },
+    "/notification-definitions": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the notifications",
+        "description": "What the agents around a ticket are told when something happens to it. Under `events`, `recipients` and `languages` what a notification can name and speak. Takes `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "The notifications, and what one can name"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Create a notification",
+        "description": "Needs a `name`, at least one event, one recipient and one message. Takes `queues:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "The ticket events it is sent on, as `events` in the list names them"
+                  },
+                  "criteria": {
+                    "type": "object",
+                    "description": "The tickets it is about, as a job names them: `queueIds`, `stateIds`, `priorityIds`, `typeIds` and `locked`; naming nothing is every ticket"
+                  },
+                  "recipients": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Who is told, as `recipients` in the list names them"
+                  },
+                  "oncePerDay": {
+                    "type": "boolean",
+                    "description": "Tell each recipient about one ticket once a day at most"
+                  },
+                  "optional": {
+                    "type": "boolean",
+                    "description": "Let an agent switch it off for themselves"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "language": {
+                          "type": "string"
+                        },
+                        "subject": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "description": "What it says, at most once per language the installation speaks"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the notification cannot be stored with"
+          },
+          "409": {
+            "description": "Another notification has that name"
+          }
+        }
+      }
+    },
+    "/notification-definitions/{id}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read a notification",
+        "description": "Takes `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "The notification"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change a notification",
+        "description": "A field left out stays as it was; a list sent takes the place of the one it had. Takes `queues:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "The ticket events it is sent on, as `events` in the list names them"
+                  },
+                  "criteria": {
+                    "type": "object",
+                    "description": "The tickets it is about, as a job names them: `queueIds`, `stateIds`, `priorityIds`, `typeIds` and `locked`; naming nothing is every ticket"
+                  },
+                  "recipients": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Who is told, as `recipients` in the list names them"
+                  },
+                  "oncePerDay": {
+                    "type": "boolean",
+                    "description": "Tell each recipient about one ticket once a day at most"
+                  },
+                  "optional": {
+                    "type": "boolean",
+                    "description": "Let an agent switch it off for themselves"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "language": {
+                          "type": "string"
+                        },
+                        "subject": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "description": "What it says, at most once per language the installation speaks"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the notification cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another notification has that name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete a notification",
+        "description": "What it already told somebody stays told. Takes `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     }
   },
   "components": {

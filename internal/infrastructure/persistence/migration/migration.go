@@ -190,7 +190,39 @@ func All(dialect string) map[int64]migration.Migrate {
 		20261117030300: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_job_run_lines_run", "job_run_lines", "run_id")
 		}},
+
+		// What the installation tells the agents around a ticket, and in which
+		// words.
+		20261117040000: {UP: func(d migration.Datasource) error { return createNotificationDefinitions(d, dialect) }},
+		20261117040100: {UP: func(d migration.Datasource) error { return createNotificationMessages(d, dialect) }},
 	}
+}
+
+// createNotificationDefinitions keeps the notifications the installation sends,
+// as KIX18 keeps its ticket notifications: the events, the tickets and the
+// recipients in data, a JSON object, beside the name.
+func createNotificationDefinitions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE notification_definitions (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		data %[4]s NOT NULL
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), longText(dialect)))
+}
+
+// createNotificationMessages keeps what each notification says, a subject and
+// a text for each language it speaks. The key on both columns is what finds a
+// notification's messages, so it needs no index of its own.
+func createNotificationMessages(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE notification_messages (
+		%[1]s,
+		definition_id %[2]s NOT NULL REFERENCES notification_definitions(id),
+		language VARCHAR(16) NOT NULL,
+		subject VARCHAR(255) NOT NULL,
+		body %[3]s NOT NULL,
+		UNIQUE (definition_id, language)
+	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect)))
 }
 
 // createJobRuns keeps what each run of a job did, as KIX18 keeps its job runs.

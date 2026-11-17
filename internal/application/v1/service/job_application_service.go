@@ -117,7 +117,7 @@ func (s *JobApplicationService) apply(ctx context.Context, job *model.Job, cmd c
 			Locked: cmd.Criteria.Locked,
 		}
 
-		named, err := s.criteriaNameWhatIsThere(ctx, criteria)
+		named, err := criteriaNameWhatIsThere(ctx, s.refs, criteria)
 		if err != nil {
 			return err
 		}
@@ -177,24 +177,24 @@ func (s *JobApplicationService) apply(ctx context.Context, job *model.Job, cmd c
 }
 
 // criteriaNameWhatIsThere says whether every record the criteria name is
-// there. A retired one may be named: a job may well be for the tickets still
-// carrying it.
-func (s *JobApplicationService) criteriaNameWhatIsThere(ctx context.Context, criteria model.TicketCriteria) (bool, error) {
+// there. A retired one may be named: a job or a notification may well be for the
+// tickets still carrying it.
+func criteriaNameWhatIsThere(ctx context.Context, refs MacroReferences, criteria model.TicketCriteria) (bool, error) {
 	for _, check := range []struct {
 		ids  []uint
 		find func(context.Context, uint) error
 	}{
-		{criteria.QueueIDs, func(ctx context.Context, id uint) error { _, err := s.refs.Queues.GetByID(ctx, id); return err }},
+		{criteria.QueueIDs, func(ctx context.Context, id uint) error { _, err := refs.Queues.GetByID(ctx, id); return err }},
 		{criteria.StateIDs, func(ctx context.Context, id uint) error {
-			_, err := s.refs.Catalog.States.GetByID(ctx, id)
+			_, err := refs.Catalog.States.GetByID(ctx, id)
 			return err
 		}},
 		{criteria.PriorityIDs, func(ctx context.Context, id uint) error {
-			_, err := s.refs.Catalog.Priorities.GetByID(ctx, id)
+			_, err := refs.Catalog.Priorities.GetByID(ctx, id)
 			return err
 		}},
 		{criteria.TypeIDs, func(ctx context.Context, id uint) error {
-			_, err := s.refs.Catalog.Types.GetByID(ctx, id)
+			_, err := refs.Catalog.Types.GetByID(ctx, id)
 			return err
 		}},
 	} {

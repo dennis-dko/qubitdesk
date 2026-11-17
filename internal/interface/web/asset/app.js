@@ -543,6 +543,8 @@ const FIELD_NAMES = {
   pendingMinutes: 'Waits for (minutes)',
   locked: 'Locked',
   customerVisible: 'The customer sees it',
+  recipients: 'Recipients',
+  messages: 'Texts',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -9238,6 +9240,9 @@ const CHANGE_SENTENCES = {
   'job.updated': () => t('change.jobUpdated', 'Changed the job {0}'),
   'job.deleted': () => t('change.jobDeleted', 'Deleted the job {0}'),
   'job.run': () => t('change.jobRun', 'Ran the job {0}'),
+  'notification.created': () => t('change.notificationCreated', 'Created the notification {0}'),
+  'notification.updated': () => t('change.notificationUpdated', 'Changed the notification {0}'),
+  'notification.deleted': () => t('change.notificationDeleted', 'Deleted the notification {0}'),
   'sysconfig.set': () => t('change.sysconfigSet', 'Changed the option {1}'),
   'sysconfig.reset': () => t('change.sysconfigReset', 'Put the option {1} back to its default'),
 };

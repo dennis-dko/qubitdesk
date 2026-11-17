@@ -134,10 +134,18 @@ func copyJob(job model.Job) *model.Job {
 	copied := job
 	copied.MacroIDs = slices.Clone(job.MacroIDs)
 	copied.PlanIDs = slices.Clone(job.PlanIDs)
-	copied.Criteria.QueueIDs = slices.Clone(job.Criteria.QueueIDs)
-	copied.Criteria.StateIDs = slices.Clone(job.Criteria.StateIDs)
-	copied.Criteria.PriorityIDs = slices.Clone(job.Criteria.PriorityIDs)
-	copied.Criteria.TypeIDs = slices.Clone(job.Criteria.TypeIDs)
+	copied.Criteria = copyCriteria(job.Criteria)
 
 	return &copied
+}
+
+// copyCriteria copies criteria with lists of their own.
+func copyCriteria(criteria model.TicketCriteria) model.TicketCriteria {
+	copied := criteria
+	copied.QueueIDs = slices.Clone(criteria.QueueIDs)
+	copied.StateIDs = slices.Clone(criteria.StateIDs)
+	copied.PriorityIDs = slices.Clone(criteria.PriorityIDs)
+	copied.TypeIDs = slices.Clone(criteria.TypeIDs)
+
+	return copied
 }

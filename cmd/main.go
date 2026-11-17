@@ -1059,6 +1059,9 @@ func main() {
 		Plans:  rest.NewExecPlanHandler(appservice.NewExecPlanApplicationService(planRepo), authorizer),
 		Jobs: rest.NewJobHandler(
 			appservice.NewJobApplicationService(jobRepo, macroRepo, planRepo, automationRefs), automation, authorizer),
+
+		Notifications: rest.NewNotificationDefinitionHandler(appservice.NewNotificationDefinitionApplicationService(
+			sqldb.NewNotificationDefinitionRepository(db, cfg.Dialect), automationRefs), authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves
