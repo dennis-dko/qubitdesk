@@ -153,15 +153,31 @@ func (s *TicketApplicationService) owe(ctx context.Context, ticket *model.Ticket
 	return nil
 }
 
-// counter is how a service level counts its minutes: in its calendar, in the
-// calendar's zone and with its place's public holidays - the installation's
-// where it names none - or around the clock where the level names no calendar.
-// A promise of no minutes, or one a calendar never lets pass, owes no moment.
+// counter is how a service level counts its minutes: in its calendar, or in the
+// installation's where it names none, in the calendar's zone and with its
+// place's public holidays - the installation's where it names neither - and
+// around the clock where there is no calendar to count in. A promise of no
+// minutes, or one a calendar never lets pass, owes no moment.
 func (s *TicketApplicationService) counter(
 	ctx context.Context,
 	level *model.ServiceLevel,
 ) (func(from time.Time, minutes int) *time.Time, error) {
-	if level.CalendarID == nil {
+	var (
+		calendar *model.Calendar
+		err      error
+	)
+
+	if level.CalendarID != nil {
+		calendar, err = s.calendars.GetByID(ctx, *level.CalendarID)
+	} else {
+		calendar, err = s.installationCalendar(ctx)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if calendar == nil {
 		return func(from time.Time, minutes int) *time.Time {
 			if minutes <= 0 {
 				return nil
@@ -173,25 +189,7 @@ func (s *TicketApplicationService) counter(
 		}, nil
 	}
 
-	calendar, err := s.calendars.GetByID(ctx, *level.CalendarID)
-	if err != nil {
-		return nil, err
-	}
-
-	zoneName := calendar.Zone
-	if zoneName == "" {
-		zoneName = s.zone(ctx)
-	}
-
-	zone, err := time.LoadLocation(zoneName)
-	if err != nil {
-		zone = time.UTC
-	}
-
-	place := calendar.HolidayPlace
-	if place == "" && s.holidays != nil {
-		place = s.holidays(ctx)
-	}
+	zone, place := s.wallOf(ctx, calendar)
 
 	return func(from time.Time, minutes int) *time.Time {
 		if minutes <= 0 {
@@ -207,6 +205,54 @@ func (s *TicketApplicationService) counter(
 
 		return &due
 	}, nil
+}
+
+// wallOf is the zone a calendar's hours are read off the wall in and the place
+// whose public holidays it keeps: its own, or the installation's where it
+// names none.
+func (s *TicketApplicationService) wallOf(ctx context.Context, calendar *model.Calendar) (*time.Location, string) {
+	zoneName := calendar.Zone
+	if zoneName == "" {
+		zoneName = s.zone(ctx)
+	}
+
+	zone, err := time.LoadLocation(zoneName)
+	if err != nil {
+		zone = time.UTC
+	}
+
+	place := calendar.HolidayPlace
+	if place == "" && s.holidays != nil {
+		place = s.holidays(ctx)
+	}
+
+	return zone, place
+}
+
+// installationCalendar is the calendar the system configuration names as the
+// installation's, or nil - around the clock - where it names none, or one that
+// is gone.
+func (s *TicketApplicationService) installationCalendar(ctx context.Context) (*model.Calendar, error) {
+	if s.config == nil || s.calendars == nil {
+		return nil, nil
+	}
+
+	named, err := s.config.String(ctx, model.ConfigTimeWorkingHours)
+	if err != nil || named == "" {
+		return nil, err
+	}
+
+	id, err := strconv.ParseUint(named, 10, 0)
+	if err != nil {
+		return nil, nil
+	}
+
+	calendar, err := s.calendars.GetByID(ctx, uint(id))
+	if apperror.KindOf(err) == apperror.KindNotFound {
+		return nil, nil
+	}
+
+	return calendar, err
 }
 
 // levelName is a service level's name for the history, by the name it has now,

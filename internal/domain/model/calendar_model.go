@@ -124,6 +124,52 @@ func (c Calendar) Deadline(start time.Time, minutes int, zone *time.Location, ho
 	return time.Time{}, false
 }
 
+// Before is the latest moment from which minutes of service time have passed
+// by end, counted backwards through the calendar's working hours as Deadline
+// counts forwards - so Deadline from any moment no later than it is no later
+// than end, and from any later one it is later. A lock taken no later than it
+// has run that long. ok is false where Deadline's is.
+func (c Calendar) Before(end time.Time, minutes int, zone *time.Location, holidayPlace string) (time.Time, bool) {
+	if minutes <= 0 {
+		return end, true
+	}
+
+	remaining := time.Duration(minutes) * time.Minute
+	cursor := end.In(zone)
+	day := time.Date(cursor.Year(), cursor.Month(), cursor.Day(), 0, 0, 0, 0, zone)
+	free := freeDays{calendar: c, place: holidayPlace}
+
+	for range deadlineHorizon {
+		if !free.holds(day) {
+			stretches := c.stretchesOf(day.Weekday())
+
+			for i := len(stretches) - 1; i >= 0; i-- {
+				from := wallClock(day, stretches[i].From, zone)
+				to := wallClock(day, stretches[i].To, zone)
+
+				if !from.Before(cursor) {
+					continue
+				}
+
+				if to.After(cursor) {
+					to = cursor
+				}
+
+				available := to.Sub(from)
+				if available >= remaining {
+					return to.Add(-remaining), true
+				}
+
+				remaining -= available
+			}
+		}
+
+		day = time.Date(day.Year(), day.Month(), day.Day()-1, 0, 0, 0, 0, zone)
+	}
+
+	return time.Time{}, false
+}
+
 // stretchesOf is a weekday's working hours, earliest first.
 func (c Calendar) stretchesOf(weekday time.Weekday) []WorkingHours {
 	var stretches []WorkingHours

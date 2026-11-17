@@ -74,11 +74,11 @@ type TicketRepository interface {
 	EndWait(ctx context.Context, ticket *model.Ticket, from uint, release bool, now time.Time,
 		history []model.HistoryEntry) (bool, error)
 
-	// FreeLock frees a ticket's lock once it has run for the time given, up to
-	// now, provided the ticket is still locked and in one of the states named:
-	// a lock taken again or answered under since it was found, or a ticket put
-	// to wait, stays as it is. It answers whether it freed it.
-	FreeLock(ctx context.Context, id uint, working []uint, held time.Duration, now time.Time,
+	// FreeLock frees, as of now, the lock of a ticket locked no later than
+	// lockedBy, provided it is still locked so and in one of the states named: a
+	// lock taken again or answered under since it was found, or a ticket put to
+	// wait, stays as it is. It answers whether it freed it.
+	FreeLock(ctx context.Context, id uint, lockedBy time.Time, working []uint, now time.Time,
 		history []model.HistoryEntry) (bool, error)
 
 	// SetWatching records whether the account watches the ticket; watching twice

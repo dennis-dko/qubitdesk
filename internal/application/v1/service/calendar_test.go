@@ -65,3 +65,47 @@ func TestACalendarIsCheckedAndCorrectedFieldByField(t *testing.T) {
 		t.Errorf("sending no hours left the calendar as %+v, %v; want the hours gone and the free day kept", corrected, err)
 	}
 }
+
+// The installation's calendar is one there is and still offered, or none at
+// all, and is not deleted from under it while the system configuration names
+// it - the refusal says which.
+func TestTheInstallationsCalendarIsOneThereIsAndIsKept(t *testing.T) {
+	ctx := context.Background()
+	calendars := memory.NewCalendarRepository()
+	config := service.NewSysConfigService(newStubSettings())
+	calendarService := service.NewCalendarApplicationService(calendars).WithConfig(config)
+	config.WithCheck(model.ConfigTimeWorkingHours, calendarService.CanBeTheInstallations)
+
+	office, err := calendars.Save(ctx, &model.Calendar{Name: "Office", Valid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	retired, err := calendars.Save(ctx, &model.Calendar{Name: "Old office"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, refused := range []any{float64(99), float64(retired.ID)} {
+		if _, err := config.Set(ctx, model.ConfigTimeWorkingHours, refused); apperror.KindOf(err) != apperror.KindInvalid {
+			t.Errorf("naming calendar %v was answered %v, want it refused", refused, err)
+		}
+	}
+
+	if _, err := config.Set(ctx, model.ConfigTimeWorkingHours, float64(office.ID)); err != nil {
+		t.Fatalf("naming the office calendar was answered %v", err)
+	}
+
+	if detail, ok := apperror.Detail(calendarService.Delete(ctx, office.ID)); !ok ||
+		detail.Code != "calendarCountsTheInstallation" || detail.Values[0] != "Office" {
+		t.Errorf("deleting the installation's calendar was answered %+v", detail)
+	}
+
+	if _, err := config.Set(ctx, model.ConfigTimeWorkingHours, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := calendarService.Delete(ctx, office.ID); err != nil {
+		t.Errorf("deleting a calendar nothing counts in any more was answered %v", err)
+	}
+}

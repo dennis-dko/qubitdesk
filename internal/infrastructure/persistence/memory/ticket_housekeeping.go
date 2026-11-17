@@ -57,8 +57,8 @@ func (r *TicketRepository) EndWait(
 func (r *TicketRepository) FreeLock(
 	_ context.Context,
 	id uint,
+	lockedBy time.Time,
 	working []uint,
-	held time.Duration,
 	now time.Time,
 	history []model.HistoryEntry,
 ) (bool, error) {
@@ -67,7 +67,7 @@ func (r *TicketRepository) FreeLock(
 
 	stored, ok := r.tickets[id]
 	if !ok || !stored.Locked || !slices.Contains(working, stored.StateID) ||
-		stored.LockedAt == nil || stored.LockedAt.After(now.Add(-held)) {
+		stored.LockedAt == nil || stored.LockedAt.After(lockedBy) {
 		return false, nil
 	}
 

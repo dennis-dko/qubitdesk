@@ -108,8 +108,9 @@ func nextAfter(states []*model.TicketState, from uint, closed *model.TicketState
 }
 
 // freeLocks frees every lock that has run as long as its ticket's queue
-// allows, counted from when it was taken or last answered under; a queue
-// allowing nothing frees nothing. Only a ticket in a state of a type the
+// allows, counted from when it was taken or last answered under, in the
+// installation's calendar as KIX18 counts in its own - around the clock while
+// the installation names none; a queue allowing nothing frees nothing. Only a ticket in a state of a type the
 // installation names loses its lock - new and open as it ships, as KIX18's
 // Ticket::UnlockStateType does.
 func (s *TicketApplicationService) freeLocks(ctx context.Context, states []*model.TicketState, now time.Time) (int, error) {
@@ -139,19 +140,43 @@ func (s *TicketApplicationService) freeLocks(ctx context.Context, states []*mode
 	}
 
 	working := ofType(states, types...)
+
+	calendar, err := s.installationCalendar(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	// lockedBy is the latest moment a lock may have been taken at to have run
+	// as long as a queue allows by now; a calendar in which time never passes
+	// frees nothing.
+	lockedBy := func(limit time.Duration) (time.Time, bool) {
+		return now.Add(-limit), true
+	}
+
+	if calendar != nil {
+		zone, place := s.wallOf(ctx, calendar)
+		lockedBy = func(limit time.Duration) (time.Time, bool) {
+			return calendar.Before(now, int(limit/time.Minute), zone, place)
+		}
+	}
+
 	freed := 0
 
 	for _, ticket := range locked {
 		limit := allowed[ticket.QueueID]
-		if limit <= 0 || !slices.Contains(working, ticket.StateID) || ticket.LockedAt == nil ||
-			now.Sub(*ticket.LockedAt) < limit {
+		if limit <= 0 || !slices.Contains(working, ticket.StateID) || ticket.LockedAt == nil {
+			continue
+		}
+
+		cutoff, passes := lockedBy(limit)
+		if !passes || ticket.LockedAt.After(cutoff) {
 			continue
 		}
 
 		change := historyBySystem(ticket.ID, now)
 		change.add(model.HistoryLock, strconv.FormatBool(true), strconv.FormatBool(false))
 
-		wrote, err := s.tickets.FreeLock(ctx, ticket.ID, working, limit, now, change.entries)
+		wrote, err := s.tickets.FreeLock(ctx, ticket.ID, cutoff, working, now, change.entries)
 		if err != nil {
 			return freed, err
 		}

@@ -165,15 +165,15 @@ func TestALockIsFreedOnlyOnceItHasRunItsTime(t *testing.T) {
 
 	line := []model.HistoryEntry{{TicketID: scanner.ID, At: at, Actor: model.SenderSystem, Event: model.HistoryLock}}
 
-	if wrote, err := tables.tickets.FreeLock(ctx, scanner.ID, working, 30*time.Minute, at.Add(10*time.Minute), line); err != nil || wrote {
+	if wrote, err := tables.tickets.FreeLock(ctx, scanner.ID, at.Add(10*time.Minute).Add(-30*time.Minute), working, at.Add(10*time.Minute), line); err != nil || wrote {
 		t.Errorf("a lock ten minutes old was freed: %v, %v", wrote, err)
 	}
 
-	if wrote, err := tables.tickets.FreeLock(ctx, keyboard.ID, working, 30*time.Minute, at.Add(time.Hour), line); err != nil || wrote {
+	if wrote, err := tables.tickets.FreeLock(ctx, keyboard.ID, at.Add(time.Hour).Add(-30*time.Minute), working, at.Add(time.Hour), line); err != nil || wrote {
 		t.Errorf("a ticket nobody locked was freed: %v, %v", wrote, err)
 	}
 
-	if wrote, err := tables.tickets.FreeLock(ctx, scanner.ID, []uint{tables.closed}, 30*time.Minute, at.Add(time.Hour), line); err != nil || wrote {
+	if wrote, err := tables.tickets.FreeLock(ctx, scanner.ID, at.Add(time.Hour).Add(-30*time.Minute), []uint{tables.closed}, at.Add(time.Hour), line); err != nil || wrote {
 		t.Errorf("a ticket in a state not named was freed: %v, %v", wrote, err)
 	}
 
@@ -207,12 +207,12 @@ func TestALockIsFreedOnlyOnceItHasRunItsTime(t *testing.T) {
 		t.Fatalf("after an answer and a note the lock counts from %v, want the answer's moment %v", read.LockedAt, answered)
 	}
 
-	if wrote, err := tables.tickets.FreeLock(ctx, scanner.ID, working, 30*time.Minute, answered.Add(20*time.Minute), line); err != nil || wrote {
+	if wrote, err := tables.tickets.FreeLock(ctx, scanner.ID, answered.Add(20*time.Minute).Add(-30*time.Minute), working, answered.Add(20*time.Minute), line); err != nil || wrote {
 		t.Errorf("a lock answered under twenty minutes ago was freed: %v, %v", wrote, err)
 	}
 
 	freedAt := answered.Add(time.Hour)
-	if wrote, err := tables.tickets.FreeLock(ctx, scanner.ID, working, 30*time.Minute, freedAt, line); err != nil || !wrote {
+	if wrote, err := tables.tickets.FreeLock(ctx, scanner.ID, freedAt.Add(-30*time.Minute), working, freedAt, line); err != nil || !wrote {
 		t.Fatalf("a lock that had run its time was kept: %v, %v", wrote, err)
 	}
 

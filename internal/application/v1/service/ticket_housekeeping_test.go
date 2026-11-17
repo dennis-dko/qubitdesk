@@ -445,3 +445,71 @@ func TestALockRunsOutInTheStateTypesTheInstallationNames(t *testing.T) {
 		t.Errorf("with the waiting type named, %d locks were freed, %v; want the scanner's", freed, err)
 	}
 }
+
+// A lock's time runs in the installation's calendar where the system
+// configuration names one, as KIX18 counts it in its own: a lock taken an hour
+// before Friday's end, under a queue allowing two hours, is not freed over the
+// weekend nor in Monday's first half hour, and is once Monday's first hour has
+// passed.
+func TestALockRunsOutInTheInstallationsWorkingHours(t *testing.T) {
+	ctx := context.Background()
+	f := newTicketFixture(t)
+	config := service.NewSysConfigService(newStubSettings())
+	f.tickets.WithConfig(config)
+
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var hours []model.WorkingHours
+	for day := time.Monday; day <= time.Friday; day++ {
+		hours = append(hours, model.WorkingHours{Weekday: day, From: 8 * 60, To: 17 * 60})
+	}
+
+	office, err := f.calendars.Save(ctx, &model.Calendar{Name: "Office", Zone: "Europe/Berlin", Hours: hours, Valid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := config.Set(ctx, model.ConfigTimeWorkingHours, float64(office.ID)); err != nil {
+		t.Fatal(err)
+	}
+
+	f.desk.UnlockMinutes = 120
+	if _, err := f.queues.Update(ctx, f.desk); err != nil {
+		t.Fatal(err)
+	}
+
+	locked := true
+	ticket := f.open(t, f.agent, f.desk, "Printer")
+	if _, err := f.tickets.UpdateTicket(ctx, f.agent, ticket.ID, command.UpdateTicketCommand{Locked: &locked}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Friday the 20th of November 2026, an hour before the office closes.
+	current, err := f.repo.GetByID(ctx, ticket.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	friday := time.Date(2026, time.November, 20, 16, 0, 0, 0, berlin)
+	current.LockedAt = &friday
+
+	if _, err := f.repo.Update(ctx, current, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, check := range []struct {
+		at    time.Time
+		freed int
+	}{
+		{time.Date(2026, time.November, 21, 12, 0, 0, 0, berlin), 0},
+		{time.Date(2026, time.November, 23, 8, 30, 0, 0, berlin), 0},
+		{time.Date(2026, time.November, 23, 9, 0, 0, 0, berlin), 1},
+	} {
+		if _, freed, err := f.tickets.Housekeep(ctx, check.at); err != nil || freed != check.freed {
+			t.Errorf("at %v the housekeeping freed %d locks, %v; want %d", check.at, freed, err, check.freed)
+		}
+	}
+}

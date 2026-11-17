@@ -128,10 +128,11 @@ func (s *SysConfigService) Bool(ctx context.Context, name string) (bool, error) 
 	return value.Value == "true", nil
 }
 
-// String reads an option of text, as the code that obeys it does.
+// String reads an option of text - or a calendar's, its id as text - as the
+// code that obeys it does.
 func (s *SysConfigService) String(ctx context.Context, name string) (string, error) {
 	option, ok := model.ConfigOptionNamed(name)
-	if !ok || option.Type != model.ConfigString {
+	if !ok || (option.Type != model.ConfigString && option.Type != model.ConfigCalendar) {
 		return "", fmt.Errorf("no option of text in the system configuration is called %q", name)
 	}
 

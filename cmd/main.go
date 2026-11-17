@@ -638,6 +638,8 @@ func main() {
 	ticketCatalog := appservice.NewTicketCatalogApplicationService(catalogRepos)
 	sysConfig := appservice.NewSysConfigService(settingsRepo)
 	calendarRepo := sqldb.NewCalendarRepository(db, cfg.Dialect)
+	calendars := appservice.NewCalendarApplicationService(calendarRepo).WithConfig(sysConfig)
+	sysConfig.WithCheck(model.ConfigTimeWorkingHours, calendars.CanBeTheInstallations)
 	tickets := appservice.NewTicketApplicationService(sqldb.NewTicketRepository(db, cfg.Dialect), queueRepo,
 		catalogRepos, customerRepos, userRepo, roleRepo, func(ctx context.Context) string {
 			name, err := settingsService.Timezone(ctx)
@@ -1022,7 +1024,7 @@ func main() {
 			WithOpenIDCheck(openIDSignIn.Check),
 
 		SysConfig: rest.NewSysConfigHandler(sysConfig, authorizer),
-		Calendars: rest.NewCalendarHandler(appservice.NewCalendarApplicationService(calendarRepo), authorizer),
+		Calendars: rest.NewCalendarHandler(calendars, authorizer),
 		Levels: rest.NewServiceLevelHandler(
 			appservice.NewSLAApplicationService(levelRepo, calendarRepo),
 			authorizer),

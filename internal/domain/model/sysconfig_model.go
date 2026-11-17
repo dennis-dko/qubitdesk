@@ -10,10 +10,12 @@ import (
 // how a value is checked, stored and offered for change.
 type ConfigType string
 
-// The kinds of value an option holds: a line of text, or a switch.
+// The kinds of value an option holds: a line of text, a switch, or a calendar
+// by its id - kept as text, and empty for none.
 const (
-	ConfigString ConfigType = "string"
-	ConfigBool   ConfigType = "bool"
+	ConfigString   ConfigType = "string"
+	ConfigBool     ConfigType = "bool"
+	ConfigCalendar ConfigType = "calendar"
 )
 
 // ConfigAccess says who may read an option, KIX18's distinction: an external
@@ -56,6 +58,13 @@ const (
 	ConfigTicketHook         = "Ticket::Hook"
 	ConfigTicketHookDivider  = "Ticket::HookDivider"
 	ConfigTicketUnlockOnMove = "Ticket::UnlockOnMove"
+
+	// ConfigTimeWorkingHours names the calendar the installation works in, under
+	// the name KIX18 gives its main calendar's working hours: a queue's unlock
+	// time is counted in it, and so is a service level that names no calendar of
+	// its own - around the clock while none is named, as a fresh installation
+	// ships.
+	ConfigTimeWorkingHours = "TimeWorkingHours"
 )
 
 // ConfigOptions are every option there is, in the order a list shows them.
@@ -82,6 +91,11 @@ func ConfigOptions() []ConfigOption {
 			Description: "Moving a ticket to another queue releases its lock, so that the agents of the queue " +
 				"it arrives in can take it up.",
 		},
+		{
+			Name: ConfigTimeWorkingHours, Group: "Framework", Type: ConfigCalendar, Access: ConfigInternal,
+			Description: "The calendar the installation works in: a queue's unlock time is counted in it, and so " +
+				"is a service level that names no calendar of its own. Around the clock while none is named.",
+		},
 	}
 }
 
@@ -98,10 +112,14 @@ func ConfigOptionNamed(name string) (ConfigOption, bool) {
 
 // Canonical is a value sent for the option in the form it is stored in, or
 // false for one the option cannot hold: text longer than allowed, text across
-// lines, or anything but text; anything but true or false for a switch. Text is
-// not trimmed, because a space can be the point - a colon and a space.
+// lines, or anything but text; anything but true or false for a switch; for a
+// calendar, anything but a whole number above nought, as a number or as text,
+// or nothing at all for none. Text is not trimmed, because a space can be the
+// point - a colon and a space.
 func (o ConfigOption) Canonical(value any) (string, bool) {
 	switch o.Type {
+	case ConfigCalendar:
+		return calendarID(value)
 	case ConfigString:
 		text, ok := value.(string)
 		if !ok || utf8.RuneCountInString(text) > o.MaxLength || strings.ContainsAny(text, "\r\n") {
@@ -122,11 +140,48 @@ func (o ConfigOption) Canonical(value any) (string, bool) {
 }
 
 // Typed is a stored value in the option's own type, as the API hands it out: a
-// switch as true or false, text as itself.
+// switch as true or false, a calendar as its id or null for none, text as
+// itself.
 func (o ConfigOption) Typed(stored string) any {
-	if o.Type == ConfigBool {
+	switch o.Type {
+	case ConfigBool:
 		return stored == "true"
+	case ConfigCalendar:
+		id, err := strconv.ParseUint(stored, 10, 0)
+		if err != nil {
+			return nil
+		}
+
+		return uint(id)
 	}
 
 	return stored
+}
+
+// calendarID is a calendar named by its id as the option keeps it: a JSON
+// number or the same as text, whole and above nought, or nothing for none.
+func calendarID(value any) (string, bool) {
+	switch sent := value.(type) {
+	case nil:
+		return "", true
+	case float64:
+		if sent < 1 || sent != float64(uint64(sent)) {
+			return "", false
+		}
+
+		return strconv.FormatUint(uint64(sent), 10), true
+	case string:
+		if sent == "" {
+			return "", true
+		}
+
+		id, err := strconv.ParseUint(sent, 10, 0)
+		if err != nil || id == 0 {
+			return "", false
+		}
+
+		return strconv.FormatUint(id, 10), true
+	}
+
+	return "", false
 }

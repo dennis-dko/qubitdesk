@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dennis-dko/go-ticket-system/internal/application/v1/command"
+	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
@@ -190,5 +191,44 @@ func TestATicketIsEscalatedOnceAPromiseRunsOut(t *testing.T) {
 		if got := tc.ticket.Escalated(now); got != tc.want {
 			t.Errorf("%s: escalated %t, want %t", tc.name, got, tc.want)
 		}
+	}
+}
+
+// A service level that names no calendar of its own counts in the
+// installation's where the system configuration names one, and around the
+// clock where it names none: in a calendar in which time never passes, the
+// ticket is owed no moment at all.
+func TestALevelWithoutACalendarCountsInTheInstallations(t *testing.T) {
+	ctx := context.Background()
+	f := newTicketFixture(t)
+	config := service.NewSysConfigService(newStubSettings())
+	f.tickets.WithConfig(config)
+
+	gold, err := f.levels.Save(ctx, &model.ServiceLevel{Name: "Gold", FirstResponseMinutes: 60, Valid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f.desk.ServiceLevelID = &gold.ID
+	if _, err := f.queues.Update(ctx, f.desk); err != nil {
+		t.Fatal(err)
+	}
+
+	clock := f.open(t, f.agent, f.desk, "Printer")
+	if want := clock.CreatedAt.Add(time.Hour); clock.FirstResponseDue == nil || !clock.FirstResponseDue.Equal(want) {
+		t.Fatalf("with no calendar named the printer is owed an answer by %v, want %v", clock.FirstResponseDue, want)
+	}
+
+	never, err := f.calendars.Save(ctx, &model.Calendar{Name: "Never", Valid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := config.Set(ctx, model.ConfigTimeWorkingHours, float64(never.ID)); err != nil {
+		t.Fatal(err)
+	}
+
+	if counted := f.open(t, f.agent, f.desk, "Scanner"); counted.FirstResponseDue != nil {
+		t.Errorf("counted in a calendar in which time never passes, the scanner is owed an answer by %v", counted.FirstResponseDue)
 	}
 }

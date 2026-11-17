@@ -133,3 +133,79 @@ func TestWorkingHoursAreCheckedStretchByStretch(t *testing.T) {
 		}
 	}
 }
+
+// Before counts backwards as Deadline counts forwards: from the end, back
+// through the working hours only - past the lunch break, the weekend, the
+// public holidays and the calendar's own free days - to the latest moment from
+// which that much service time has passed by the end.
+func TestBeforeCountsTheWorkingHoursBackwards(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	at := func(month time.Month, day, hour, minute int) time.Time {
+		return time.Date(2026, month, day, hour, minute, 0, 0, berlin)
+	}
+
+	calendar := Calendar{Hours: officeHours(), FreeDays: []FreeDay{
+		{Day: time.Date(2026, time.November, 17, 0, 0, 0, 0, time.UTC), Name: "Works outing"},
+	}}
+
+	for _, tc := range []struct {
+		name    string
+		end     time.Time
+		minutes int
+		place   string
+		want    time.Time
+	}{
+		{"within the morning", at(time.November, 16, 11, 0), 60, "", at(time.November, 16, 10, 0)},
+		{"back past the lunch break", at(time.November, 16, 13, 30), 60, "", at(time.November, 16, 11, 30)},
+		{"during the lunch break", at(time.November, 16, 12, 30), 60, "", at(time.November, 16, 11, 0)},
+		{"back past the weekend", at(time.November, 23, 8, 30), 60, "", at(time.November, 20, 16, 30)},
+		{"back past a free day of its own", at(time.November, 18, 8, 30), 60, "", at(time.November, 16, 16, 30)},
+		{"back past Christmas in Bavaria", at(time.December, 28, 9, 0), 120, HolidayPlace("DE", "BY"),
+			at(time.December, 24, 16, 0)},
+		{"no time at all", at(time.November, 16, 10, 0), 0, "", at(time.November, 16, 10, 0)},
+	} {
+		got, ok := calendar.Before(tc.end, tc.minutes, berlin, tc.place)
+		if !ok || !got.Equal(tc.want) {
+			t.Errorf("%s: %v, %t; want %v", tc.name, got.In(berlin), ok, tc.want)
+		}
+	}
+}
+
+// Before and Deadline agree on every moment: the deadline from the moment
+// Before finds is no later than the end, and from a minute after it, later.
+func TestBeforeIsTheDeadlineTurnedRound(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	calendar := Calendar{Hours: officeHours()}
+
+	for hour := 0; hour < 24*9; hour += 5 {
+		end := time.Date(2026, time.March, 23, 0, 7, 0, 0, berlin).Add(time.Duration(hour) * time.Hour)
+
+		for _, minutes := range []int{1, 45, 240, 600} {
+			start, ok := calendar.Before(end, minutes, berlin, "")
+			if !ok {
+				t.Fatalf("no moment %d minutes before %v", minutes, end)
+			}
+
+			if due, _ := calendar.Deadline(start, minutes, berlin, ""); due.After(end) {
+				t.Errorf("%d minutes from %v are due at %v, after %v", minutes, start.In(berlin), due.In(berlin), end.In(berlin))
+			}
+
+			if due, _ := calendar.Deadline(start.Add(time.Minute), minutes, berlin, ""); !due.After(end) {
+				t.Errorf("%d minutes from a minute after %v are due at %v, not after %v",
+					minutes, start.In(berlin), due.In(berlin), end.In(berlin))
+			}
+		}
+	}
+
+	if got, ok := (Calendar{}).Before(time.Now(), 60, time.UTC, ""); ok {
+		t.Errorf("a calendar without hours answered %v", got)
+	}
+}

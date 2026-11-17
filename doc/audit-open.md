@@ -18,13 +18,10 @@ What is below was raised and is not recorded as decided anywhere.
 
 ## Decisions waiting on the maintainer
 
-One, raised on 2026-11-16 by the ticket housekeeping: a place where it counts
-more simply than KIX18 does and agrees with it on what ships. It is not cheaper
-in a way anybody could measure, so the question is only which answer is right.
+None today: the last were decided on 2026-11-16. The table stays for the next.
 
 | | Question |
 | --- | --- |
-| K2 | A queue's unlock time counts around the clock (`freeLocks` in the ticket service); KIX18 counts it in working time of its main calendar, so a lock taken on Friday evening outlasts the weekend there and not here. This installation has calendars but no main one. Leave it around the clock, or - recommended - count in a calendar the system configuration names as the installation's own, as KIX18 does with its main calendar, around the clock while none is named? The same calendar would then be the one a service level without a calendar of its own counts in, which is around the clock today. |
 
 ## Measurements reading cannot make
 

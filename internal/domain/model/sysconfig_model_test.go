@@ -79,3 +79,30 @@ func TestAConfigValueIsCheckedAgainstItsOption(t *testing.T) {
 		t.Errorf("a switch stored as false reads as %v", typed)
 	}
 }
+
+// A calendar option keeps a calendar by its id - sent as a number or as text,
+// whole and above nought - or nothing at all for none, and hands it out as the
+// id or as null.
+func TestACalendarOptionKeepsAnIDOrNothing(t *testing.T) {
+	option := ConfigOption{Name: "TimeWorkingHours", Type: ConfigCalendar}
+
+	for sent, want := range map[any]string{nil: "", "": "", float64(7): "7", "12": "12"} {
+		if got, ok := option.Canonical(sent); !ok || got != want {
+			t.Errorf("%#v was kept as %q, %t; want %q", sent, got, ok, want)
+		}
+	}
+
+	for _, refused := range []any{float64(0), float64(-3), 2.5, "0", "seven", true} {
+		if got, ok := option.Canonical(refused); ok {
+			t.Errorf("%#v was taken as %q", refused, got)
+		}
+	}
+
+	if got := option.Typed("7"); got != uint(7) {
+		t.Errorf("a stored 7 is handed out as %#v", got)
+	}
+
+	if got := option.Typed(""); got != nil {
+		t.Errorf("no calendar is handed out as %#v, want null", got)
+	}
+}

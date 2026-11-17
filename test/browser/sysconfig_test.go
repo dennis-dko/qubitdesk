@@ -3,6 +3,7 @@
 package browser
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -81,5 +82,60 @@ func TestTheSystemConfigurationNamesTheTickets(t *testing.T) {
 
 	if got := heading(); !strings.HasPrefix(got, "Ticket#2026") {
 		t.Errorf("the ticket is headed %q; want KIX18's Ticket# and its number", got)
+	}
+}
+
+// The installation's calendar is chosen on the system configuration's card
+// from the calendars still offered, around the clock first, and the option's
+// row then names it.
+func TestTheInstallationsCalendarIsChosenOnTheCard(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+
+	var office int
+
+	p.awaitJSON(`(async () => {
+		const made = await api('/calendars', { method: 'POST', body: JSON.stringify(
+			{ name: 'Office', hours: [{ weekday: 1, from: '08:00', to: '17:00' }] }) });
+		await api('/calendars', { method: 'POST', body: JSON.stringify({ name: 'Old office', valid: false }) });
+		await refreshAll();
+		return made.id;
+	})()`, &office)
+
+	p.run("open the settings", p.click(`.tab[data-view="admin"]`),
+		chromedp.WaitVisible("#table-sysconfig", chromedp.ByID))
+	p.waitForText("#table-sysconfig tbody", "TimeWorkingHours")
+
+	row := `[...document.querySelectorAll('#table-sysconfig tbody tr')]
+		.find((row) => row.querySelector('code')?.textContent === 'TimeWorkingHours')`
+
+	if got := p.text("#table-sysconfig tbody"); !strings.Contains(got, "around the clock") {
+		t.Errorf("before a calendar is named the card reads %q; want around the clock", got)
+	}
+
+	p.run("open the option", chromedp.Evaluate(row+`.querySelector('button.link').click()`, nil),
+		chromedp.WaitVisible(`#form-sysconfig [name="calendar"]`, chromedp.ByQuery))
+
+	var offered []string
+
+	p.evalJSON(`JSON.stringify([...document.querySelectorAll('#form-sysconfig [name="calendar"] option')]
+		.map((option) => option.textContent))`, &offered)
+
+	if strings.Join(offered, "|") != "around the clock|Office" {
+		t.Errorf("the calendars offered are %q; want around the clock first and the one still offered", offered)
+	}
+
+	p.run("choose the office", p.chooseOption(`#form-sysconfig [name="calendar"]`, strconv.Itoa(office)),
+		p.click("#sysconfig-submit"))
+	p.waitGone("#form-sysconfig")
+
+	var named string
+
+	p.evalJSON(`JSON.stringify(`+row+`.textContent)`, &named)
+
+	if !strings.Contains(named, "Office · changed") {
+		t.Errorf("after choosing the office the option's row reads %q", named)
 	}
 }

@@ -5214,9 +5214,18 @@ function configDescription(option) {
   return t(`sysconfig.${option.name}`, option.description);
 }
 
-/** A value of an option as the card shows it: a switch as on or off, nothing as a word. */
+/**
+ * A value of an option as the card shows it: a switch as on or off, a calendar
+ * by its name - none counts around the clock - and nothing as a word.
+ */
 function configShown(option, value) {
   if (option.type === 'bool') return value ? t('change.on', 'on') : t('change.off', 'off');
+
+  if (option.type === 'calendar') {
+    if (value === null || value === undefined) return t('sla.aroundTheClock', 'around the clock');
+
+    return (cache.calendars ?? []).find((calendar) => calendar.id === value)?.name ?? `#${value}`;
+  }
 
   return value === '' ? t('sysconfig.nothing', 'nothing') : value;
 }
@@ -5227,6 +5236,13 @@ async function loadSysConfig() {
 
   const tbody = $('#table-sysconfig tbody');
   if (!tbody || !can('settings:manage')) return;
+
+  // The names of the calendars an option may name, read here as well because
+  // nothing on this screen reads them otherwise; whoever cannot set up queues
+  // sees an option's calendar by its number.
+  if (cache.sysconfig.some((option) => option.type === 'calendar') && can('queues:write')) {
+    cache.calendars = (await api('/calendars'))?.items ?? [];
+  }
 
   fillTable(tbody, cache.sysconfig.map(sysconfigRow), 4, t('sysconfig.none', 'No options.'));
 }
@@ -5254,14 +5270,26 @@ function sysconfigRow(option) {
 function editSysConfig(option) {
   const form = $('#form-sysconfig');
   const text = option.type === 'string';
+  const calendar = option.type === 'calendar';
 
   form.hidden = false;
   form.elements.id.value = option.name;
   $('.sysconfig-text', form).hidden = !text;
-  $('.sysconfig-switch', form).hidden = text;
+  $('.sysconfig-switch', form).hidden = option.type !== 'bool';
+  $('.sysconfig-calendar', form).hidden = !calendar;
   form.elements.text.maxLength = option.maxLength || 255;
   form.elements.text.value = text ? option.value : '';
   form.elements.enabled.checked = option.value === true;
+
+  // Around the clock first, then the calendars still offered - and the one the
+  // option names, offered or not, so that opening it does not quietly change it.
+  if (calendar) {
+    fillSelect(form.elements.calendar,
+      (cache.calendars ?? []).filter((entry) => entry.valid || entry.id === option.value)
+        .map((entry) => ({ value: String(entry.id), label: entry.name })),
+      { placeholder: t('sla.aroundTheClock', 'around the clock'), labelKey: 'label', valueKey: 'value' });
+    form.elements.calendar.value = option.value ? String(option.value) : '';
+  }
   $('#sysconfig-default').hidden = !option.modified;
   $('#sysconfig-cancel').hidden = false;
 
@@ -5276,7 +5304,7 @@ function editSysConfig(option) {
     $('#sysconfig-description').textContent = configDescription(option);
   });
 
-  form.elements[text ? 'text' : 'enabled'].focus();
+  form.elements[{ string: 'text', calendar: 'calendar' }[option.type] ?? 'enabled'].focus();
 }
 
 /** Puts the card's form away, holding no option. */
@@ -5303,7 +5331,11 @@ function saveSysConfig(form) {
   const option = cache.sysconfig.find((candidate) => candidate.name === form.elements.id.value);
   if (!option) return;
 
-  const value = option.type === 'bool' ? form.elements.enabled.checked : form.elements.text.value;
+  const chosen = form.elements.calendar.value;
+  const value = {
+    bool: () => form.elements.enabled.checked,
+    calendar: () => (chosen ? Number(chosen) : null),
+  }[option.type]?.() ?? form.elements.text.value;
 
   mutate(
     () => api(`/settings/sysconfig/${encodeURIComponent(option.name)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
@@ -10258,7 +10290,8 @@ const TOUR_STEPS = [
     permission: 'queues:write',
     title: () => t('tour.sla.title', 'What a ticket is owed'),
     text: () => t('tour.sla.text',
-      'Minutes until the first answer and until the solution, counted in a calendar or around the clock. A queue '
+      'Minutes until the first answer and until the solution, counted in the level\'s calendar, in the installation\'s '
+      + 'where it names none, or around the clock. A queue '
       + 'names the level its new tickets start with, and a ticket past its moment is marked overdue.'),
   },
   {

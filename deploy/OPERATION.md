@@ -1512,7 +1512,9 @@ directory's schedule. That schedule is not configurable.
 
 Once a minute the application looks after its tickets: one whose wait is over
 moves on to the state its waiting state names, and a lock that has run
-as long as its queue allows is freed. It writes a line at INFO when it changed
+as long as its queue allows is freed - counted in the calendar the system
+configuration's TimeWorkingHours names, and around the clock while it names
+none. It writes a line at INFO when it changed
 something and at ERROR when it could not, and nothing while there was nothing
 to do - so a quiet log is not a sign that it has stopped. That schedule is not
 configurable either; a queue that frees nothing has its unlock time at zero,

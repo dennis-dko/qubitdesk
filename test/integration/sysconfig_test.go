@@ -4,6 +4,7 @@ package integration
 
 import (
 	"net/http"
+	"strconv"
 	"testing"
 )
 
@@ -142,4 +143,48 @@ func TestTheTicketsObeyTheSystemConfiguration(t *testing.T) {
 	if released := movedLocked("Scanner"); released.Locked {
 		t.Error("with Ticket::UnlockOnMove at its default a moved ticket kept its lock")
 	}
+}
+
+// The installation's calendar is named over HTTP and through the database: a
+// calendar there is is taken and handed out as its id, one that is not is
+// refused, the calendar is not deleted while it is named, and once the option
+// is put back to none it is.
+func TestTheInstallationsCalendarIsNamedOverHTTP(t *testing.T) {
+	t.Parallel()
+
+	a := start(t)
+	admin := a.signInAsAdmin("a-much-better-password")
+
+	var office struct {
+		ID uint `json:"id"`
+	}
+
+	admin.must(admin.api(http.MethodPost, "/calendars", map[string]any{
+		"name": "Office", "hours": []map[string]any{{"weekday": 1, "from": "08:00", "to": "17:00"}},
+	}), http.StatusCreated).Data(t, &office)
+
+	admin.must(admin.api(http.MethodPut, "/settings/sysconfig/TimeWorkingHours", map[string]any{"value": office.ID}),
+		http.StatusOK)
+
+	if got := admin.api(http.MethodPut, "/settings/sysconfig/TimeWorkingHours", map[string]any{"value": 999}); got.Status != http.StatusBadRequest {
+		t.Errorf("naming a calendar there is not was answered %d, want 400", got.Status)
+	}
+
+	var listed configList
+
+	admin.must(admin.api(http.MethodGet, "/settings/sysconfig", nil), http.StatusOK).Data(t, &listed)
+
+	if value, modified, _ := listed.valueOf("TimeWorkingHours"); value != float64(office.ID) || !modified {
+		t.Errorf("the option reads %v, modified %t; want the office calendar's id", value, modified)
+	}
+
+	path := "/calendars/" + strconv.FormatUint(uint64(office.ID), 10)
+
+	if got := admin.api(http.MethodDelete, path, nil); got.Status != http.StatusConflict ||
+		errorCode(t, got) != "calendarCountsTheInstallation" {
+		t.Errorf("deleting the installation's calendar was answered %d %s", got.Status, got.Body)
+	}
+
+	admin.must(admin.api(http.MethodDelete, "/settings/sysconfig/TimeWorkingHours", nil), http.StatusNoContent, http.StatusOK)
+	admin.must(admin.api(http.MethodDelete, path, nil), http.StatusNoContent, http.StatusOK)
 }

@@ -55,8 +55,8 @@ func (r *TicketRepository) EndWait(
 func (r *TicketRepository) FreeLock(
 	ctx context.Context,
 	id uint,
+	lockedBy time.Time,
 	working []uint,
-	held time.Duration,
 	now time.Time,
 	history []model.HistoryEntry,
 ) (bool, error) {
@@ -69,7 +69,7 @@ func (r *TicketRepository) FreeLock(
 		args = append(args, state)
 	}
 
-	args = append(args, now.Add(-held))
+	args = append(args, lockedBy)
 
 	return r.guarded(ctx, history,
 		"UPDATE tickets SET locked = ?, locked_at = NULL, updated_at = ? "+

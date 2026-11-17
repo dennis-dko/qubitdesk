@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/dennis-dko/go-ticket-system/internal/application/v1/command"
@@ -11,14 +12,55 @@ import (
 )
 
 // CalendarApplicationService administers the calendars a service level's
-// minutes are counted in.
+// minutes are counted in, one of which the installation may name as its own.
 type CalendarApplicationService struct {
 	calendars repository.CalendarRepository
+
+	// config is the system configuration, which names the installation's
+	// calendar; nil leaves it naming none.
+	config ConfigReader
 }
 
 // NewCalendarApplicationService works on the calendars alone.
 func NewCalendarApplicationService(calendars repository.CalendarRepository) *CalendarApplicationService {
 	return &CalendarApplicationService{calendars: calendars}
+}
+
+// WithConfig reads which calendar the installation counts in, so that the one
+// it names is not deleted from under it.
+func (s *CalendarApplicationService) WithConfig(config ConfigReader) *CalendarApplicationService {
+	s.config = config
+
+	return s
+}
+
+// CanBeTheInstallations refuses a calendar the system configuration may not
+// name as the installation's: one that is not there, or no longer offered.
+// Naming none is always allowed: it counts around the clock.
+func (s *CalendarApplicationService) CanBeTheInstallations(ctx context.Context, value string) error {
+	if value == "" {
+		return nil
+	}
+
+	id, err := strconv.ParseUint(value, 10, 0)
+	if err != nil || id == 0 {
+		return apperror.InvalidFields("value")
+	}
+
+	calendar, err := s.calendars.GetByID(ctx, uint(id))
+	if apperror.KindOf(err) == apperror.KindNotFound {
+		return apperror.InvalidFields("value")
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if !calendar.Valid {
+		return apperror.InvalidFields("value")
+	}
+
+	return nil
 }
 
 func (s *CalendarApplicationService) List(ctx context.Context) ([]*model.Calendar, error) {
@@ -79,6 +121,18 @@ func (s *CalendarApplicationService) Delete(ctx context.Context, id uint) error 
 	if levels > 0 {
 		return apperror.Conflictf("%d service levels count in the calendar %q", levels, calendar.Name).
 			WithCode("calendarInUse", calendar.Name, levels)
+	}
+
+	if s.config != nil {
+		named, err := s.config.String(ctx, model.ConfigTimeWorkingHours)
+		if err != nil {
+			return err
+		}
+
+		if named == strconv.FormatUint(uint64(id), 10) {
+			return apperror.Conflictf("the installation counts in the calendar %q", calendar.Name).
+				WithCode("calendarCountsTheInstallation", calendar.Name)
+		}
 	}
 
 	return s.calendars.Delete(ctx, id)
