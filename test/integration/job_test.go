@@ -182,3 +182,64 @@ func TestAJobRunsOverHTTP(t *testing.T) {
 		t.Errorf("the administration log reads %+v; want the run", log.Entries)
 	}
 }
+
+// A ticket opened over HTTP starts the job waiting for TicketCreate in the
+// shipped binary: the ticket comes back from the job's macro raised, the change
+// written as the system's, and the run kept as one an event started.
+func TestOpeningATicketStartsTheJobWaitingForIt(t *testing.T) {
+	t.Parallel()
+
+	a := start(t)
+	admin := a.signInAsAdmin("a-much-better-password")
+	desk := theDesk(t, admin)
+
+	var priorities catalogList
+
+	admin.must(admin.api(http.MethodGet, "/ticket-priorities", nil), http.StatusOK).Data(t, &priorities)
+
+	high := ""
+	for _, priority := range priorities.Items {
+		if priority.Name == "high" {
+			high = strconv.FormatUint(uint64(priority.ID), 10)
+		}
+	}
+
+	var macro, plan, job struct {
+		ID uint `json:"id"`
+	}
+
+	admin.must(admin.api(http.MethodPost, "/macros", map[string]any{"name": "Raise", "actions": []map[string]any{
+		{"type": "PrioritySet", "parameters": map[string]string{"priorityId": high}},
+	}}), http.StatusCreated).Data(t, &macro)
+	admin.must(admin.api(http.MethodPost, "/exec-plans", map[string]any{
+		"name": "Arrivals", "type": "EventBased", "events": []string{"TicketCreate"},
+	}), http.StatusCreated).Data(t, &plan)
+	admin.must(admin.api(http.MethodPost, "/jobs", map[string]any{
+		"name": "Raise what arrives", "criteria": map[string]any{"queueIds": []uint{desk}},
+		"macroIds": []uint{macro.ID}, "planIds": []uint{plan.ID},
+	}), http.StatusCreated).Data(t, &job)
+
+	printer := openTicket(t, admin, desk, "Printer", nil)
+
+	var read ticketResponse
+
+	admin.must(admin.api(http.MethodGet, ticketPath(printer.ID), nil), http.StatusOK).Data(t, &read)
+
+	if strconv.FormatUint(uint64(read.PriorityID), 10) != high {
+		t.Errorf("the printer reads %+v; want the waiting job to have raised it", read)
+	}
+
+	var runs struct {
+		Items []struct {
+			Trigger string `json:"trigger"`
+			Tickets int    `json:"tickets"`
+		} `json:"items"`
+	}
+
+	admin.must(admin.api(http.MethodGet, "/jobs/"+strconv.FormatUint(uint64(job.ID), 10)+"/runs", nil), http.StatusOK).
+		Data(t, &runs)
+
+	if len(runs.Items) != 1 || runs.Items[0].Trigger != "event" || runs.Items[0].Tickets != 1 {
+		t.Errorf("the job's runs read %+v; want one, started by the opening", runs)
+	}
+}

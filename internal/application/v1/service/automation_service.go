@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"time"
 
@@ -11,29 +12,45 @@ import (
 	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
-// AutomationService runs the jobs. It finds the tickets a job's criteria take
-// and takes the job's macros through each of them, step by step, by way of the
-// ticket service and as the application - so that a step meets every rule a
-// person's change meets and is written into the history as the system's - and
-// keeps what each run did.
+// AutomationService runs the jobs - when somebody asks, when a time-based plan's
+// time comes, when an event-based plan's event happens to a ticket. It finds
+// the tickets a job's criteria take and takes the job's macros through each of
+// them, step by step, by way of the ticket service and as the application - so
+// that a step meets every rule a person's change meets and is written into the
+// history as the system's - and keeps what each run did.
 type AutomationService struct {
 	jobs    repository.JobRepository
 	macros  repository.MacroRepository
+	plans   repository.ExecPlanRepository
 	runs    repository.JobRunRepository
 	found   repository.TicketRepository
 	tickets *TicketApplicationService
+	zone    func(ctx context.Context) string
 	now     func() time.Time
 }
 
-// NewAutomationService runs jobs through the ticket service given.
+// AutomationRepositories are the tables the automation keeps its jobs, their
+// macros and plans and what they did in, handed over together.
+type AutomationRepositories struct {
+	Jobs   repository.JobRepository
+	Macros repository.MacroRepository
+	Plans  repository.ExecPlanRepository
+	Runs   repository.JobRunRepository
+}
+
+// NewAutomationService runs jobs on the tickets found through found, by way of
+// the ticket service given; zone answers the installation's zone, which a
+// time-based plan's times are read in.
 func NewAutomationService(
-	jobs repository.JobRepository,
-	macros repository.MacroRepository,
-	runs repository.JobRunRepository,
+	automation AutomationRepositories,
 	found repository.TicketRepository,
 	tickets *TicketApplicationService,
+	zone func(ctx context.Context) string,
 ) *AutomationService {
-	return &AutomationService{jobs: jobs, macros: macros, runs: runs, found: found, tickets: tickets, now: time.Now}
+	return &AutomationService{
+		jobs: automation.Jobs, macros: automation.Macros, plans: automation.Plans, runs: automation.Runs,
+		found: found, tickets: tickets, zone: zone, now: time.Now,
+	}
 }
 
 // Run runs a job once, as the trigger given, on the tickets its criteria take
@@ -50,7 +67,120 @@ func (s *AutomationService) Run(ctx context.Context, jobID uint, trigger model.R
 		return nil, err
 	}
 
-	return s.run(ctx, job, trigger)
+	return s.run(ctx, job, trigger, nil)
+}
+
+// RunDue runs every job one of whose time-based plans owes it a run at now, in
+// the installation's zone, and says how many it ran. A retired job, or a
+// retired plan, runs nothing.
+func (s *AutomationService) RunDue(ctx context.Context, now time.Time) (int, error) {
+	zone, err := time.LoadLocation(s.zone(ctx))
+	if err != nil {
+		zone = time.UTC
+	}
+
+	jobs, plans, err := s.jobsAndPlans(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	ran := 0
+
+	for _, job := range jobs {
+		for _, id := range job.PlanIDs {
+			if plan, ok := plans[id]; ok && job.DueOn(*plan, now, zone) {
+				if _, err := s.run(ctx, job, model.RunTime, nil); err != nil {
+					return ran, err
+				}
+
+				ran++
+
+				break
+			}
+		}
+	}
+
+	return ran, nil
+}
+
+// OnEvents runs, on the ticket the events happened to, every job one of whose
+// event-based plans waits for one of them and whose criteria take the ticket.
+// A retired job, or a retired plan, runs nothing.
+func (s *AutomationService) OnEvents(ctx context.Context, ticketID uint, events []model.TicketEvent) error {
+	jobs, plans, err := s.jobsAndPlans(ctx)
+	if err != nil {
+		return err
+	}
+
+	var ticket *model.Ticket
+
+	for _, job := range jobs {
+		if !waitsFor(job, plans, events) {
+			continue
+		}
+
+		if ticket == nil {
+			if ticket, err = s.found.GetByID(ctx, ticketID); err != nil {
+				return err
+			}
+		}
+
+		if job.Criteria.Matches(ticket) {
+			if _, err := s.run(ctx, job, model.RunEvent, []uint{ticketID}); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// jobsAndPlans are the jobs still offered and every plan still offered, by id.
+func (s *AutomationService) jobsAndPlans(ctx context.Context) ([]*model.Job, map[uint]*model.ExecPlan, error) {
+	all, err := s.jobs.GetAll(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	jobs := make([]*model.Job, 0, len(all))
+	for _, job := range all {
+		if job.Valid {
+			jobs = append(jobs, job)
+		}
+	}
+
+	listed, err := s.plans.GetAll(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	plans := map[uint]*model.ExecPlan{}
+	for _, plan := range listed {
+		if plan.Valid {
+			plans[plan.ID] = plan
+		}
+	}
+
+	return jobs, plans, nil
+}
+
+// waitsFor says whether one of a job's event-based plans waits for one of the
+// events.
+func waitsFor(job *model.Job, plans map[uint]*model.ExecPlan, events []model.TicketEvent) bool {
+	for _, id := range job.PlanIDs {
+		plan, ok := plans[id]
+		if !ok || plan.Type != model.PlanEventBased {
+			continue
+		}
+
+		for _, event := range events {
+			if slices.Contains(plan.Events, event) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // Runs lists a job's latest runs, the latest first.
@@ -67,7 +197,14 @@ func (s *AutomationService) Prune(ctx context.Context) (int, error) {
 	return s.runs.PruneBefore(ctx, s.now().UTC().Add(-model.RunsKeptFor))
 }
 
-func (s *AutomationService) run(ctx context.Context, job *model.Job, trigger model.RunTrigger) (*model.JobRun, error) {
+// run runs a job on the tickets its criteria take now, or on only the ones
+// given - the ticket an event happened to.
+func (s *AutomationService) run(
+	ctx context.Context,
+	job *model.Job,
+	trigger model.RunTrigger,
+	only []uint,
+) (*model.JobRun, error) {
 	started := s.now().UTC()
 	run := &model.JobRun{JobID: job.ID, Trigger: trigger, StartedAt: started, Lines: []model.RunLine{}}
 
@@ -93,9 +230,14 @@ func (s *AutomationService) run(ctx context.Context, job *model.Job, trigger mod
 		macros = append(macros, macro)
 	}
 
-	ids, err := s.found.Matching(ctx, job.Criteria, model.MaxRunTickets)
-	if err != nil {
-		return nil, err
+	ids := only
+	if ids == nil {
+		matching, err := s.found.Matching(ctx, job.Criteria, model.MaxRunTickets)
+		if err != nil {
+			return nil, err
+		}
+
+		ids = matching
 	}
 
 	run.Tickets = len(ids)

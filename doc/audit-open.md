@@ -18,10 +18,11 @@ What is below was raised and is not recorded as decided anywhere.
 
 ## Decisions waiting on the maintainer
 
-None today: the last were decided on 2026-11-16. The table stays for the next.
+One, raised on 2026-11-17 by the automation's time-based plans.
 
 | | Question |
 | --- | --- |
+| K4 | A job that has never run is owed only a time of its plan that has just come (`Job.DueOn`); KIX18 counts its last run from nought, so a job set up at three in the afternoon on a plan for eight runs at once, and the first eight o'clock after that again. A job that has run catches up on a time missed while the application was down in both. Keep it - a job runs at the times it says, and not when it was saved - or run a new job at once as KIX18 does? |
 
 ## Measurements reading cannot make
 

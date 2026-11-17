@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
@@ -17,19 +18,23 @@ type automationFixture struct {
 	automation *service.AutomationService
 	macros     *memory.MacroRepository
 	jobs       *memory.JobRepository
+	plans      *memory.ExecPlanRepository
 }
 
 func newAutomationFixture(t *testing.T) automationFixture {
 	t.Helper()
 
 	f := newTicketFixture(t)
-	macros, jobs := memory.NewMacroRepository(), memory.NewJobRepository()
+	macros, jobs, plans := memory.NewMacroRepository(), memory.NewJobRepository(), memory.NewExecPlanRepository()
 
 	return automationFixture{
 		ticketFixture: f,
-		automation:    service.NewAutomationService(jobs, macros, memory.NewJobRunRepository(), f.repo, f.tickets),
-		macros:        macros,
-		jobs:          jobs,
+		automation: service.NewAutomationService(service.AutomationRepositories{
+			Jobs: jobs, Macros: macros, Plans: plans, Runs: memory.NewJobRunRepository(),
+		}, f.repo, f.tickets, func(context.Context) string { return "Europe/Berlin" }),
+		macros: macros,
+		jobs:   jobs,
+		plans:  plans,
 	}
 }
 
@@ -181,5 +186,100 @@ func TestARunKeepsWhatItCouldNotDo(t *testing.T) {
 
 	if _, err := f.tickets.GetTicket(ctx, f.admin, printer.ID); err == nil {
 		t.Error("the deleted printer can still be read")
+	}
+}
+
+// A job whose event-based plan waits for what a person's change did runs on the
+// ticket it was done to, if its criteria take it, as a run started by the
+// event; the change the job itself makes raises nothing, so the job does not
+// start itself again; and a ticket the criteria do not take is left alone.
+func TestAnEventStartsTheJobsWaitingForIt(t *testing.T) {
+	ctx := context.Background()
+	f := newAutomationFixture(t)
+	f.tickets.WithEvents(func(ctx context.Context, ticketID uint, events []model.TicketEvent) {
+		if err := f.automation.OnEvents(ctx, ticketID, events); err != nil {
+			t.Error(err)
+		}
+	})
+
+	arrivals, err := f.plans.Save(ctx, &model.ExecPlan{Name: "Arrivals", Valid: true, Type: model.PlanEventBased,
+		Events: []model.TicketEvent{model.EventTicketCreate, model.EventTicketPriorityUpdate}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raise := f.macro(t, "Raise", true,
+		model.MacroAction{Type: model.ActionPrioritySet, Parameters: map[string]string{"priorityId": idText(f.priority["high"].ID)}})
+
+	job, err := f.jobs.Save(ctx, &model.Job{Name: "Raise the desk", Valid: true,
+		Criteria: model.TicketCriteria{QueueIDs: []uint{f.desk.ID}}, MacroIDs: []uint{raise}, PlanIDs: []uint{arrivals.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	printer := f.open(t, f.admin, f.desk, "Printer")
+	ledger := f.open(t, f.admin, f.readOnly, "Ledger")
+
+	if read, _ := f.tickets.GetTicket(ctx, f.admin, printer.ID); read.PriorityID != f.priority["high"].ID {
+		t.Errorf("a ticket opened in the desk was left at priority %d, want high", read.PriorityID)
+	}
+
+	if read, _ := f.tickets.GetTicket(ctx, f.admin, ledger.ID); read.PriorityID == f.priority["high"].ID {
+		t.Error("a ticket of another queue was raised")
+	}
+
+	runs, err := f.automation.Runs(ctx, job.ID)
+	if err != nil || len(runs) != 1 || runs[0].Trigger != model.RunEvent || runs[0].Tickets != 1 {
+		t.Errorf("the job's runs read %+v, %v; want the one the opening started, and none its own change started", runs, err)
+	}
+}
+
+// A job whose time-based plan's time has come runs as a run started by the
+// time, and once: the next look, a minute on, finds it has run since.
+func TestATimeStartsTheJobsItIsDueFor(t *testing.T) {
+	ctx := context.Background()
+	f := newAutomationFixture(t)
+
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	monday := time.Date(2026, time.November, 16, 8, 0, 10, 0, berlin)
+
+	mornings, err := f.plans.Save(ctx, &model.ExecPlan{Name: "Mornings", Valid: true, Type: model.PlanTimeBased,
+		Weekdays: []time.Weekday{time.Monday}, Times: []int{8 * 60}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f.open(t, f.admin, f.desk, "Printer")
+
+	note := f.macro(t, "Note", true,
+		model.MacroAction{Type: model.ActionArticleCreate, Parameters: map[string]string{"channel": "note", "body": "Good morning."}})
+
+	job, err := f.jobs.Save(ctx, &model.Job{Name: "Mornings", Valid: true,
+		Criteria: model.TicketCriteria{QueueIDs: []uint{f.desk.ID}}, MacroIDs: []uint{note}, PlanIDs: []uint{mornings.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// It last ran on Friday, so that only its having run since stops a second
+	// run a minute on - a job that never ran is held by the minute alone.
+	if err := f.jobs.RanAt(ctx, job.ID, monday.AddDate(0, 0, -3)); err != nil {
+		t.Fatal(err)
+	}
+
+	if ran, err := f.automation.RunDue(ctx, monday); err != nil || ran != 1 {
+		t.Fatalf("at eight the automation ran %d jobs, %v; want the morning job", ran, err)
+	}
+
+	if ran, err := f.automation.RunDue(ctx, monday.Add(time.Minute)); err != nil || ran != 0 {
+		t.Errorf("a minute later the automation ran %d jobs, %v; want none", ran, err)
+	}
+
+	runs, _ := f.automation.Runs(ctx, job.ID)
+	if len(runs) != 1 || runs[0].Trigger != model.RunTime {
+		t.Errorf("the job's runs read %+v; want one started by the time", runs)
 	}
 }

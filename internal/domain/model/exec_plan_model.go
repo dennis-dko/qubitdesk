@@ -65,6 +65,34 @@ func TicketEvents() []TicketEvent {
 	}
 }
 
+// EventsOf are the events a change raised, read off the history lines it wrote,
+// each once and in the order a form offers them. The time noted, a file added
+// and a ticket's service level raise none, as KIX18 raises none for them.
+func EventsOf(entries []HistoryEntry) []TicketEvent {
+	raised := map[HistoryEvent]TicketEvent{
+		HistoryCreated: EventTicketCreate, HistoryTitle: EventTicketTitleUpdate, HistoryQueue: EventTicketQueueUpdate,
+		HistoryState: EventTicketStateUpdate, HistoryPriority: EventTicketPriorityUpdate,
+		HistoryType: EventTicketTypeUpdate, HistoryOwner: EventTicketOwnerUpdate,
+		HistoryResponsible: EventTicketResponsibleUpdate, HistoryContact: EventTicketCustomerUpdate,
+		HistoryOrganisation: EventTicketCustomerUpdate, HistoryLock: EventTicketLockUpdate,
+		HistoryPending: EventTicketPendingTimeUpdate, HistoryArticle: EventArticleCreate,
+	}
+
+	events := make([]TicketEvent, 0)
+
+	for _, event := range TicketEvents() {
+		for _, entry := range entries {
+			if raised[entry.Event] == event {
+				events = append(events, event)
+
+				break
+			}
+		}
+	}
+
+	return events
+}
+
 // MaxPlanTimes bounds the times of day a plan runs at. Chosen rather than
 // derived: every quarter of an hour is ninety-six, and a job wanted more often
 // than that is a job that should not be time-based.

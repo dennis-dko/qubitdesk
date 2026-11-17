@@ -52,6 +52,38 @@ func (c TicketCriteria) Matches(ticket *Ticket) bool {
 		(c.Locked == nil || *c.Locked == ticket.Locked)
 }
 
+// DueOn says whether a time-based plan owes the job a run at now, read off the
+// wall in zone: one of the plan's times today, on one of its weekdays, that has
+// come and lies after the job's last run - as KIX18's TimeBased plan decides
+// it, so that a time missed while the application was down is run once it is
+// back. A job that has never run is owed only a time that has just come, and
+// not one that passed before it was set up, which KIX18 would run at once.
+func (j Job) DueOn(plan ExecPlan, now time.Time, zone *time.Location) bool {
+	wall := now.In(zone)
+	if plan.Type != PlanTimeBased || !plan.Valid || !slices.Contains(plan.Weekdays, wall.Weekday()) {
+		return false
+	}
+
+	midnight := time.Date(wall.Year(), wall.Month(), wall.Day(), 0, 0, 0, 0, zone)
+
+	for _, minute := range plan.Times {
+		at := wallClock(midnight, minute, zone)
+
+		switch {
+		case at.After(now):
+			continue
+		case j.LastRunAt == nil:
+			if now.Sub(at) < time.Minute {
+				return true
+			}
+		case at.After(*j.LastRunAt):
+			return true
+		}
+	}
+
+	return false
+}
+
 // MaxJobMacros bounds the macros one job runs. Chosen rather than derived: a
 // job running more macros than a form shows at once is several jobs.
 const MaxJobMacros = 20

@@ -5,8 +5,13 @@ import "time"
 // RunTrigger is what started a job's run.
 type RunTrigger string
 
-// RunManual is a run somebody asked for.
-const RunManual RunTrigger = "manual"
+// The ways a run starts: somebody asking for it, a time-based plan's time
+// coming, an event-based plan's event happening to a ticket.
+const (
+	RunManual RunTrigger = "manual"
+	RunTime   RunTrigger = "time"
+	RunEvent  RunTrigger = "event"
+)
 
 // JobRun is what one run of a job did: how many tickets it found, on how many
 // every step was taken and on how many one was refused, and a line for each

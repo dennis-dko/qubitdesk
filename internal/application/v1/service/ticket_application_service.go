@@ -114,6 +114,10 @@ type TicketApplicationService struct {
 	// unlockTypes are the state types a queue's unlock time frees a lock in.
 	unlockTypes repository.UnlockStateTypeRepository
 
+	// raised hears what a person's change did to a ticket, for the jobs whose
+	// event-based plans wait for it; nil hears nothing - see WithEvents.
+	raised func(ctx context.Context, ticketID uint, events []model.TicketEvent)
+
 	metrics
 }
 
@@ -152,6 +156,27 @@ var _ TicketService = (*TicketApplicationService)(nil)
 type ConfigReader interface {
 	Bool(ctx context.Context, name string) (bool, error)
 	String(ctx context.Context, name string) (string, error)
+}
+
+// WithEvents has the events a person's change raised told to raised, after the
+// change is written. The application's own changes - the automation's - raise
+// none, so that a job cannot start itself, or two jobs one another, for ever.
+func (s *TicketApplicationService) WithEvents(
+	raised func(ctx context.Context, ticketID uint, events []model.TicketEvent),
+) *TicketApplicationService {
+	s.raised = raised
+
+	return s
+}
+
+// raise tells the events a change raised to whoever listens, where a person
+// made it.
+func (s *TicketApplicationService) raise(ctx context.Context, caller *Principal, ticketID uint, events []model.TicketEvent) {
+	if s.raised == nil || caller == nil || caller.System || len(events) == 0 {
+		return
+	}
+
+	s.raised(ctx, ticketID, events)
 }
 
 // WithConfig attaches the system configuration. Optional: without it every
@@ -325,6 +350,7 @@ func (s *TicketApplicationService) CreateTicket(
 	}
 
 	s.count(ctx, MetricTicketsOpened, "channel", string(opened.Channel))
+	s.raise(ctx, caller, opened.ID, []model.TicketEvent{model.EventTicketCreate, model.EventArticleCreate})
 
 	return opened, nil
 }
@@ -411,7 +437,14 @@ func (s *TicketApplicationService) UpdateTicket(
 
 	ticket.UpdatedAt = now
 
-	return s.tickets.Update(ctx, ticket, change.entries)
+	changed, err := s.tickets.Update(ctx, ticket, change.entries)
+	if err != nil {
+		return nil, err
+	}
+
+	s.raise(ctx, caller, changed.ID, model.EventsOf(change.entries))
+
+	return changed, nil
 }
 
 // releaseOnMove takes a moved ticket's lock off, as KIX18 does unless the
@@ -490,7 +523,14 @@ func (s *TicketApplicationService) AddArticle(
 		answered = &now
 	}
 
-	return s.tickets.AddArticle(ctx, article, minutes, change.entries, answered, article.CustomerVisible)
+	written, err := s.tickets.AddArticle(ctx, article, minutes, change.entries, answered, article.CustomerVisible)
+	if err != nil {
+		return nil, err
+	}
+
+	s.raise(ctx, caller, ticket.ID, model.EventsOf(change.entries))
+
+	return written, nil
 }
 
 // reached reads a ticket and its queue for a caller, and answers "not found"

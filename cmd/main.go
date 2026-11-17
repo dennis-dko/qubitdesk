@@ -664,8 +664,26 @@ func main() {
 
 			return place
 		})
-	automation := appservice.NewAutomationService(jobRepo, macroRepo, sqldb.NewJobRunRepository(db, cfg.Dialect),
-		ticketRepo, tickets)
+	automation := appservice.NewAutomationService(appservice.AutomationRepositories{
+		Jobs: jobRepo, Macros: macroRepo, Plans: planRepo, Runs: sqldb.NewJobRunRepository(db, cfg.Dialect),
+	}, ticketRepo, tickets, func(ctx context.Context) string {
+		name, err := settingsService.Timezone(ctx)
+		if err != nil {
+			return model.DefaultTimezone
+		}
+
+		return name
+	})
+
+	// The jobs whose event-based plans wait for what a person's change did run
+	// once the change is written - to the end, though the request that made the
+	// change may be gone by then, and without failing that change: the run keeps
+	// what it could not do, and anything else goes to the log.
+	tickets.WithEvents(func(ctx context.Context, ticketID uint, events []model.TicketEvent) {
+		if err := automation.OnEvents(context.WithoutCancel(ctx), ticketID, events); err != nil {
+			app.Logger().Errorf("automation on ticket %d: %v", ticketID, err)
+		}
+	})
 
 	// What this installation is called in a language, wherever it has to name
 	// itself: the prompt a passkey device shows.
@@ -1057,6 +1075,21 @@ func main() {
 		if moved > 0 || freed > 0 {
 			ctx.Logger.Infof("ticket housekeeping moved %d ticket(s) whose wait was over and freed %d lock(s)",
 				moved, freed)
+		}
+	})
+
+	// The jobs whose time-based plans owe them a run. Every minute, as KIX18's
+	// daemon looks.
+	app.AddCronJob("* * * * *", "automation-time-plans", func(ctx *gofr.Context) {
+		ran, err := automation.RunDue(ctx, time.Now())
+		if err != nil {
+			ctx.Logger.Errorf("automation: %v", err)
+
+			return
+		}
+
+		if ran > 0 {
+			ctx.Logger.Infof("automation ran %d job(s) whose time had come", ran)
 		}
 	})
 
