@@ -39,6 +39,7 @@ type Handlers struct {
 	Jobs      *rest.JobHandler
 
 	Notifications *rest.NotificationDefinitionHandler
+	Told          *rest.NotificationHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -166,6 +167,10 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.GET(base+"/me/push", h.Push.State)
 	app.POST(base+"/me/push", h.Push.Subscribe)
 	app.DELETE(base+"/me/push", h.Push.Unsubscribe)
+
+	app.GET(base+"/me/notifications", h.Told.Mine)
+	app.PUT(base+"/me/notifications/read", h.Told.MarkAllRead)
+	app.PUT(base+"/me/notifications/{id}/read", h.Told.MarkRead)
 
 	app.GET(base+"/me/address", h.Auth.Address)
 

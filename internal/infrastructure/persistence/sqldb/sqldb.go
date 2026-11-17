@@ -157,6 +157,32 @@ func (b base) exec(ctx context.Context, query string, args ...any) (int64, error
 	return res.RowsAffected()
 }
 
+// ids are the ids a query of one id answers, in the order it answers them.
+func (b base) ids(ctx context.Context, query string, id uint) ([]uint, error) {
+	rows, err := b.db.QueryContext(ctx, b.rebind(query), id)
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	ids := make([]uint, 0)
+
+	for rows.Next() {
+		var found uint
+		if err := rows.Scan(&found); err != nil {
+			return nil, apperror.Internal(err)
+		}
+
+		ids = append(ids, found)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, apperror.Internal(err)
+	}
+
+	return ids, nil
+}
+
 // update runs an UPDATE and reports whether the row was there, which is not
 // the same as whether anything changed.
 //

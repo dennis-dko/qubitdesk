@@ -41,6 +41,10 @@ type ticketFixture struct {
 	agent         *service.Principal
 	agentUser     *model.User
 	customer      *model.User
+	users         *memory.UserRepository
+	roles         *memory.RoleRepository
+	catalog       service.TicketCatalogRepositories
+	customers     service.TicketCustomerRepositories
 }
 
 func newTicketFixture(t *testing.T) ticketFixture {
@@ -124,6 +128,8 @@ func newTicketFixture(t *testing.T) ticketFixture {
 	}
 	customers := service.TicketCustomerRepositories{Contacts: f.contacts, Organisations: f.organisations}
 	levels, calendars := f.levels, f.calendars
+
+	f.users, f.roles, f.catalog, f.customers = users, roles, catalog, customers
 
 	f.serviceOver = func(tickets repository.TicketRepository) *service.TicketApplicationService {
 		return service.NewTicketApplicationService(tickets, queues, catalog, customers,

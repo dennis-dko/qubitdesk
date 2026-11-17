@@ -685,6 +685,27 @@ func main() {
 		}
 	})
 
+	// What any change did to a ticket is sent to the agents around it once the
+	// change is written, the same way and for the same reasons as the jobs run:
+	// to the end, and without failing the change.
+	notifications := appservice.NewNotificationService(appservice.NotificationSources{
+		Definitions: sqldb.NewNotificationDefinitionRepository(db, cfg.Dialect),
+		Sent:        sqldb.NewNotificationRepository(db, cfg.Dialect),
+		Tickets:     ticketRepo, Roles: roleRepo, Refs: automationRefs,
+	}, func(ctx context.Context) string {
+		name, err := settingsService.Timezone(ctx)
+		if err != nil {
+			return model.DefaultTimezone
+		}
+
+		return name
+	})
+	tickets.WithNotifications(func(ctx context.Context, ticketID uint, events []model.TicketEvent, by uint) {
+		if err := notifications.OnTicketEvents(context.WithoutCancel(ctx), ticketID, events, by); err != nil {
+			app.Logger().Errorf("notifications on ticket %d: %v", ticketID, err)
+		}
+	})
+
 	// What this installation is called in a language, wherever it has to name
 	// itself: the prompt a passkey device shows.
 	//
@@ -1062,6 +1083,7 @@ func main() {
 
 		Notifications: rest.NewNotificationDefinitionHandler(appservice.NewNotificationDefinitionApplicationService(
 			sqldb.NewNotificationDefinitionRepository(db, cfg.Dialect), automationRefs), authorizer),
+		Told: rest.NewNotificationHandler(notifications, authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves

@@ -4016,6 +4016,57 @@
           }
         }
       }
+    },
+    "/me/notifications": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "List what I was told",
+        "description": "The latest notifications sent to the caller, the latest first and at most a hundred, each worded for them as it was sent, and under `unread` how many of all of theirs they have not read. Takes `tickets:read`.",
+        "responses": {
+          "200": {
+            "description": "The notifications"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      }
+    },
+    "/me/notifications/read": {
+      "put": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Mark everything I was told as read",
+        "description": "Takes `tickets:read`.",
+        "responses": {
+          "200": {
+            "description": "Read"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      }
+    },
+    "/me/notifications/{id}/read": {
+      "put": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Mark one thing I was told as read",
+        "description": "Somebody else's notification is not found. Takes `tickets:read`.",
+        "responses": {
+          "200": {
+            "description": "Read"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     }
   },
   "components": {

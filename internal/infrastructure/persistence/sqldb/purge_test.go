@@ -139,7 +139,8 @@ func TestPurgeUserRemovesWhatIsTheAccountsAndReleasesWhatIsNot(t *testing.T) {
 
 	for _, statement := range []string{
 		"INSERT INTO ticket_watchers (ticket_id, user_id) VALUES (?, ?)",
-		"INSERT INTO notifications (user_id, ticket_id, kind, created_at) VALUES (?2, ?1, 'answered', CURRENT_TIMESTAMP)",
+		"INSERT INTO notifications (user_id, ticket_id, definition_id, subject, body, created_at) " +
+			"VALUES (?2, ?1, 1, 'Answered', 'Somebody answered.', CURRENT_TIMESTAMP)",
 	} {
 		if _, err := db.Exec(statement, watched, leaving.ID); err != nil {
 			t.Fatalf("%s: %v", statement, err)

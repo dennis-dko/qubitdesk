@@ -118,6 +118,10 @@ type TicketApplicationService struct {
 	// event-based plans wait for it; nil hears nothing - see WithEvents.
 	raised func(ctx context.Context, ticketID uint, events []model.TicketEvent)
 
+	// told hears what any change did to a ticket and who made it, for the
+	// notifications; nil tells nobody - see WithNotifications.
+	told func(ctx context.Context, ticketID uint, events []model.TicketEvent, by uint)
+
 	metrics
 }
 
@@ -169,10 +173,35 @@ func (s *TicketApplicationService) WithEvents(
 	return s
 }
 
-// raise tells the events a change raised to whoever listens, where a person
-// made it.
+// WithNotifications attaches what sends the notifications, told of every
+// change's events and of the account that made it - nought for the application,
+// whose changes are news to the agents around a ticket as much as a person's -
+// once the change is written. Optional: without it nobody is told anything.
+func (s *TicketApplicationService) WithNotifications(
+	told func(ctx context.Context, ticketID uint, events []model.TicketEvent, by uint),
+) *TicketApplicationService {
+	s.told = told
+
+	return s
+}
+
+// raise tells the events a change raised to whoever listens: the notifications
+// whoever made it, and the jobs where a person made it.
 func (s *TicketApplicationService) raise(ctx context.Context, caller *Principal, ticketID uint, events []model.TicketEvent) {
-	if s.raised == nil || caller == nil || caller.System || len(events) == 0 {
+	if len(events) == 0 {
+		return
+	}
+
+	if s.told != nil {
+		var by uint
+		if id := callerID(caller); id != nil {
+			by = *id
+		}
+
+		s.told(ctx, ticketID, events, by)
+	}
+
+	if s.raised == nil || caller == nil || caller.System {
 		return
 	}
 

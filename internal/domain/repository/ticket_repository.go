@@ -91,6 +91,9 @@ type TicketRepository interface {
 
 	// Watching reports whether the account watches the ticket.
 	Watching(ctx context.Context, ticketID, userID uint) (bool, error)
+
+	// Watchers are the accounts that watch the ticket.
+	Watchers(ctx context.Context, ticketID uint) ([]uint, error)
 }
 
 // TicketFilter says which tickets a listing allows, and which page of them.

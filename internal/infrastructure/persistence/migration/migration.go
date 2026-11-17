@@ -1081,19 +1081,25 @@ func createTicketWatchers(d migration.Datasource, dialect string) error {
 	)`, foreignKeyID(dialect)))
 }
 
-// createNotifications keeps what each agent was told about a ticket and whether
-// they have read it. sent says whether it has left for the browsers and the
-// address that asked for it, so that the job which sends them sends each once.
+// createNotifications keeps what each agent was told about a ticket, in the
+// words the notification had for them then, and whether they have read it.
+// definition_id names the notification that told them and has no key: what was
+// told stays told when the notification is changed or deleted. sent says whether
+// it has left for the browsers and the address that asked for it, so that the
+// job which sends them sends each once.
 func createNotifications(d migration.Datasource, dialect string) error {
 	return exec(d, fmt.Sprintf(`CREATE TABLE notifications (
 		%[1]s,
 		user_id %[2]s NOT NULL REFERENCES users(id),
 		ticket_id %[2]s NOT NULL REFERENCES tickets(id),
-		kind VARCHAR(32) NOT NULL,
+		definition_id INT NOT NULL,
+		subject VARCHAR(255) NOT NULL,
+		body %[6]s NOT NULL,
 		created_at %[3]s NOT NULL,
 		read_at %[3]s,
 		sent %[4]s NOT NULL DEFAULT %[5]s
-	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), boolean(dialect), falseLiteral(dialect)))
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), boolean(dialect), falseLiteral(dialect),
+		longText(dialect)))
 }
 
 // createResponseTemplates keeps the answers written once and sent often. One

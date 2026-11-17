@@ -141,6 +141,10 @@ func (r *QueueRepository) Update(ctx context.Context, queue *model.Queue) (*mode
 	return r.GetByID(ctx, queue.ID)
 }
 
+func (r *QueueRepository) Followers(ctx context.Context, id uint) ([]uint, error) {
+	return r.ids(ctx, "SELECT user_id FROM user_queues WHERE queue_id = ? ORDER BY user_id", id)
+}
+
 func (r *QueueRepository) Delete(ctx context.Context, id uint) error {
 	return r.withTx(ctx, func(tx base) error {
 		if _, err := tx.exec(ctx, "DELETE FROM queue_roles WHERE queue_id = ?", id); err != nil {

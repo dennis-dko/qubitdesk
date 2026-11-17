@@ -36,7 +36,7 @@ var accountExport = []struct {
 		"FROM tickets t LEFT JOIN ticket_states s ON s.id = t.state_id WHERE t.responsible_id = ? ORDER BY t.id"},
 	{"contact", "SELECT id, organisation_id, name, email, phone, created_at FROM contacts WHERE user_id = ?"},
 	{"watched-tickets", "SELECT ticket_id FROM ticket_watchers WHERE user_id = ? ORDER BY ticket_id"},
-	{"notifications", "SELECT ticket_id, kind, created_at, read_at " +
+	{"notifications", "SELECT ticket_id, definition_id, created_at, read_at " +
 		"FROM notifications WHERE user_id = ? ORDER BY id"},
 	{"queues-told-about", "SELECT queue_id FROM user_queues WHERE user_id = ? ORDER BY queue_id"},
 	{"api-tokens", "SELECT id, name, prefix, created_at, expires_at, last_used_at " +

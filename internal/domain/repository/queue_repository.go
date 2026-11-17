@@ -24,4 +24,8 @@ type QueueRepository interface {
 
 	// CountChildren reports how many queues sit directly under this one.
 	CountChildren(ctx context.Context, id uint) (int, error)
+
+	// Followers are the agents who chose the queue as one of theirs, to be told
+	// about what happens in it.
+	Followers(ctx context.Context, id uint) ([]uint, error)
 }

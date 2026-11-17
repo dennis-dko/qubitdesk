@@ -1,5 +1,7 @@
 package model
 
+import "slices"
+
 // NotificationDefinition is what the installation tells the agents around a
 // ticket when something happens to it - KIX18's ticket notifications: the events
 // it is sent on, the tickets it is about, who is told, and what each is told in
@@ -59,6 +61,22 @@ type NotificationMessage struct {
 	Language string
 	Subject  string
 	Body     string
+}
+
+// MessageFor is the message a recipient reading language is sent: theirs, or
+// the English, or the first there is.
+func (n NotificationDefinition) MessageFor(language string) NotificationMessage {
+	for _, wanted := range []string{language, LanguageEnglish} {
+		if at := slices.IndexFunc(n.Messages, func(m NotificationMessage) bool { return m.Language == wanted }); at >= 0 {
+			return n.Messages[at]
+		}
+	}
+
+	if len(n.Messages) == 0 {
+		return NotificationMessage{}
+	}
+
+	return n.Messages[0]
 }
 
 // MaxNotificationBodyLength bounds what a notification says. Chosen rather than

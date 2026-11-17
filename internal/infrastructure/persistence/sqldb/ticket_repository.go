@@ -415,6 +415,10 @@ func (r *TicketRepository) Watching(ctx context.Context, ticketID, userID uint) 
 	return count > 0, nil
 }
 
+func (r *TicketRepository) Watchers(ctx context.Context, ticketID uint) ([]uint, error) {
+	return r.ids(ctx, "SELECT user_id FROM ticket_watchers WHERE ticket_id = ? ORDER BY user_id", ticketID)
+}
+
 // insertArticle stores an article and the time noted with it, and answers the
 // article's id.
 func insertArticle(ctx context.Context, tx base, article *model.Article, minutes int) (uint, error) {

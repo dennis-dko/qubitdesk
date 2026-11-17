@@ -267,6 +267,20 @@ func (r *TicketRepository) Watching(_ context.Context, ticketID, userID uint) (b
 	return r.watchers[ticketID][userID], nil
 }
 
+func (r *TicketRepository) Watchers(_ context.Context, ticketID uint) ([]uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	watchers := make([]uint, 0, len(r.watchers[ticketID]))
+	for id := range r.watchers[ticketID] {
+		watchers = append(watchers, id)
+	}
+
+	slices.Sort(watchers)
+
+	return watchers, nil
+}
+
 // addArticle stores an article and the time noted with it; the caller holds the
 // lock.
 func (r *TicketRepository) addArticle(article *model.Article, minutes int) {

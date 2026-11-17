@@ -222,31 +222,6 @@ func (r *JobRepository) fill(ctx context.Context, job *model.Job) error {
 	return nil
 }
 
-func (r *JobRepository) ids(ctx context.Context, query string, id uint) ([]uint, error) {
-	rows, err := r.db.QueryContext(ctx, r.rebind(query), id)
-	if err != nil {
-		return nil, apperror.Internal(err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	ids := make([]uint, 0)
-
-	for rows.Next() {
-		var found uint
-		if err := rows.Scan(&found); err != nil {
-			return nil, apperror.Internal(err)
-		}
-
-		ids = append(ids, found)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, apperror.Internal(err)
-	}
-
-	return ids, nil
-}
-
 // replaceJobParts writes a job's macros and plans in place of the ones it had.
 func replaceJobParts(ctx context.Context, tx base, id uint, job *model.Job) error {
 	for _, query := range []string{

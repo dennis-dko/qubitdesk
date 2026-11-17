@@ -16,13 +16,29 @@ import (
 type QueueRepository struct {
 	items *store[model.Queue]
 
-	mu      sync.Mutex
-	tickets map[uint]int
+	mu        sync.Mutex
+	tickets   map[uint]int
+	followers map[uint][]uint
 }
 
 // NewQueueRepository creates an empty queue repository.
 func NewQueueRepository() *QueueRepository {
-	return &QueueRepository{items: newStore[model.Queue]("queue"), tickets: map[uint]int{}}
+	return &QueueRepository{items: newStore[model.Queue]("queue"), tickets: map[uint]int{}, followers: map[uint][]uint{}}
+}
+
+// Follow makes the agent with userID one who chose the queue as theirs.
+func (r *QueueRepository) Follow(queueID, userID uint) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.followers[queueID] = append(r.followers[queueID], userID)
+}
+
+func (r *QueueRepository) Followers(_ context.Context, id uint) ([]uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return slices.Clone(r.followers[id]), nil
 }
 
 var _ repository.QueueRepository = (*QueueRepository)(nil)
