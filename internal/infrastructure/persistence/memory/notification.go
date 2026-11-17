@@ -3,24 +3,27 @@ package memory
 import (
 	"context"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
+	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
 // NotificationRepository keeps what each agent was told in memory, for the
 // service tests.
 type NotificationRepository struct {
-	mu   sync.Mutex
-	sent []model.Notification
-	next uint
+	mu     sync.Mutex
+	sent   []model.Notification
+	pushed map[uint]bool
+	next   uint
 }
 
 // NewNotificationRepository creates an empty notification repository.
 func NewNotificationRepository() *NotificationRepository {
-	return &NotificationRepository{next: 1}
+	return &NotificationRepository{pushed: map[uint]bool{}, next: 1}
 }
 
 var _ repository.NotificationRepository = (*NotificationRepository)(nil)
@@ -87,6 +90,45 @@ func (r *NotificationRepository) MarkAllRead(_ context.Context, userID uint, at 
 		if n.UserID == userID && n.ReadAt == nil {
 			r.sent[i].ReadAt = &at
 		}
+	}
+
+	return nil
+}
+
+func (r *NotificationRepository) Get(_ context.Context, userID, id uint) (*model.Notification, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, n := range r.sent {
+		if n.ID == id && n.UserID == userID {
+			return &n, nil
+		}
+	}
+
+	return nil, apperror.NotFound("notification", strconv.FormatUint(uint64(id), 10))
+}
+
+func (r *NotificationRepository) Unsent(_ context.Context, limit int) ([]model.Notification, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	unsent := make([]model.Notification, 0)
+
+	for _, n := range r.sent {
+		if !r.pushed[n.ID] && len(unsent) < limit {
+			unsent = append(unsent, n)
+		}
+	}
+
+	return unsent, nil
+}
+
+func (r *NotificationRepository) MarkSent(_ context.Context, ids []uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, id := range ids {
+		r.pushed[id] = true
 	}
 
 	return nil

@@ -2,7 +2,9 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/memory"
 	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/go-ticket-system/internal/support/webpush"
 )
 
 // notifying is the ticket fixture with the notifications wired in as main wires
@@ -297,5 +300,65 @@ func TestAnAgentReadsWhatTheyWereTold(t *testing.T) {
 
 	if _, unread, _ = n.notifications.Mine(ctx, n.admin); unread != 2 || !strings.HasPrefix(n.admin.User.Name, "Ada") {
 		t.Errorf("Bob marking his own read left Ada %d unread", unread)
+	}
+}
+
+// fakePusher keeps what it is given to push, and fails where it is told to.
+type fakePusher struct {
+	pushed map[uint][]webpush.Message
+	fail   error
+}
+
+func (f *fakePusher) Push(_ context.Context, userID uint, messages ...webpush.Message) error {
+	f.pushed[userID] = append(f.pushed[userID], messages...)
+
+	return f.fail
+}
+
+// What an agent is told is pushed to them once, as a message of its own with the
+// notification's words, when it was sent, and a tag the service worker asks
+// about; a push that fails is said and not tried again a minute later.
+func TestWhatAnAgentIsToldIsPushedOnce(t *testing.T) {
+	ctx := context.Background()
+	n := newNotifying(t)
+	pusher := &fakePusher{pushed: map[uint][]webpush.Message{}}
+	n.notifications.WithPush(pusher)
+
+	n.define(t, command.NotificationDefinitionCommand{
+		Name: ptr("Opened"), Events: &[]string{"TicketCreate"}, Recipients: &[]string{"AgentWritePermissions"},
+		Messages: &[]command.NotificationMessageCommand{
+			{Language: "en", Subject: "New: <KIX_TICKET_Title>", Body: "Opened."},
+		},
+	})
+
+	n.open(t, n.agent, n.desk, "Printer")
+
+	if sent, err := n.notifications.SendUnsent(ctx); sent != 2 || err != nil {
+		t.Fatalf("sending sent %d, %v; want the two told", sent, err)
+	}
+
+	mine, _, _ := n.notifications.Mine(ctx, &service.Principal{User: n.bob})
+	id := strconv.FormatUint(uint64(mine[0].ID), 10)
+	want := webpush.Message{Title: "New: Printer", Body: "Opened.", Tag: "gts-notification-" + id,
+		At: n.clock.Format(time.RFC3339), About: id}
+
+	if got := pusher.pushed[n.bob.ID]; len(got) != 1 || got[0] != want {
+		t.Errorf("Bob was pushed %+v, want %+v", got, want)
+	}
+
+	if sent, _ := n.notifications.SendUnsent(ctx); sent != 0 || len(pusher.pushed[n.bob.ID]) != 1 {
+		t.Errorf("sending again sent %d and pushed Bob %d", sent, len(pusher.pushed[n.bob.ID]))
+	}
+
+	pusher.fail = errors.New("the push service is down")
+	n.open(t, n.agent, n.desk, "Scanner")
+
+	if sent, err := n.notifications.SendUnsent(ctx); sent != 2 || err == nil {
+		t.Errorf("sending through a push service that is down answered %d, %v; want both sent and the failure said",
+			sent, err)
+	}
+
+	if sent, _ := n.notifications.SendUnsent(ctx); sent != 0 {
+		t.Errorf("a push that failed was tried again: %d sent", sent)
 	}
 }

@@ -4067,6 +4067,23 @@
           }
         }
       }
+    },
+    "/me/notifications/{id}": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Read one thing I was told",
+        "description": "One of the caller's notifications, as it was worded for them; somebody else's is not found. The service worker asks for one this way to know whether a push that arrived late still holds. Takes `tickets:read`.",
+        "responses": {
+          "200": {
+            "description": "The notification"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     }
   },
   "components": {

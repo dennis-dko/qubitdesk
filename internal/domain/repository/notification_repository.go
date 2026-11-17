@@ -26,4 +26,14 @@ type NotificationRepository interface {
 	// SentSince says whether a notification has told the agent about the ticket
 	// since the moment given.
 	SentSince(ctx context.Context, definitionID, ticketID, userID uint, since time.Time) (bool, error)
+
+	// Get is one of an agent's notifications.
+	Get(ctx context.Context, userID, id uint) (*model.Notification, error)
+
+	// Unsent are the notifications that have not left for the browsers yet, the
+	// oldest first and at most limit of them.
+	Unsent(ctx context.Context, limit int) ([]model.Notification, error)
+
+	// MarkSent marks notifications as having left.
+	MarkSent(ctx context.Context, ids []uint) error
 }

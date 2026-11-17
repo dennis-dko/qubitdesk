@@ -53,12 +53,36 @@ func (h *NotificationHandler) Mine(c *gofr.Context) (any, error) {
 
 	items := make([]NotificationResponse, 0, len(listed))
 	for _, n := range listed {
-		items = append(items, NotificationResponse{
-			ID: n.ID, TicketID: n.TicketID, Subject: n.Subject, Body: n.Body, CreatedAt: n.CreatedAt, ReadAt: n.ReadAt,
-		})
+		items = append(items, newNotificationResponse(n))
 	}
 
 	return NotificationListResponse{Items: items, Unread: unread}, nil
+}
+
+func newNotificationResponse(n model.Notification) NotificationResponse {
+	return NotificationResponse{
+		ID: n.ID, TicketID: n.TicketID, Subject: n.Subject, Body: n.Body, CreatedAt: n.CreatedAt, ReadAt: n.ReadAt,
+	}
+}
+
+// Get handles GET /api/v1/me/notifications/{id}.
+func (h *NotificationHandler) Get(c *gofr.Context) (any, error) {
+	caller, err := h.authz.Require(c, model.PermTicketRead)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := pathID(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	n, err := h.notifications.Get(c, caller, id)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return newNotificationResponse(*n), nil
 }
 
 // MarkRead handles PUT /api/v1/me/notifications/{id}/read.

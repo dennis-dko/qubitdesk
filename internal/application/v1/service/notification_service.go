@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"slices"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
 	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 	"github.com/dennis-dko/go-ticket-system/internal/support/i18n"
+	"github.com/dennis-dko/go-ticket-system/internal/support/webpush"
 )
 
 // NotificationService sends the notifications: when something happens to a
@@ -31,7 +33,22 @@ type NotificationService struct {
 	refs        MacroReferences
 	zone        func(ctx context.Context) string
 	now         func() time.Time
+	push        Pusher
 }
+
+// Pusher pushes messages to the browsers an account subscribed, where the
+// installation pushes at all; PushService is the one there is.
+type Pusher interface {
+	Push(ctx context.Context, userID uint, messages ...webpush.Message) error
+}
+
+// pushedAtOnce bounds how many notifications one look sends, the rest waiting
+// for the next. Chosen rather than derived: a minute's worth on a busy desk.
+const pushedAtOnce = 500
+
+// notificationTag starts the tag a pushed notification carries, which the
+// service worker reads to know whom to ask whether it still holds.
+const notificationTag = "gts-notification-"
 
 // NotificationSources are what a notification is worked out from: the
 // notifications set up, the ones sent, the ticket and the roles that decide who
@@ -51,6 +68,69 @@ func NewNotificationService(sources NotificationSources, zone func(ctx context.C
 		definitions: sources.Definitions, sent: sources.Sent, tickets: sources.Tickets, roles: sources.Roles,
 		refs: sources.Refs, zone: zone, now: time.Now,
 	}
+}
+
+// WithPush pushes what the agents are told to the browsers they subscribed.
+// Optional: without it a notification is kept for the screen and pushed
+// nowhere.
+func (s *NotificationService) WithPush(push Pusher) *NotificationService {
+	s.push = push
+
+	return s
+}
+
+// SendUnsent pushes the notifications that have not left yet, each as a
+// message of its own, and says how many it sent. Each leaves once, pushed or
+// not: a push is a courtesy beside the screen, and one that failed is not tried
+// again a minute later about a moment that has passed. What failed is said.
+func (s *NotificationService) SendUnsent(ctx context.Context) (int, error) {
+	unsent, err := s.sent.Unsent(ctx, pushedAtOnce)
+	if err != nil || len(unsent) == 0 {
+		return 0, err
+	}
+
+	byUser := map[uint][]webpush.Message{}
+	order := make([]uint, 0)
+	ids := make([]uint, 0, len(unsent))
+
+	for _, n := range unsent {
+		if _, seen := byUser[n.UserID]; !seen {
+			order = append(order, n.UserID)
+		}
+
+		byUser[n.UserID] = append(byUser[n.UserID], webpush.Message{
+			Title: n.Subject, Body: n.Body, Tag: notificationTag + strconv.FormatUint(uint64(n.ID), 10),
+			At: n.CreatedAt.UTC().Format(time.RFC3339), About: strconv.FormatUint(uint64(n.ID), 10),
+		})
+		ids = append(ids, n.ID)
+	}
+
+	var failed []error
+
+	if s.push != nil {
+		for _, userID := range order {
+			if err := s.push.Push(ctx, userID, byUser[userID]...); err != nil {
+				failed = append(failed, err)
+			}
+		}
+	}
+
+	if err := s.sent.MarkSent(ctx, ids); err != nil {
+		return 0, err
+	}
+
+	return len(ids), errors.Join(failed...)
+}
+
+// Get is one of the caller's notifications; somebody else's is not found. The
+// service worker asks for one this way to know whether a push that arrived late
+// still holds.
+func (s *NotificationService) Get(ctx context.Context, caller *Principal, id uint) (*model.Notification, error) {
+	if caller == nil || caller.User == nil {
+		return nil, apperror.NotFound("notification", strconv.FormatUint(uint64(id), 10))
+	}
+
+	return s.sent.Get(ctx, caller.User.ID, id)
 }
 
 // WithClock reads the time from now instead of the wall.

@@ -169,6 +169,7 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.DELETE(base+"/me/push", h.Push.Unsubscribe)
 
 	app.GET(base+"/me/notifications", h.Told.Mine)
+	app.GET(base+"/me/notifications/{id}", h.Told.Get)
 	app.PUT(base+"/me/notifications/read", h.Told.MarkAllRead)
 	app.PUT(base+"/me/notifications/{id}/read", h.Told.MarkRead)
 

@@ -62,23 +62,32 @@ self.addEventListener('push', (event) => {
 const PUSHED_FRESH = 5 * 60 * 1000;
 
 /**
- * What the installation is asked about each kind of notification, by its tag:
- * the address to ask, and whether the answer bears out what the notification is
- * about. A kind not named here is shown while it is fresh and not at all once it
- * is late, because nothing can confirm it still holds.
+ * What the installation is asked about each kind of notification, by the start
+ * of its tag: the address to ask for what the notification is about, and whether
+ * the answer bears it out. A kind not named here is shown while it is fresh and
+ * not at all once it is late, because nothing can confirm it still holds.
  */
-const ASKED_AGAIN = {};
+const ASKED_AGAIN = {
+  // What an agent was told about a ticket, which holds while they have not read
+  // it: once read, on this screen or another, it is news no longer.
+  'gts-notification-': [
+    (about) => `/api/v1/me/notifications/${encodeURIComponent(about)}`,
+    (notification) => Boolean(notification) && !notification.readAt,
+  ],
+};
 
 /** Whether a pushed notification still holds: at once where it is fresh, and otherwise as the installation answers now. */
 async function stillHolds(message) {
   const at = Date.parse(message.at);
   if (!Number.isFinite(at) || Date.now() - at <= PUSHED_FRESH) return true;
 
-  const [path, bearsOut] = ASKED_AGAIN[message.tag] ?? [];
+  const [path, bearsOut] = Object.entries(ASKED_AGAIN)
+    .find(([start]) => String(message.tag ?? '').startsWith(start))?.[1] ?? [];
   if (!path) return false;
 
   try {
-    const response = await fetch(path, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    const response = await fetch(path(message.about),
+      { credentials: 'same-origin', headers: { Accept: 'application/json' } });
     if (!response.ok) return false;
 
     const answer = await response.json();

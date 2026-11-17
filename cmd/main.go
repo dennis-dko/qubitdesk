@@ -861,6 +861,7 @@ func main() {
 	// installation allows it at all - which it ships not doing.
 	push := appservice.NewPushService(settingsRepo, sqldb.NewPushSubscriptionRepository(db, cfg.Dialect)).
 		WithSecrets(secrets)
+	notifications.WithPush(push)
 
 	// Built here rather than inline, because both the middleware that reads it and
 	// the handler that clears it need the same instance - two would mean the
@@ -1115,6 +1116,21 @@ func main() {
 
 		if ran > 0 {
 			ctx.Logger.Infof("automation ran %d job(s) whose time had come", ran)
+		}
+	})
+
+	// What the agents were told, pushed to the browsers they subscribed. Every
+	// minute, as KIX18 sends its notifications in the background rather than in
+	// the request that raised them: a push service that answers slowly holds up
+	// nobody's save.
+	app.AddCronJob("* * * * *", "send-notifications", func(ctx *gofr.Context) {
+		sent, err := notifications.SendUnsent(ctx)
+		if err != nil {
+			ctx.Logger.Errorf("sending notifications: %v", err)
+		}
+
+		if sent > 0 {
+			ctx.Logger.Debugf("sent %d notification(s)", sent)
 		}
 	})
 

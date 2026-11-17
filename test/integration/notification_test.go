@@ -84,7 +84,20 @@ func TestAnOpenedTicketIsSentToTheAgentsAroundIt(t *testing.T) {
 		t.Errorf("the administrator who opened the ticket was told %+v", opener.Items)
 	}
 
-	path := "/me/notifications/" + strconv.FormatUint(uint64(told.Items[0].ID), 10) + "/read"
+	one := "/me/notifications/" + strconv.FormatUint(uint64(told.Items[0].ID), 10)
+
+	var read struct {
+		Subject string `json:"subject"`
+	}
+
+	agnes.must(agnes.api(http.MethodGet, one, nil), http.StatusOK).Data(t, &read)
+	admin.must(admin.api(http.MethodGet, one, nil), http.StatusNotFound)
+
+	if read.Subject != "Neu: Printer" {
+		t.Errorf("Agnes's notification read on its own says %q", read.Subject)
+	}
+
+	path := one + "/read"
 
 	admin.must(admin.api(http.MethodPut, path, nil), http.StatusNotFound)
 	agnes.must(agnes.api(http.MethodPut, path, nil), http.StatusOK)
