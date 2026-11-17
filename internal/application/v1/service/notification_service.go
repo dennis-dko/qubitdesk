@@ -421,25 +421,37 @@ type ticketSurroundings struct {
 	org        string
 }
 
-// around reads a ticket's surroundings.
-func (s *NotificationService) around(ctx context.Context, ticket *model.Ticket) (ticketSurroundings, error) {
+// surroundingsOf reads what a ticket's placeholders write: its queue, every
+// account for the people it names, and the names of what it is sorted by. The
+// notifications and the answer templates fill the same placeholders from it.
+func surroundingsOf(ctx context.Context, refs MacroReferences, ticket *model.Ticket) (ticketSurroundings, *model.Queue, error) {
 	around := ticketSurroundings{
 		ticket: ticket, recipients: map[model.NotificationRecipient][]uint{}, reads: map[uint]bool{},
 	}
 
-	queue, err := s.refs.Queues.GetByID(ctx, ticket.QueueID)
+	queue, err := refs.Queues.GetByID(ctx, ticket.QueueID)
 	if err != nil {
-		return around, err
+		return around, nil, err
 	}
 
 	around.queue = queue.Name
 
-	roles, err := s.roles.GetAll(ctx)
+	if around.users, err = refs.Users.GetAll(ctx); err != nil {
+		return around, nil, err
+	}
+
+	return around, queue, namesOf(ctx, refs, &around)
+}
+
+// around reads a ticket's surroundings, and who around it each recipient names.
+func (s *NotificationService) around(ctx context.Context, ticket *model.Ticket) (ticketSurroundings, error) {
+	around, queue, err := surroundingsOf(ctx, s.refs, ticket)
 	if err != nil {
 		return around, err
 	}
 
-	if around.users, err = s.refs.Users.GetAll(ctx); err != nil {
+	roles, err := s.roles.GetAll(ctx)
+	if err != nil {
 		return around, err
 	}
 
@@ -478,24 +490,24 @@ func (s *NotificationService) around(ctx context.Context, ticket *model.Ticket) 
 		return around, err
 	}
 
-	return around, s.names(ctx, &around)
+	return around, nil
 }
 
-// names reads the names a ticket's placeholders write.
-func (s *NotificationService) names(ctx context.Context, around *ticketSurroundings) error {
+// namesOf reads the names a ticket's placeholders write.
+func namesOf(ctx context.Context, refs MacroReferences, around *ticketSurroundings) error {
 	ticket := around.ticket
 
-	state, err := s.refs.Catalog.States.GetByID(ctx, ticket.StateID)
+	state, err := refs.Catalog.States.GetByID(ctx, ticket.StateID)
 	if err != nil {
 		return err
 	}
 
-	priority, err := s.refs.Catalog.Priorities.GetByID(ctx, ticket.PriorityID)
+	priority, err := refs.Catalog.Priorities.GetByID(ctx, ticket.PriorityID)
 	if err != nil {
 		return err
 	}
 
-	kind, err := s.refs.Catalog.Types.GetByID(ctx, ticket.TypeID)
+	kind, err := refs.Catalog.Types.GetByID(ctx, ticket.TypeID)
 	if err != nil {
 		return err
 	}
@@ -503,7 +515,7 @@ func (s *NotificationService) names(ctx context.Context, around *ticketSurroundi
 	around.state, around.priority, around.kind = state.Name, priority.Name, kind.Name
 
 	if ticket.ContactID != nil {
-		contact, err := s.refs.Customers.Contacts.GetByID(ctx, *ticket.ContactID)
+		contact, err := refs.Customers.Contacts.GetByID(ctx, *ticket.ContactID)
 		if err != nil && apperror.KindOf(err) != apperror.KindNotFound {
 			return err
 		}
@@ -514,7 +526,7 @@ func (s *NotificationService) names(ctx context.Context, around *ticketSurroundi
 	}
 
 	if ticket.OrganisationID != nil {
-		org, err := s.refs.Customers.Organisations.GetByID(ctx, *ticket.OrganisationID)
+		org, err := refs.Customers.Organisations.GetByID(ctx, *ticket.OrganisationID)
 		if err != nil && apperror.KindOf(err) != apperror.KindNotFound {
 			return err
 		}

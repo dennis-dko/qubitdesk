@@ -4140,6 +4140,175 @@
           }
         }
       }
+    },
+    "/response-templates": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the answer templates",
+        "description": "Answers written once and sent often, as KIX18's text modules. Takes `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "The templates"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Create an answer template",
+        "description": "Needs a `name` and a `body`; both it and the `subject` may carry KIX18's ticket placeholders. Takes `queues:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "queueId": {
+                    "type": "integer",
+                    "description": "The queue it is offered in alone; without one, every queue"
+                  },
+                  "clearQueue": {
+                    "type": "boolean",
+                    "description": "Offer it in every queue again"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the template cannot be stored with"
+          },
+          "409": {
+            "description": "Another template has that name"
+          }
+        }
+      }
+    },
+    "/response-templates/{id}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read an answer template",
+        "description": "Takes `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "The template"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change an answer template",
+        "description": "A field left out stays as it was. Takes `queues:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "queueId": {
+                    "type": "integer",
+                    "description": "The queue it is offered in alone; without one, every queue"
+                  },
+                  "clearQueue": {
+                    "type": "boolean",
+                    "description": "Offer it in every queue again"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the template cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another template has that name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete an answer template",
+        "description": "Takes `queues:write`.",
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/tickets/{id}/templates": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the answer templates offered for a ticket",
+        "description": "The valid templates offered in the ticket's queue, their placeholders filled for the ticket in the caller's language. A ticket the caller may not read is not found. Takes `tickets:write`.",
+        "responses": {
+          "200": {
+            "description": "The templates, filled"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     }
   },
   "components": {

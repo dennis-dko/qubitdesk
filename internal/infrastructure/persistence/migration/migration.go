@@ -1114,15 +1114,18 @@ func createNotifications(d migration.Datasource, dialect string) error {
 		longText(dialect)))
 }
 
-// createResponseTemplates keeps the answers written once and sent often. One
-// without a queue is offered in every queue.
+// createResponseTemplates keeps the answers written once and sent often, as
+// KIX18 keeps its text modules: a subject and a text, offered in the queue named
+// or, without one, in every queue, while valid.
 func createResponseTemplates(d migration.Datasource, dialect string) error {
 	return exec(d, fmt.Sprintf(`CREATE TABLE response_templates (
-		%s,
+		%[1]s,
 		name VARCHAR(255) NOT NULL UNIQUE,
-		body %s NOT NULL,
-		queue_id %s REFERENCES queues(id)
-	)`, primaryKey(dialect), longText(dialect), foreignKeyID(dialect)))
+		subject VARCHAR(255) NOT NULL DEFAULT '',
+		body %[2]s NOT NULL,
+		queue_id %[3]s REFERENCES queues(id),
+		valid %[4]s NOT NULL DEFAULT %[5]s
+	)`, primaryKey(dialect), longText(dialect), foreignKeyID(dialect), boolean(dialect), trueLiteral(dialect)))
 }
 
 // createMailAccounts keeps the mailboxes tickets arrive through: where each is,

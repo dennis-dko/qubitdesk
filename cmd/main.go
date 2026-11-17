@@ -629,7 +629,8 @@ func main() {
 		UnlockTypes: sqldb.NewUnlockStateTypeRepository(db, cfg.Dialect),
 	}
 	levelRepo := sqldb.NewServiceLevelRepository(db, cfg.Dialect)
-	queues := appservice.NewQueueApplicationService(queueRepo, roleRepo, levelRepo)
+	templateRepo := sqldb.NewResponseTemplateRepository(db, cfg.Dialect)
+	queues := appservice.NewQueueApplicationService(queueRepo, roleRepo, levelRepo).WithTemplates(templateRepo)
 	customerRepos := appservice.TicketCustomerRepositories{
 		Contacts:      sqldb.NewContactRepository(db, cfg.Dialect),
 		Organisations: sqldb.NewOrganisationRepository(db, cfg.Dialect),
@@ -1085,6 +1086,8 @@ func main() {
 		Notifications: rest.NewNotificationDefinitionHandler(appservice.NewNotificationDefinitionApplicationService(
 			sqldb.NewNotificationDefinitionRepository(db, cfg.Dialect), automationRefs), authorizer),
 		Told: rest.NewNotificationHandler(notifications, authorizer),
+		Templates: rest.NewResponseTemplateHandler(
+			appservice.NewResponseTemplateApplicationService(templateRepo, tickets, automationRefs), authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves

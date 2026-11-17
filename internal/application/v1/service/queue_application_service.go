@@ -30,9 +30,10 @@ type QueueService interface {
 // caller may not learn. What a caller is shown of a queue's access is the line
 // that is theirs.
 type QueueApplicationService struct {
-	queues repository.QueueRepository
-	roles  repository.RoleRepository
-	levels repository.ServiceLevelRepository
+	queues    repository.QueueRepository
+	roles     repository.RoleRepository
+	levels    repository.ServiceLevelRepository
+	templates repository.ResponseTemplateRepository
 }
 
 // NewQueueApplicationService needs the roles, to refuse access for one that
@@ -44,6 +45,15 @@ func NewQueueApplicationService(
 	levels repository.ServiceLevelRepository,
 ) *QueueApplicationService {
 	return &QueueApplicationService{queues: queues, roles: roles, levels: levels}
+}
+
+// WithTemplates attaches the answer templates, so that a queue a template is
+// offered in alone is not deleted from under it. Optional: without it a queue is
+// deleted whatever templates name it.
+func (s *QueueApplicationService) WithTemplates(templates repository.ResponseTemplateRepository) *QueueApplicationService {
+	s.templates = templates
+
+	return s
 }
 
 var _ QueueService = (*QueueApplicationService)(nil)
@@ -164,6 +174,18 @@ func (s *QueueApplicationService) DeleteQueue(ctx context.Context, id uint) erro
 	if children > 0 {
 		return apperror.Conflictf("%d queue(s) sit under %q; move or delete them first", children, queue.Name).
 			WithCode("queueHasChildren", queue.Name, children)
+	}
+
+	if s.templates != nil {
+		templates, err := s.templates.CountForQueue(ctx, id)
+		if err != nil {
+			return err
+		}
+
+		if templates > 0 {
+			return apperror.Conflictf("%d answer template(s) are offered in the queue %q alone; give them another "+
+				"queue or delete them first", templates, queue.Name).WithCode("queueHasTemplates", queue.Name, templates)
+		}
 	}
 
 	return s.queues.Delete(ctx, id)

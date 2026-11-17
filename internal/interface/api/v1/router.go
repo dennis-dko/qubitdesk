@@ -40,6 +40,7 @@ type Handlers struct {
 
 	Notifications *rest.NotificationDefinitionHandler
 	Told          *rest.NotificationHandler
+	Templates     *rest.ResponseTemplateHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -299,6 +300,13 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.DELETE(base+"/jobs/{id}", h.Jobs.Delete)
 	app.POST(base+"/jobs/{id}/run", h.Jobs.Run)
 	app.GET(base+"/jobs/{id}/runs", h.Jobs.Runs)
+
+	app.GET(base+"/response-templates", h.Templates.List)
+	app.GET(base+"/response-templates/{id}", h.Templates.Get)
+	app.POST(base+"/response-templates", h.Templates.Create)
+	app.PUT(base+"/response-templates/{id}", h.Templates.Update)
+	app.DELETE(base+"/response-templates/{id}", h.Templates.Delete)
+	app.GET(base+"/tickets/{id}/templates", h.Templates.ForTicket)
 
 	app.GET(base+"/notification-definitions", h.Notifications.List)
 	app.GET(base+"/notification-definitions/{id}", h.Notifications.Get)
