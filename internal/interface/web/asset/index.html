@@ -602,6 +602,7 @@
         <form method="post" id="form-article" class="form" data-perm="tickets:write">
           <h3 data-i18n="ticket.write">Write in the ticket</h3>
           <div class="grid">
+            <label class="wide" data-i18n="ticket.template">Start from a template<select name="template" data-not-an-edit></select></label>
             <label data-i18n="field.channel">Channel<select name="channel" required></select></label>
             <label data-i18n="field.minutes">Minutes<input type="number" name="minutes" min="0" max="1440" value="0"></label>
             <label class="wide" data-i18n="field.subject">Subject<input type="text" name="subject" maxlength="255" data-i18n-placeholder="field.optional" placeholder="optional"></label>
@@ -1156,6 +1157,40 @@
           <div class="row">
             <button type="submit" id="notification-submit" data-i18n="action.create">Create</button>
             <button type="button" class="link" id="notification-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Answers written once and sent often, as KIX18's text modules. -->
+      <div class="card" id="template-card" data-perm="queues:write">
+        <h2 data-i18n="template.title">Answer templates</h2>
+        <p class="muted" data-i18n="template.hint">Answers written once and sent often. Whoever writes in a ticket starts from one offered in its queue, with the ticket's placeholders filled in their words, and changes it before it is sent.</p>
+        <div class="table-wrap">
+          <table id="table-template">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="field.queueId">Queue</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-template" class="form">
+          <h3 id="template-form-title" data-i18n="template.create">Add an answer template</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="255" required></label>
+            <label data-i18n="field.queueId">Queue<select name="queueId"></select></label>
+            <label class="wide" data-i18n="field.subject">Subject<input type="text" name="subject" maxlength="255" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+            <label class="wide" data-i18n="field.body">Text<textarea name="body" rows="6" maxlength="10000" required></textarea></label>
+          </div>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="template.offered">Offered</span></label>
+          <div class="row">
+            <button type="submit" id="template-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="template-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
           </div>
         </form>
       </div>

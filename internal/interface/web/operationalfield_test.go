@@ -168,6 +168,10 @@ func TestTheFormLimitsAreTheOnesTheServerEnforces(t *testing.T) {
 
 		"form-notification/name":        model.MaxCatalogNameLength,
 		"form-notification/description": model.MaxDescriptionLength,
+
+		"form-template/name":    model.MaxNameLength,
+		"form-template/subject": model.MaxTicketTitleLength,
+		"form-template/body":    model.MaxTemplateBodyLength,
 	} {
 		t.Run(key, func(t *testing.T) {
 			field, found := fields[key]

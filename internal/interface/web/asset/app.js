@@ -20,6 +20,7 @@ const cache = {
   macros: [], macroSteps: [], stepChoices: { queues: [], states: [], priorities: [], types: [] },
   plans: [], planEvents: [], jobs: [],
   notifying: notifyingNothing(),
+  templates: [], templateQueues: [], ticketTemplates: [],
 };
 
 /**
@@ -6369,6 +6370,164 @@ function wireNotifications() {
   $('#notification-cancel').addEventListener('click', resetNotificationForm);
 }
 
+// --------------------------------------------------------- answer templates
+
+/**
+ * Draws the answer templates' card, and the form where nobody is filling it in.
+ * queues are the ones a template can be offered in.
+ */
+function drawTemplates(page, queues) {
+  cache.templates = page?.items ?? [];
+  cache.templateQueues = queues;
+
+  const byId = new Map(queues.map((queue) => [queue.id, queue]));
+  const queueName = (id) => {
+    if (!id) return t('template.everyQueue', 'every queue');
+
+    return byId.has(id) ? queuePath(byId.get(id), byId) : `#${id}`;
+  };
+
+  fillTable($('#table-template tbody'), cache.templates.map((template) => el('tr', {},
+    el('td', { class: 'text', text: template.name }),
+    el('td', { class: 'text', text: queueName(template.queueId) }),
+    el('td', { text: template.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editTemplate(template) }),
+      deleteButton({
+        label: `${t('entity.template', 'Answer template')} "${template.name}"`,
+        path: `/response-templates/${template.id}`,
+        message: t('msg.templateDeleted', 'Answer template deleted'),
+        after: refreshAll,
+      })),
+  )), 4, t('template.empty', 'No answer templates yet.'));
+
+  const form = $('#form-template');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillTemplateQueues(form, null);
+}
+
+/**
+ * Fills the template form's choice of queue: every queue, or one of those still
+ * offered, and the one the template names already, retired or not.
+ */
+function fillTemplateQueues(form, current) {
+  const queues = cache.templateQueues.filter((queue) => queue.valid || queue.id === current);
+  const byId = new Map(cache.templateQueues.map((queue) => [queue.id, queue]));
+
+  fillSelect(form.elements.queueId,
+    queues.map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    { placeholder: t('template.everyQueue', 'every queue'), labelKey: 'label', valueKey: 'value' });
+  form.elements.queueId.value = current ? String(current) : '';
+}
+
+/** Sends the template form, making a template or correcting one. */
+function saveTemplate(form) {
+  const id = form.elements.id.value;
+  const queue = form.elements.queueId.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    subject: form.elements.subject.value.trim(),
+    body: form.elements.body.value.trim(),
+    valid: form.elements.valid.checked,
+    ...(queue ? { queueId: Number(queue) } : { clearQueue: true }),
+  });
+
+  mutate(
+    () => (id ? api(`/response-templates/${id}`, { method: 'PUT', body }) : api('/response-templates', { method: 'POST', body })),
+    id ? t('msg.templateSaved', 'Answer template saved') : t('msg.templateCreated', 'Answer template created'),
+    async () => { resetTemplateForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a template in the form, to correct it. */
+function editTemplate(template) {
+  const form = $('#form-template');
+
+  form.elements.id.value = String(template.id);
+  form.elements.name.value = template.name;
+  form.elements.subject.value = template.subject;
+  form.elements.body.value = template.body;
+  form.elements.valid.checked = template.valid;
+  fillTemplateQueues(form, template.queueId);
+
+  // Drawn rather than declared with a key, because it carries the template's
+  // name; see editRole for why the key has to come off.
+  const heading = $('#template-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('templateFormTitle', () => {
+    heading.textContent = t('template.edit', 'Edit the answer template {0}').replace('{0}', template.name);
+  });
+
+  swapTheLabel($('#template-submit'), 'action.save', 'Save');
+  $('#template-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the template form back to making a new one. */
+function resetTemplateForm() {
+  const form = $('#form-template');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillTemplateQueues(form, null);
+
+  stopRedrawing('templateFormTitle');
+  swapTheLabel($('#template-form-title'), 'template.create', 'Add an answer template');
+  swapTheLabel($('#template-submit'), 'action.create', 'Create');
+  $('#template-cancel').hidden = true;
+}
+
+/**
+ * Offers the templates of the ticket that is open in the article form. Not over
+ * an article somebody is part way through writing, whose choice of template is
+ * theirs.
+ */
+function offerTemplates(templates) {
+  const article = $('#form-article');
+  cache.ticketTemplates = templates;
+
+  if (!article || beingEdited(article)) return;
+
+  fillSelect(article.elements.template,
+    templates.map((template) => ({ value: String(template.id), label: template.name })),
+    { placeholder: t('ticket.noTemplate', 'none'), labelKey: 'label', valueKey: 'value' });
+  article.elements.template.value = '';
+  article.elements.template.closest('label').hidden = templates.length === 0;
+}
+
+/**
+ * Starts the article from the template chosen: its subject where the article has
+ * none yet, and its text after whatever is written already, so that choosing a
+ * template never takes away what somebody wrote. The choice goes back to none,
+ * so that the same template can be chosen again.
+ */
+function useTemplate(article) {
+  const chosen = cache.ticketTemplates.find((template) => String(template.id) === article.elements.template.value);
+  if (!chosen) return;
+
+  if (!article.elements.subject.value.trim()) article.elements.subject.value = chosen.subject;
+
+  const body = article.elements.body;
+  body.value = body.value.trim() ? `${body.value.trimEnd()}\n\n${chosen.body}` : chosen.body;
+
+  article.dataset.editing = 'yes';
+  article.elements.template.value = '';
+  body.focus();
+}
+
+/** Wires the template form, and the choice of template in the article form. */
+function wireTemplates() {
+  const form = $('#form-template');
+  const article = $('#form-article');
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveTemplate(form); });
+  $('#template-cancel').addEventListener('click', resetTemplateForm);
+  article.elements.template.addEventListener('change', () => useTemplate(article));
+}
+
 // ---------------------------------------------------- system configuration
 
 /**
@@ -7227,9 +7386,14 @@ async function openTicket(id, { keepPlace = false } = {}) {
   let history;
   let assignees;
 
+  let templates;
+
   try {
-    [ticket, articles, history] = await Promise.all([
+    [ticket, articles, history, templates] = await Promise.all([
       api(`/tickets/${id}`), api(`/tickets/${id}/articles`), api(`/tickets/${id}/history`),
+      // Asked only of whoever may write in tickets, the right the server hands
+      // them out to; anybody else would turn the whole ticket into a refusal.
+      can('tickets:write') ? api(`/tickets/${id}/templates`) : { items: [] },
     ]);
 
     assignees = (await api(`/tickets/assignees?queue=${ticket.queueId}`))?.items ?? [];
@@ -7243,6 +7407,7 @@ async function openTicket(id, { keepPlace = false } = {}) {
 
   openTicketShown = ticket;
   drawTicketDetail(ticket, articles?.items ?? [], history?.items ?? []);
+  offerTemplates(templates?.items ?? []);
 
   // Corrected only where the reader's role works in its queue: the server
   // answers any change to a ticket of a queue only read as not found, and a form
@@ -7915,9 +8080,9 @@ const CATALOGS = {
 async function loadTicketSetup() {
   if (!can('queues:write')) return;
 
-  const [queues, states, priorities, types, levels, unlocking, notifying] = await Promise.all(
+  const [queues, states, priorities, types, levels, unlocking, notifying, templates] = await Promise.all(
     ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path, '/service-levels',
-      '/unlock-state-types', '/notification-definitions']
+      '/unlock-state-types', '/notification-definitions', '/response-templates']
       .map((path) => api(path)),
   );
 
@@ -7954,6 +8119,7 @@ async function loadTicketSetup() {
   drawNotifications(notifying, {
     queues: queues?.items ?? [], states: lists.state, priorities: lists.priority, types: lists.type,
   });
+  drawTemplates(templates, queues?.items ?? []);
 }
 
 /**
@@ -10885,6 +11051,9 @@ function forgetTheLastAccount() {
   cache.planEvents = [];
   cache.jobs = [];
   cache.notifying = notifyingNothing();
+  cache.templates = [];
+  cache.templateQueues = [];
+  cache.ticketTemplates = [];
   $('#told-all-read').hidden = true;
 
   // Emptied rather than left to the next render, which may never come: a table
@@ -10969,6 +11138,7 @@ function forgetTheLastAccount() {
   resetPlanForm();
   resetJobForm();
   resetNotificationForm();
+  resetTemplateForm();
   resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
@@ -11620,6 +11790,15 @@ const TOUR_STEPS = [
     text: () => t('tour.notifications.text',
       'A notification tells the agents around a ticket - its owner, those watching it, those who work in its queue - '
       + 'when something happens to it, each in their language. It is shown to them here and pushed to their browsers.'),
+  },
+  {
+    target: '#template-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.templates.title', 'Answers written once'),
+    text: () => t('tour.templates.text',
+      'An answer template is offered to whoever writes in a ticket of its queue, or of every queue, with the '
+      + 'ticket\'s placeholders filled in their words. It starts an article; it does not send one.'),
   },
   {
     target: '#macro-card',
@@ -16030,6 +16209,7 @@ function wireForms() {
   wireAutomation();
   wireNotifications();
   wireTold();
+  wireTemplates();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();

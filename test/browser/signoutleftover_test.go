@@ -146,6 +146,7 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		await send('/service-levels', { name: 'Gold', solutionMinutes: 480 });
 		const escalate = await send('/macros', { name: 'Escalate', actions: [] });
 		await send('/jobs', { name: 'Escalate the desk', criteria: { queueIds: [queue.id] }, macroIds: [escalate.id] });
+		await send('/response-templates', { name: 'Thanks', body: 'Thank you.' });
 		await send('/notification-definitions', { name: 'Opened', events: ['TicketCreate'],
 			recipients: ['AgentOwner'], messages: [{ language: 'en', subject: 'New', body: 'Opened.' }] });
 		await send('/exec-plans', { name: 'Mornings', type: 'TimeBased', weekdays: [1], times: ['08:00'] });
@@ -174,6 +175,7 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		"form-plan":         `#table-plan tbody td.actions button.link:not(.danger)`,
 		"form-job":          `#table-job tbody td.actions button.link:not(.danger)`,
 		"form-notification": `#table-notification tbody td.actions button.link:not(.danger)`,
+		"form-template":     `#table-template tbody td.actions button.link:not(.danger)`,
 	}
 
 	for form, opener := range openers {
