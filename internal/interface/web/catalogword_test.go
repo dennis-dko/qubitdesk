@@ -103,39 +103,14 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		t.Fatal("there is no German dictionary")
 	}
 
-	stateTypes := map[string]struct{}{}
-	for _, kind := range model.StateTypes() {
-		stateTypes[string(kind)] = struct{}{}
-	}
+	words := tableWords()
+	set := func(prefix string) map[string]struct{} {
+		known := map[string]struct{}{}
+		for _, word := range words[prefix] {
+			known[word] = struct{}{}
+		}
 
-	followUps := map[string]struct{}{}
-	for _, followUp := range model.FollowUps() {
-		followUps[string(followUp)] = struct{}{}
-	}
-
-	levels := map[string]struct{}{}
-	for _, level := range model.AccessLevels() {
-		levels[string(level)] = struct{}{}
-	}
-
-	channels := map[string]struct{}{}
-	for _, channel := range model.AgentChannels() {
-		channels[string(channel)] = struct{}{}
-	}
-
-	steps := map[string]struct{}{}
-	for _, step := range model.MacroActionDefinitions() {
-		steps[string(step.Type)] = struct{}{}
-	}
-
-	events := map[string]struct{}{}
-	for _, event := range model.TicketEvents() {
-		events[string(event)] = struct{}{}
-	}
-
-	triggers := map[string]struct{}{}
-	for _, trigger := range runTriggers() {
-		triggers[string(trigger)] = struct{}{}
+		return known
 	}
 
 	for _, family := range []struct {
@@ -145,13 +120,14 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		{"status.", "SHIPPED_STATE_TITLES", ticketStates(t)},
 		{"priority.", "SHIPPED_PRIORITY_TITLES", shippedPriorities(t)},
 		{"tickettype.", "SHIPPED_TYPE_TITLES", shippedTicketTypes(t)},
-		{"statetype.", "STATE_TYPE_TITLES", stateTypes},
-		{"followup.", "FOLLOW_UP_TITLES", followUps},
-		{"queueaccess.", "ACCESS_TITLES", levels},
-		{"channel.", "CHANNEL_TITLES", channels},
-		{"macrostep.", "MACRO_STEP_TITLES", steps},
-		{"planevent.", "PLAN_EVENT_TITLES", events},
-		{"runtrigger.", "RUN_TRIGGER_TITLES", triggers},
+		{"statetype.", "STATE_TYPE_TITLES", set("statetype.")},
+		{"followup.", "FOLLOW_UP_TITLES", set("followup.")},
+		{"queueaccess.", "ACCESS_TITLES", set("queueaccess.")},
+		{"channel.", "CHANNEL_TITLES", set("channel.")},
+		{"macrostep.", "MACRO_STEP_TITLES", set("macrostep.")},
+		{"planevent.", "PLAN_EVENT_TITLES", set("planevent.")},
+		{"runtrigger.", "RUN_TRIGGER_TITLES", set("runtrigger.")},
+		{"recipient.", "RECIPIENT_TITLES", set("recipient.")},
 	} {
 		english := scriptTitles(t, family.titles)
 
@@ -210,8 +186,48 @@ func TestEveryConfigOptionIsDescribedInGerman(t *testing.T) {
 	}
 }
 
-// runTriggers are what can start a job's run. The model names them as constants
-// and lists them nowhere, because nothing but the screen asks for all three.
-func runTriggers() []model.RunTrigger {
-	return []model.RunTrigger{model.RunManual, model.RunTime, model.RunEvent}
+// tableWords are the words of each family the script names from a table of its
+// own, by the prefix their keys share: the types a state can have, what an answer
+// to a closed ticket does, how far a role reaches into a queue, the channels an
+// agent writes through, the steps a macro can take, the events a plan can run on,
+// what started a job's run and who a notification is sent to - each as the model
+// has them. The model names the run triggers as constants and lists them nowhere,
+// because nothing but the screen asks for all three.
+func tableWords() map[string][]string {
+	words := map[string][]string{}
+	add := func(prefix string, word string) { words[prefix] = append(words[prefix], word) }
+
+	for _, kind := range model.StateTypes() {
+		add("statetype.", string(kind))
+	}
+
+	for _, followUp := range model.FollowUps() {
+		add("followup.", string(followUp))
+	}
+
+	for _, level := range model.AccessLevels() {
+		add("queueaccess.", string(level))
+	}
+
+	for _, channel := range model.AgentChannels() {
+		add("channel.", string(channel))
+	}
+
+	for _, step := range model.MacroActionDefinitions() {
+		add("macrostep.", string(step.Type))
+	}
+
+	for _, event := range model.TicketEvents() {
+		add("planevent.", string(event))
+	}
+
+	for _, trigger := range []model.RunTrigger{model.RunManual, model.RunTime, model.RunEvent} {
+		add("runtrigger.", string(trigger))
+	}
+
+	for _, recipient := range model.NotificationRecipients() {
+		add("recipient.", string(recipient))
+	}
+
+	return words
 }

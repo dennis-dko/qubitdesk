@@ -3805,7 +3805,7 @@
           "tickets"
         ],
         "summary": "List the notifications",
-        "description": "What the agents around a ticket are told when something happens to it. Under `events`, `recipients` and `languages` what a notification can name and speak. Takes `queues:write`.",
+        "description": "What the agents around a ticket are told when something happens to it. Under `events`, `recipients` and `languages` what a notification can name and speak, and under `subjectLimit` and `bodyLimit` how long a subject and a text may be. Takes `queues:write`.",
         "responses": {
           "200": {
             "description": "The notifications, and what one can name"

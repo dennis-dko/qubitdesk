@@ -19,6 +19,7 @@ const cache = {
   found: {}, sysconfig: [], calendars: [], levels: [],
   macros: [], macroSteps: [], stepChoices: { queues: [], states: [], priorities: [], types: [] },
   plans: [], planEvents: [], jobs: [],
+  notifying: notifyingNothing(),
 };
 
 /**
@@ -5921,24 +5922,7 @@ function runJob(job, button) {
  * every plan the job already names.
  */
 function fillJobForm(form, job) {
-  const { queues, states, priorities, types } = cache.stepChoices;
-  const byId = new Map(queues.map((queue) => [queue.id, queue]));
-  const on = (list, id) => (job?.criteria[list] ?? []).includes(id);
-  const locked = job?.criteria.locked;
-
-  $('#job-queues').replaceChildren(...queues
-    .map((queue) => ({ id: queue.id, words: queuePath(queue, byId) }))
-    .sort((a, b) => a.words.localeCompare(b.words))
-    .map((queue) => choiceSwitch({ 'data-queue': String(queue.id) }, queue.words, on('queueIds', queue.id))));
-  $('#job-states').replaceChildren(...states.map((state) =>
-    choiceSwitch({ 'data-state': String(state.id) }, statusName(state.name), on('stateIds', state.id))));
-  $('#job-priorities').replaceChildren(...priorities.map((priority) =>
-    choiceSwitch({ 'data-priority': String(priority.id) }, priorityName(priority.name),
-      on('priorityIds', priority.id))));
-  $('#job-types').replaceChildren(...types.map((type) =>
-    choiceSwitch({ 'data-type': String(type.id) }, ticketTypeName(type.name), on('typeIds', type.id))));
-
-  form.elements.locked.value = locked === true || locked === false ? String(locked) : '';
+  fillCriteria(form, 'job', cache.stepChoices, job?.criteria);
 
   $('#job-macros').replaceChildren(...(job?.macroIds ?? []).map(jobMacroRow));
   $('#job-plans').replaceChildren(...cache.plans
@@ -5946,6 +5930,51 @@ function fillJobForm(form, job) {
     .map((plan) => choiceSwitch({ 'data-plan': String(plan.id) }, plan.name, job?.planIds.includes(plan.id) ?? false)));
 
   showRowBounds();
+}
+
+/**
+ * Fills a form's switches for the tickets something is about - a switch for
+ * every queue, state, priority and type in lists, retired ones among them,
+ * because a job or a notification may well be for the tickets still carrying
+ * one - on as the criteria have them, and its choice of lock. The switches go
+ * into the elements named prefix-queues, prefix-states and so on.
+ */
+function fillCriteria(form, prefix, lists, criteria) {
+  const byId = new Map(lists.queues.map((queue) => [queue.id, queue]));
+  const on = (list, id) => (criteria?.[list] ?? []).includes(id);
+  const locked = criteria?.locked;
+
+  $(`#${prefix}-queues`).replaceChildren(...lists.queues
+    .map((queue) => ({ id: queue.id, words: queuePath(queue, byId) }))
+    .sort((a, b) => a.words.localeCompare(b.words))
+    .map((queue) => choiceSwitch({ 'data-queue': String(queue.id) }, queue.words, on('queueIds', queue.id))));
+  $(`#${prefix}-states`).replaceChildren(...lists.states.map((state) =>
+    choiceSwitch({ 'data-state': String(state.id) }, statusName(state.name), on('stateIds', state.id))));
+  $(`#${prefix}-priorities`).replaceChildren(...lists.priorities.map((priority) =>
+    choiceSwitch({ 'data-priority': String(priority.id) }, priorityName(priority.name),
+      on('priorityIds', priority.id))));
+  $(`#${prefix}-types`).replaceChildren(...lists.types.map((type) =>
+    choiceSwitch({ 'data-type': String(type.id) }, ticketTypeName(type.name), on('typeIds', type.id))));
+
+  form.elements.locked.value = locked === true || locked === false ? String(locked) : '';
+}
+
+/**
+ * The tickets a form's switches say something is about. A list with nothing
+ * switched on goes as nothing, which takes any.
+ */
+function criteriaOf(form) {
+  const on = (mark) => $$(`[data-${mark}]`, form).filter((box) => box.checked)
+    .map((box) => Number(box.getAttribute(`data-${mark}`)));
+  const locked = form.elements.locked.value;
+
+  return {
+    queueIds: on('queue'),
+    stateIds: on('state'),
+    priorityIds: on('priority'),
+    typeIds: on('type'),
+    locked: locked ? locked === 'true' : null,
+  };
 }
 
 /** One macro of the job form, in the place the job runs it. */
@@ -5963,21 +5992,13 @@ function jobMacroRow(id) {
  */
 function saveJob(form) {
   const id = form.elements.id.value;
-  const on = (mark) => $$(`[data-${mark}]`, form).filter((box) => box.checked)
-    .map((box) => Number(box.getAttribute(`data-${mark}`)));
-  const locked = form.elements.locked.value;
+  const plans = $$('[data-plan]', form).filter((box) => box.checked).map((box) => Number(box.dataset.plan));
   const body = JSON.stringify({
     name: form.elements.name.value.trim(),
     description: form.elements.description.value.trim(),
-    criteria: {
-      queueIds: on('queue'),
-      stateIds: on('state'),
-      priorityIds: on('priority'),
-      typeIds: on('type'),
-      locked: locked ? locked === 'true' : null,
-    },
+    criteria: criteriaOf(form),
     macroIds: $$('#job-macros > li').map((row) => Number(row.dataset.macro)),
-    planIds: on('plan'),
+    planIds: plans,
     valid: form.elements.valid.checked,
   });
 
@@ -6140,6 +6161,210 @@ function wireAutomation() {
     rowsChanged(macroForm);
     $('select, input, textarea', row)?.focus();
   });
+}
+
+// ------------------------------------------------------------ notifications
+
+/** What a notification has to work with before anything has been read: nothing. */
+function notifyingNothing() {
+  return {
+    items: [], events: [], recipients: [], languages: [], subjectLimit: 0, bodyLimit: 0,
+    lists: { queues: [], states: [], priorities: [], types: [] },
+  };
+}
+
+/**
+ * Who a notification can be sent to, in words. The server names them as KIX18
+ * names its recipients.
+ */
+const RECIPIENT_TITLES = {
+  AgentOwner: 'The owner',
+  AgentResponsible: 'The responsible agent',
+  AgentWatcher: 'Those watching the ticket',
+  AgentMyQueues: 'Those who chose its queue',
+  AgentWritePermissions: 'Those who work in its queue',
+  AgentReadPermissions: 'Those who can read its queue',
+};
+
+/** Who a notification can be sent to, in the reader's language. */
+function recipientName(recipient) {
+  return t(`recipient.${recipient}`, RECIPIENT_TITLES[recipient] ?? recipient);
+}
+
+/**
+ * Draws the notifications' card from the list the server sent: the table, and
+ * the form where nobody is filling it in. lists are the queues, states,
+ * priorities and types a notification's tickets can be named by.
+ */
+function drawNotifications(page, lists) {
+  cache.notifying = {
+    items: page?.items ?? [],
+    events: page?.events ?? [],
+    recipients: page?.recipients ?? [],
+    languages: page?.languages ?? [],
+    subjectLimit: page?.subjectLimit ?? 0,
+    bodyLimit: page?.bodyLimit ?? 0,
+    lists,
+  };
+
+  fillTable($('#table-notification tbody'), cache.notifying.items.map(notificationRow), 5,
+    t('notification.empty', 'No notifications yet.'));
+
+  const form = $('#form-notification');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillNotificationForm(form, null);
+}
+
+/** One notification as a row of its card's table. */
+function notificationRow(definition) {
+  return el('tr', {},
+    el('td', { class: 'text', text: definition.name }),
+    el('td', { class: 'text', text: definition.events.map(planEventName).join(', ') }),
+    el('td', { class: 'text', text: definition.recipients.map(recipientName).join(', ') }),
+    el('td', { text: definition.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editNotification(definition) }),
+      deleteButton({
+        label: `${t('entity.notification', 'Notification')} "${definition.name}"`,
+        path: `/notification-definitions/${definition.id}`,
+        message: t('msg.notificationDeleted', 'Notification deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/**
+ * Fills the notification form from a notification, or for a new one: a switch
+ * for every event and every recipient the server lists, the tickets it is about,
+ * and a subject and a text for every language the installation speaks.
+ */
+function fillNotificationForm(form, definition) {
+  const { events, recipients, languages, lists } = cache.notifying;
+
+  $('#notification-events').replaceChildren(...events.map((event) =>
+    choiceSwitch({ 'data-event': event }, planEventName(event), definition?.events.includes(event) ?? false)));
+  $('#notification-recipients').replaceChildren(...recipients.map((recipient) =>
+    choiceSwitch({ 'data-recipient': recipient }, recipientName(recipient),
+      definition?.recipients.includes(recipient) ?? false)));
+
+  fillCriteria(form, 'notification', lists, definition?.criteria);
+
+  $('#notification-messages').replaceChildren(...languages.map((language) =>
+    notificationMessage(language, definition?.messages.find((message) => message.language === language))));
+}
+
+/**
+ * What a notification says in one language: a subject and a text, bounded as
+ * the server bounds them. Either asks for the other once it holds something, so
+ * that a language half written is not sent to be refused; a language left empty
+ * is not spoken.
+ */
+function notificationMessage(language, message) {
+  const subject = el('input', {
+    type: 'text', maxlength: String(cache.notifying.subjectLimit), value: message?.subject ?? '',
+    'data-language': language, 'data-part': 'subject',
+  });
+  const body = el('textarea', {
+    rows: '4', maxlength: String(cache.notifying.bodyLimit), 'data-language': language, 'data-part': 'body',
+  });
+  const pair = () => {
+    const spoken = Boolean(subject.value.trim() || body.value.trim());
+    subject.required = spoken;
+    body.required = spoken;
+  };
+
+  body.value = message?.body ?? '';
+  subject.addEventListener('input', pair);
+  body.addEventListener('input', pair);
+  pair();
+
+  return el('fieldset', { class: 'notification-message' },
+    el('legend', { text: LANGUAGES[language] ?? language }),
+    el('div', { class: 'grid' }, fieldLabelled('subject', subject), fieldLabelled('body', body, true)));
+}
+
+/** What the notification form says, in each language it speaks. */
+function notificationMessagesOf(form) {
+  return cache.notifying.languages.map((language) => ({
+    language,
+    subject: $(`[data-language="${language}"][data-part="subject"]`, form)?.value.trim() ?? '',
+    body: $(`[data-language="${language}"][data-part="body"]`, form)?.value.trim() ?? '',
+  })).filter((message) => message.subject || message.body);
+}
+
+/** Sends the notification form, making a notification or correcting one. */
+function saveNotification(form) {
+  const id = form.elements.id.value;
+  const on = (mark) => $$(`[data-${mark}]`, form).filter((box) => box.checked)
+    .map((box) => box.getAttribute(`data-${mark}`));
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    events: on('event'),
+    recipients: on('recipient'),
+    criteria: criteriaOf(form),
+    oncePerDay: form.elements.oncePerDay.checked,
+    optional: form.elements.optional.checked,
+    messages: notificationMessagesOf(form),
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id
+      ? api(`/notification-definitions/${id}`, { method: 'PUT', body })
+      : api('/notification-definitions', { method: 'POST', body })),
+    id ? t('msg.notificationSaved', 'Notification saved') : t('msg.notificationCreated', 'Notification created'),
+    async () => { resetNotificationForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a notification in the form, to correct it. */
+function editNotification(definition) {
+  const form = $('#form-notification');
+
+  form.elements.id.value = String(definition.id);
+  form.elements.name.value = definition.name;
+  form.elements.description.value = definition.description;
+  form.elements.oncePerDay.checked = definition.oncePerDay;
+  form.elements.optional.checked = definition.optional;
+  form.elements.valid.checked = definition.valid;
+  fillNotificationForm(form, definition);
+
+  // Drawn rather than declared with a key, because it carries the notification's
+  // name; see editRole for why the key has to come off.
+  const heading = $('#notification-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('notificationFormTitle', () => {
+    heading.textContent = t('notification.edit', 'Edit the notification {0}').replace('{0}', definition.name);
+  });
+
+  swapTheLabel($('#notification-submit'), 'action.save', 'Save');
+  $('#notification-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the notification form back to making a new one. */
+function resetNotificationForm() {
+  const form = $('#form-notification');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillNotificationForm(form, null);
+
+  stopRedrawing('notificationFormTitle');
+  swapTheLabel($('#notification-form-title'), 'notification.create', 'Add a notification');
+  swapTheLabel($('#notification-submit'), 'action.create', 'Create');
+  $('#notification-cancel').hidden = true;
+}
+
+/** Wires the notification form. */
+function wireNotifications() {
+  const form = $('#form-notification');
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveNotification(form); });
+  $('#notification-cancel').addEventListener('click', resetNotificationForm);
 }
 
 // ---------------------------------------------------- system configuration
@@ -7583,9 +7808,9 @@ const CATALOGS = {
 async function loadTicketSetup() {
   if (!can('queues:write')) return;
 
-  const [queues, states, priorities, types, levels, unlocking] = await Promise.all(
+  const [queues, states, priorities, types, levels, unlocking, notifying] = await Promise.all(
     ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path, '/service-levels',
-      '/unlock-state-types']
+      '/unlock-state-types', '/notification-definitions']
       .map((path) => api(path)),
   );
 
@@ -7619,6 +7844,9 @@ async function loadTicketSetup() {
   drawUnlockTypes(unlocking?.items ?? []);
   await loadCalendars();
   loadSlaCard();
+  drawNotifications(notifying, {
+    queues: queues?.items ?? [], states: lists.state, priorities: lists.priority, types: lists.type,
+  });
 }
 
 /**
@@ -10546,6 +10774,7 @@ function forgetTheLastAccount() {
   cache.plans = [];
   cache.planEvents = [];
   cache.jobs = [];
+  cache.notifying = notifyingNothing();
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -10628,6 +10857,7 @@ function forgetTheLastAccount() {
   resetMacroForm();
   resetPlanForm();
   resetJobForm();
+  resetNotificationForm();
   resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
@@ -11261,6 +11491,15 @@ const TOUR_STEPS = [
       'Minutes until the first answer and until the solution, counted in the level\'s calendar, in the installation\'s '
       + 'where it names none, or around the clock. A queue '
       + 'names the level its new tickets start with, and a ticket past its moment is marked overdue.'),
+  },
+  {
+    target: '#notification-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.notifications.title', 'Who is told what'),
+    text: () => t('tour.notifications.text',
+      'A notification tells the agents around a ticket - its owner, those watching it, those who work in its queue - '
+      + 'when something happens to it, each in their language. It is shown to them here and pushed to their browsers.'),
   },
   {
     target: '#macro-card',
@@ -15665,6 +15904,7 @@ function wireForms() {
   wireSla();
   wireUnlockTypes();
   wireAutomation();
+  wireNotifications();
 
   $('#form-queue').addEventListener('submit', (e) => {
     e.preventDefault();

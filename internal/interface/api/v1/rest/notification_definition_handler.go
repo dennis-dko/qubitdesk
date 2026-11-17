@@ -46,14 +46,16 @@ type NotificationDefinitionResponse struct {
 }
 
 // NotificationDefinitionListResponse is every notification, with the events
-// and the recipients one can name and the languages one can speak, so a form
-// offers what the server takes.
+// and the recipients one can name, the languages one can speak and how long a
+// subject and a text may be, so a form offers what the server takes.
 type NotificationDefinitionListResponse struct {
-	Items      []NotificationDefinitionResponse `json:"items"`
-	TotalCount uint                             `json:"totalCount"`
-	Events     []string                         `json:"events"`
-	Recipients []string                         `json:"recipients"`
-	Languages  []string                         `json:"languages"`
+	Items        []NotificationDefinitionResponse `json:"items"`
+	TotalCount   uint                             `json:"totalCount"`
+	Events       []string                         `json:"events"`
+	Recipients   []string                         `json:"recipients"`
+	Languages    []string                         `json:"languages"`
+	SubjectLimit int                              `json:"subjectLimit"`
+	BodyLimit    int                              `json:"bodyLimit"`
 }
 
 // NotificationDefinitionRequest creates or changes a notification. On a change
@@ -140,7 +142,8 @@ func (h *NotificationDefinitionHandler) List(c *gofr.Context) (any, error) {
 
 	return NotificationDefinitionListResponse{
 		Items: page.Items, TotalCount: page.TotalCount, Events: ticketEvents(), Recipients: recipients,
-		Languages: model.SupportedLanguages(),
+		Languages: model.SupportedLanguages(), SubjectLimit: model.MaxTicketTitleLength,
+		BodyLimit: model.MaxNotificationBodyLength,
 	}, nil
 }
 

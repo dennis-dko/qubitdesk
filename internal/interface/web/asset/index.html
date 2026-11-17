@@ -1070,6 +1070,74 @@
           </div>
         </form>
       </div>
+
+      <!-- What the agents around a ticket are told when something happens to it,
+           as KIX18's ticket notifications tell them. -->
+      <div class="card" id="notification-card" data-perm="queues:write">
+        <h2 data-i18n="notification.title">Notifications</h2>
+        <p class="muted" data-i18n="notification.hint">What the agents around a ticket are told when something happens to it, each in their language. Nobody is told about their own change.</p>
+        <div class="table-wrap">
+          <table id="table-notification">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="field.events">Events</th>
+                <th data-i18n="field.recipients">Recipients</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-notification" class="form">
+          <h3 id="notification-form-title" data-i18n="notification.create">Add a notification</h3>
+          <input type="hidden" name="id">
+          <div class="grid">
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="120" required></label>
+            <label class="wide" data-i18n="field.description">Description<input type="text" name="description" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <fieldset class="perms">
+            <legend data-i18n="field.events">Events</legend>
+            <div class="perm-grid" id="notification-events"></div>
+          </fieldset>
+          <fieldset class="perms">
+            <legend data-i18n="field.recipients">Recipients</legend>
+            <div class="perm-grid" id="notification-recipients"></div>
+          </fieldset>
+          <fieldset class="perms">
+            <legend data-i18n="field.criteria">Which tickets</legend>
+            <p class="muted" data-i18n="notification.criteriaHint">A ticket is one it is about when it is in one of the queues, states, priorities and types switched on; a list with none switched on takes any, so nothing switched on at all is every ticket.</p>
+            <h4 data-i18n="catalog.queues">Queues</h4>
+            <div class="perm-grid" id="notification-queues"></div>
+            <h4 data-i18n="catalog.states">Ticket states</h4>
+            <div class="perm-grid" id="notification-states"></div>
+            <h4 data-i18n="catalog.priorities">Priorities</h4>
+            <div class="perm-grid" id="notification-priorities"></div>
+            <h4 data-i18n="catalog.types">Ticket types</h4>
+            <div class="perm-grid" id="notification-types"></div>
+            <div class="grid">
+              <label data-i18n="field.locked">Locked<select name="locked">
+                <option value="" data-i18n="job.lockedAny">either way</option>
+                <option value="true" data-i18n="job.lockedYes">locked</option>
+                <option value="false" data-i18n="job.lockedNo">not locked</option>
+              </select></label>
+            </div>
+          </fieldset>
+          <fieldset class="perms">
+            <legend data-i18n="field.messages">Texts</legend>
+            <p class="muted" data-i18n="notification.messagesHint">A subject and a text for each language it speaks: an agent is sent theirs, or the English, or the first there is. &lt;KIX_TICKET_Title&gt;, &lt;KIX_TICKET_NUMBER&gt;, &lt;KIX_TICKET_State&gt;, &lt;KIX_TICKET_Priority&gt;, &lt;KIX_TICKET_Queue&gt; and &lt;KIX_TICKET_Owner&gt; put in what the ticket says, in each agent's words.</p>
+            <div id="notification-messages"></div>
+          </fieldset>
+          <label class="switch"><input type="checkbox" name="oncePerDay"><span class="switch-track"></span><span class="switch-label" data-i18n="notification.oncePerDay">At most once a day to each agent about a ticket</span></label>
+          <label class="switch"><input type="checkbox" name="optional"><span class="switch-track"></span><span class="switch-label" data-i18n="notification.optional">Agents may switch it off for themselves</span></label>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="notification.offered">Sent</span></label>
+          <div class="row">
+            <button type="submit" id="notification-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="notification-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
     </section>
 
     <!-- What the application does to tickets by itself: the macros, when they

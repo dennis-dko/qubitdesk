@@ -315,52 +315,11 @@ func TestNoTranslationIsUnused(t *testing.T) {
 				}
 			}
 
-			if kind, isStateType := strings.CutPrefix(key, "statetype."); isStateType {
-				if slices.Contains(model.StateTypes(), model.StateType(kind)) {
-					continue
-				}
-			}
-
-			if followUp, isFollowUp := strings.CutPrefix(key, "followup."); isFollowUp {
-				if slices.Contains(model.FollowUps(), model.FollowUp(followUp)) {
-					continue
-				}
-			}
-
-			if level, isLevel := strings.CutPrefix(key, "queueaccess."); isLevel {
-				if slices.Contains(model.AccessLevels(), model.AccessLevel(level)) {
-					continue
-				}
-			}
-
-			if channel, isChannel := strings.CutPrefix(key, "channel."); isChannel {
-				if slices.Contains(model.AgentChannels(), model.Channel(channel)) {
-					continue
-				}
-			}
-
-			// The steps a macro can take, looked up as t(`macrostep.${type}`) from the
-			// definitions the server lists.
-			if step, isStep := strings.CutPrefix(key, "macrostep."); isStep {
-				if _, known := model.MacroActionDefinitionOf(model.MacroActionType(step)); known {
-					continue
-				}
-			}
-
-			// The events a plan can run on, looked up as t(`planevent.${event}`)
-			// from the events the server lists.
-			if event, isEvent := strings.CutPrefix(key, "planevent."); isEvent {
-				if slices.Contains(model.TicketEvents(), model.TicketEvent(event)) {
-					continue
-				}
-			}
-
-			// What started a job's run, looked up as t(`runtrigger.${trigger}`) from
-			// the runs the server lists.
-			if trigger, isTrigger := strings.CutPrefix(key, "runtrigger."); isTrigger {
-				if slices.Contains(runTriggers(), model.RunTrigger(trigger)) {
-					continue
-				}
+			// The rest of the families the script names from a table of its own,
+			// looked up as t(`statetype.${type}`) and the like from what the server
+			// lists - see tableWords.
+			if prefix, word, family := strings.Cut(key, "."); family && slices.Contains(tableWords()[prefix+"."], word) {
+				continue
 			}
 
 			// What an option of the system configuration does, looked up as
