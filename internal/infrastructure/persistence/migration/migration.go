@@ -1156,9 +1156,12 @@ func createMailAccounts(d migration.Datasource, dialect string) error {
 // createFAQCategories keeps the headings the knowledge base is sorted under.
 func createFAQCategories(d migration.Datasource, dialect string) error {
 	return exec(d, fmt.Sprintf(`CREATE TABLE faq_categories (
-		%s,
-		name VARCHAR(255) NOT NULL UNIQUE
-	)`, primaryKey(dialect)))
+		%[1]s,
+		parent_id %[2]s REFERENCES faq_categories(id),
+		name VARCHAR(255) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[3]s NOT NULL DEFAULT %[4]s
+	)`, primaryKey(dialect), foreignKeyID(dialect), boolean(dialect), trueLiteral(dialect)))
 }
 
 // createFAQArticles keeps the knowledge base: what each article says, and who
@@ -1167,16 +1170,18 @@ func createFAQCategories(d migration.Datasource, dialect string) error {
 func createFAQArticles(d migration.Datasource, dialect string) error {
 	return exec(d, fmt.Sprintf(`CREATE TABLE faq_articles (
 		%[1]s,
-		category_id %[2]s REFERENCES faq_categories(id),
+		category_id %[2]s NOT NULL REFERENCES faq_categories(id),
 		title VARCHAR(255) NOT NULL,
 		body %[3]s NOT NULL,
 		keywords VARCHAR(255) NOT NULL DEFAULT '',
 		visibility VARCHAR(16) NOT NULL,
 		language VARCHAR(8) NOT NULL DEFAULT '',
+		valid %[5]s NOT NULL DEFAULT %[6]s,
 		created_at %[4]s NOT NULL,
 		updated_at %[4]s NOT NULL,
-		updated_by %[2]s
-	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect), timestamp(dialect)))
+		updated_by INT
+	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect), timestamp(dialect), boolean(dialect),
+		trueLiteral(dialect)))
 }
 
 // createIndex adds one index, as a migration of its own - see All for why it is

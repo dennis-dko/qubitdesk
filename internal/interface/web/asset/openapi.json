@@ -4309,6 +4309,318 @@
           }
         }
       }
+    },
+    "/faq/categories": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List the knowledge base's categories",
+        "description": "Takes `faq:read`.",
+        "responses": {
+          "200": {
+            "description": "The categories"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Create a category of the knowledge base",
+        "description": "Needs a `name`. Takes `faq:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "parentId": {
+                    "type": "integer",
+                    "description": "The category it sits under; without one, at the top"
+                  },
+                  "clearParent": {
+                    "type": "boolean",
+                    "description": "Put it at the top again"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the category cannot be stored with"
+          },
+          "409": {
+            "description": "Another category has that name"
+          }
+        }
+      }
+    },
+    "/faq/categories/{id}": {
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change a category of the knowledge base",
+        "description": "A field left out stays as it was; a category cannot sit under itself. Takes `faq:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "parentId": {
+                    "type": "integer",
+                    "description": "The category it sits under; without one, at the top"
+                  },
+                  "clearParent": {
+                    "type": "boolean",
+                    "description": "Put it at the top again"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the category cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Another category has that name"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete a category of the knowledge base",
+        "description": "One with articles or categories under it is refused with how many. Takes `faq:write`.",
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Articles or categories are under it"
+          }
+        }
+      }
+    },
+    "/faq/articles": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Search the knowledge base",
+        "description": "The articles whose title, keywords or text hold `q`, in the `category` given, the latest written first and at most two hundred; retired ones only for whoever writes the knowledge base. Under `visibilities` who an article can be for. Takes `faq:read`.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The articles"
+          },
+          "403": {
+            "description": "Missing permission"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Write an article into the knowledge base",
+        "description": "Needs a `categoryId`, a `title` and a `body`; it is for the staff alone unless told otherwise. Takes `faq:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "categoryId": {
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "keywords": {
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "internal",
+                      "external",
+                      "public"
+                    ],
+                    "description": "Who may read it: the staff alone, customers signed in as well, or anybody"
+                  },
+                  "language": {
+                    "type": "string",
+                    "description": "The language it is written in; empty for every reader"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "A field the article cannot be stored with"
+          }
+        }
+      }
+    },
+    "/faq/articles/{id}": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Read an article of the knowledge base",
+        "description": "A retired one is not found for anybody who does not write the knowledge base. Takes `faq:read`.",
+        "responses": {
+          "200": {
+            "description": "The article"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Change an article of the knowledge base",
+        "description": "A field left out stays as it was. Takes `faq:write`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "categoryId": {
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "keywords": {
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "internal",
+                      "external",
+                      "public"
+                    ],
+                    "description": "Who may read it: the staff alone, customers signed in as well, or anybody"
+                  },
+                  "language": {
+                    "type": "string",
+                    "description": "The language it is written in; empty for every reader"
+                  },
+                  "valid": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "description": "A field the article cannot be stored with"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete an article of the knowledge base",
+        "description": "Takes `faq:write`.",
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     }
   },
   "components": {

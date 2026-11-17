@@ -549,6 +549,9 @@ const FIELD_NAMES = {
   messages: 'Texts',
   switchedOff: 'Notifications you take',
   followed: 'Queues you follow',
+  categoryId: 'Category',
+  keywords: 'Keywords',
+  visibility: 'Who may read it',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */

@@ -1088,6 +1088,8 @@ func main() {
 		Told: rest.NewNotificationHandler(notifications, authorizer),
 		Templates: rest.NewResponseTemplateHandler(
 			appservice.NewResponseTemplateApplicationService(templateRepo, tickets, automationRefs), authorizer),
+		FAQ: rest.NewFAQHandler(appservice.NewFAQApplicationService(sqldb.NewFAQCategoryRepository(db, cfg.Dialect),
+			sqldb.NewFAQArticleRepository(db, cfg.Dialect), userRepo), authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves
