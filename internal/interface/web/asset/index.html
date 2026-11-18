@@ -208,6 +208,7 @@
     </div>
 
     <nav id="tabs">
+      <button class="tab" data-view="portal" data-perm="portal:use" data-i18n="nav.portal">My tickets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-tickets"/></svg></button>
       <button class="tab" data-view="tickets" data-perm="tickets:read" data-i18n="nav.tickets">Tickets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-tickets"/></svg></button>
       <button class="tab" data-view="customers" data-perm="customers:read" data-i18n="nav.customers">Customers<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-customers"/></svg></button>
       <button class="tab" data-view="faq" data-perm="faq:read" data-i18n="nav.faq">Knowledge base<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-faq"/></svg></button>
@@ -528,6 +529,85 @@
           <button type="button" id="welcome-continue" data-i18n="welcome.continue">Get started</button>
           <button type="button" class="secondary" id="welcome-tour" data-i18n="welcome.tour">Show me around</button>
         </div>
+      </div>
+    </section>
+
+    <!-- The customer portal: the tickets of the contact the account signs in
+         as, one of them opened to read and answer, and the form that opens a
+         new one. Nothing here names a queue's work - an owner, a lock, what a
+         ticket is owed - because none of it is the customer's. -->
+    <section id="view-portal" class="view" hidden>
+      <div class="card" id="portal-list-card">
+        <h2 data-i18n="portal.title">My tickets</h2>
+        <form method="post" id="form-portal-filter" class="form">
+          <div class="grid">
+            <label data-i18n="portal.show">Show<select name="finished">
+              <option value="" data-i18n="portal.showOpen">being worked on</option>
+              <option value="true" data-i18n="portal.showFinished">finished</option>
+            </select></label>
+          </div>
+        </form>
+        <div class="table-wrap">
+          <table id="table-portal">
+            <thead>
+              <tr>
+                <th data-i18n="field.title">Title</th>
+                <th data-i18n="portal.number">Number</th>
+                <th data-i18n="field.stateId">State</th>
+                <th data-i18n="portal.for">For</th>
+                <th data-i18n="portal.changed">Changed</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="muted" id="portal-overflow"></p>
+      </div>
+
+      <div class="card" id="portal-ticket" hidden>
+        <div class="row">
+          <h2 id="portal-ticket-title"></h2>
+          <button type="button" class="link" id="portal-ticket-close" data-i18n="portal.backToList">back to my tickets</button>
+        </div>
+        <p class="muted" id="portal-ticket-facts"></p>
+        <h3 data-i18n="ticket.articles">What was written</h3>
+        <ol class="ticket-articles" id="portal-thread"></ol>
+        <form method="post" id="form-portal-answer" class="form">
+          <h3 data-i18n="portal.answer">Answer</h3>
+          <div class="grid">
+            <label class="wide" data-i18n="field.body">Text<textarea name="body" rows="5" required></textarea></label>
+            <div class="wide row">
+              <label class="file-pick">
+                <span data-i18n="ticket.chooseFiles">Attach files…</span>
+                <input type="file" name="files" multiple>
+              </label>
+            </div>
+          </div>
+          <div class="row">
+            <button type="submit" id="portal-answer-submit" data-i18n="portal.send">Send</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card" id="portal-new-card">
+        <h2 data-i18n="portal.newTitle">Open a ticket</h2>
+        <p class="muted" id="portal-no-queue" hidden data-i18n="portal.noQueue">Tickets cannot be opened here yet.</p>
+        <form method="post" id="form-portal-ticket" class="form">
+          <div class="grid">
+            <label id="portal-queue-choice" data-i18n="portal.queue">About<select name="queueId"></select></label>
+            <label class="wide" data-i18n="field.title">Title<input type="text" name="title" maxlength="255" required></label>
+            <label class="wide" data-i18n="portal.describe">What happened<textarea name="body" rows="6" required></textarea></label>
+            <div class="wide row">
+              <label class="file-pick">
+                <span data-i18n="ticket.chooseFiles">Attach files…</span>
+                <input type="file" name="files" multiple>
+              </label>
+            </div>
+          </div>
+          <div class="row">
+            <button type="submit" id="portal-ticket-submit" data-i18n="portal.open">Open the ticket</button>
+          </div>
+        </form>
       </div>
     </section>
 

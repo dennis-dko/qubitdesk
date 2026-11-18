@@ -74,6 +74,7 @@ var notInTheTour = map[string]string{
 	"sync-card":                      "the directory's step describes the run below the directory",
 	"ticket-detail":                  "one ticket, shown only once it is opened from the list, whose step says how",
 	"faq-article":                    "one article, shown only once it is opened from the search, whose step says how",
+	"portal-ticket":                  "one of the customer's tickets, shown only once it is opened from the list, whose step says how",
 }
 
 // screenCard is a card on one of the screens, and every id inside it -

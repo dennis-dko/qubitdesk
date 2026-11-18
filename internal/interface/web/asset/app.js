@@ -7407,6 +7407,179 @@ async function deleteContact(contact) {
   mutate(() => api(`/contacts/${contact.id}?confirm=true`, { method: 'DELETE' }), done, refreshAll);
 }
 
+// ------------------------------------------------------------------ portal
+
+/** The ticket open on the portal's screen, or null. */
+let portalTicketShown = null;
+
+/**
+ * Fills the portal's screen for an account that reaches it: a page of the
+ * tickets it follows and the queues a ticket is opened in. The question of
+ * which queue is put only where there is more than one, and the form goes where
+ * there is none, with a sentence saying why rather than nothing.
+ */
+async function loadPortal() {
+  if (!can('portal:use')) return;
+
+  await loadPortalTickets();
+
+  const form = $('#form-portal-ticket');
+  let queues = [];
+
+  try {
+    queues = (await api('/portal/queues'))?.items ?? [];
+  } catch (err) {
+    // An account that signs in as no contact is refused this, and has nothing
+    // to open a ticket as - which the empty screen says on its own.
+    if (err.status !== 409) throw err;
+  }
+
+  // A choice nobody has made yet where there are several, so that the first
+  // queue in the list is not where every ticket lands because nobody looked.
+  if (!beingEdited(form)) {
+    fillSelect(form.elements.queueId, queues,
+      queues.length > 1 ? { placeholder: t('portal.chooseQueue', 'choose…') } : {});
+  }
+
+  $('#portal-queue-choice').hidden = queues.length < 2;
+  form.elements.queueId.required = queues.length > 1;
+  form.hidden = queues.length === 0;
+  $('#portal-no-queue').hidden = queues.length > 0;
+}
+
+/** Reads the page of tickets the filter asks for, and draws it. */
+async function loadPortalTickets() {
+  const finished = $('#form-portal-filter').elements.finished.value === 'true';
+  const page = await api(`/portal/tickets?limit=${CUSTOMER_PAGE}${finished ? '&finished=true' : ''}`);
+  const items = page?.items ?? [];
+
+  fillTable($('#table-portal tbody'), items.map((ticket) => el('tr', {},
+    el('td', { class: 'text' }, el('button', {
+      type: 'button', class: 'link', text: ticket.title, onclick: () => openPortalTicket(ticket.id),
+    })),
+    el('td', { text: ticketName(ticket.number) }),
+    el('td', { text: statusName(ticket.state) }),
+    el('td', { class: 'text', text: ticket.contactName || '–' }),
+    el('td', { text: fmtMoment(ticket.updatedAt) }),
+  )), 5, finished
+    ? t('portal.noneFinished', 'No finished tickets.')
+    : t('portal.none', 'No tickets being worked on.'));
+  customerOverflow($('#portal-overflow'), items.length, page?.totalCount ?? 0);
+}
+
+/**
+ * Opens one of the tickets on the portal's screen: where it stands, and what
+ * the customer is shown of it, the oldest first, each article with who wrote it
+ * and its files.
+ */
+async function openPortalTicket(id) {
+  const [ticket, articles] = await Promise.all([
+    api(`/portal/tickets/${id}`), api(`/portal/tickets/${id}/articles`),
+  ]);
+
+  portalTicketShown = ticket;
+
+  $('#portal-ticket-title').textContent = ticket.title;
+  $('#portal-ticket-facts').textContent = [
+    ticketName(ticket.number),
+    statusName(ticket.state),
+    fillIn(t('portal.opened', 'opened {0}'), [fmtMoment(ticket.createdAt)]),
+  ].join(' · ');
+
+  $('#portal-thread').replaceChildren(...(articles?.items ?? []).map((article) => el('li', {},
+    el('p', { class: 'muted', text: [
+      article.sender === 'customer'
+        ? (article.authorName || t('portal.you', 'you'))
+        : (article.authorName || t('portal.serviceDesk', 'the service desk')),
+      fmtMoment(article.createdAt),
+    ].join(' · ') }),
+    article.subject ? el('strong', { text: article.subject }) : null,
+    el('div', { class: 'ticket-article-body', text: article.body }),
+    article.attachments.length ? el('ul', { class: 'ticket-attachments' }, ...article.attachments.map((file) => el('li', {},
+      el('button', {
+        type: 'button',
+        class: 'link',
+        text: `${file.filename} (${fileSize(file.size)})`,
+        onclick: () => downloadAttachment(ticket.id, file, 'portal/tickets').catch((err) => toastFailure(err)),
+      })))) : null,
+  )));
+
+  $('#portal-ticket').hidden = false;
+  $('#portal-ticket').scrollIntoView({ block: 'start' });
+}
+
+/** Puts the open ticket away, and what was written about it with it. */
+function closePortalTicket() {
+  portalTicketShown = null;
+  $('#portal-ticket').hidden = true;
+  $('#portal-thread').replaceChildren();
+  $('#portal-ticket-title').textContent = '';
+  $('#portal-ticket-facts').textContent = '';
+  $('#form-portal-answer').reset();
+}
+
+/**
+ * Opens a ticket from the portal's form, and then sends its files with the
+ * article it was opened with - after the form is emptied, as an article's files
+ * go on the staff's side, so that a file refused cannot leave the text behind
+ * for a second press to send again.
+ */
+function savePortalTicket(form) {
+  const files = [...(form.elements.files.files ?? [])];
+  const queue = form.elements.queueId.value;
+  const body = JSON.stringify({
+    title: form.elements.title.value.trim(),
+    body: form.elements.body.value,
+    ...(queue && !$('#portal-queue-choice').hidden ? { queueId: Number(queue) } : {}),
+  });
+
+  mutate(() => api('/portal/tickets', { method: 'POST', body }), t('msg.portalOpened', 'Ticket opened'),
+    async (ticket) => {
+      form.reset();
+
+      if (ticket?.id && files.length) {
+        const articles = await api(`/portal/tickets/${ticket.id}/articles`);
+        await attachFiles(ticket.id, articles?.items?.[0]?.id, files, 'portal/tickets');
+      }
+
+      await loadPortalTickets();
+      if (ticket?.id) await openPortalTicket(ticket.id);
+    });
+}
+
+/**
+ * Sends the customer's answer to the open ticket, with its files. The answer
+ * says which ticket it landed in, which is a new one where the ticket was
+ * finished and its queue opens one for an answer - and that is the one opened
+ * afterwards.
+ */
+function savePortalAnswer(form) {
+  if (!portalTicketShown) return;
+
+  const id = portalTicketShown.id;
+  const files = [...(form.elements.files.files ?? [])];
+  const body = JSON.stringify({ body: form.elements.body.value });
+
+  mutate(() => api(`/portal/tickets/${id}/articles`, { method: 'POST', body }), t('msg.portalAnswered', 'Answer sent'),
+    async (article) => {
+      form.reset();
+
+      const landed = article?.ticketId || id;
+      await attachFiles(landed, article?.id, files, 'portal/tickets');
+      await loadPortalTickets();
+      await openPortalTicket(landed);
+    });
+}
+
+/** Wires the portal's screen. */
+function wirePortal() {
+  $('#form-portal-filter').addEventListener('change', () => loadPortalTickets().catch((err) => toastFailure(err)));
+  $('#form-portal-filter').addEventListener('submit', (e) => e.preventDefault());
+  $('#form-portal-ticket').addEventListener('submit', (e) => { e.preventDefault(); savePortalTicket(e.target); });
+  $('#form-portal-answer').addEventListener('submit', (e) => { e.preventDefault(); savePortalAnswer(e.target); });
+  $('#portal-ticket-close').addEventListener('click', closePortalTicket);
+}
+
 /** Opens an organisation or a contact in its card's form, to correct it. */
 function editCustomer(kind, entry) {
   const form = $(`#form-${kind}`);
@@ -8257,12 +8430,12 @@ function saveArticle(form) {
  * another: each is a request bounded on its own, and a file refused is named,
  * while the rest still go.
  */
-async function attachFiles(ticketID, articleID, files) {
+async function attachFiles(ticketID, articleID, files, area = 'tickets') {
   if (!articleID) return;
 
   for (const file of files) {
     try {
-      await uploadAttachment(ticketID, articleID, file);
+      await uploadAttachment(ticketID, articleID, file, area);
     } catch (err) {
       toastFailure(err, fillIn(t('ticket.fileRefused', '{0} was not attached.'), [file.name]));
     }
@@ -8274,11 +8447,11 @@ async function attachFiles(ticketID, articleID, files) {
  * knows the multipart boundary it generated, so the request carries no
  * Content-Type of its own.
  */
-async function uploadAttachment(ticketID, articleID, file) {
+async function uploadAttachment(ticketID, articleID, file, area = 'tickets') {
   const form = new FormData();
   form.append('file', file);
 
-  const res = await reach(`${API}/tickets/${ticketID}/articles/${articleID}/attachments`, {
+  const res = await reach(`${API}/${area}/${ticketID}/articles/${articleID}/attachments`, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'X-CSRF-Token': readCookie('gts_csrf') },
@@ -8300,8 +8473,8 @@ async function uploadAttachment(ticketID, articleID, file) {
 }
 
 /** Fetches a file of a ticket and saves it under the name it came with. */
-function downloadAttachment(ticketID, file) {
-  return saveDownload(`${API}/tickets/${ticketID}/attachments/${file.id}`, file.filename);
+function downloadAttachment(ticketID, file, area = 'tickets') {
+  return saveDownload(`${API}/${area}/${ticketID}/attachments/${file.id}`, file.filename);
 }
 
 /**
@@ -11491,6 +11664,7 @@ function forgetTheLastAccount() {
   cache.faqCategories = [];
   cache.faqVisibilities = [];
   closeFAQArticle();
+  closePortalTicket();
   $('#told-all-read').hidden = true;
 
   // Emptied rather than left to the next render, which may never come: a table
@@ -11968,6 +12142,23 @@ const TOUR_STEPS = [
     text: () => t('tour.told.text',
       'What the notifications tell you about the tickets around you waits here until you have read it. Opening a '
       + 'ticket from here reads it, and where you let this browser, it is pushed to you as well.'),
+  },
+  {
+    target: '#portal-list-card',
+    view: 'portal',
+    permission: 'portal:use',
+    title: () => t('tour.portal.title', 'Your tickets'),
+    text: () => t('tour.portal.text',
+      'Every ticket opened for you, the ones still being worked on first. Open one to read what the service desk '
+      + 'answered and to answer it.'),
+  },
+  {
+    target: '#portal-new-card',
+    view: 'portal',
+    permission: 'portal:use',
+    title: () => t('tour.portalNew.title', 'Something new'),
+    text: () => t('tour.portalNew.text',
+      'Open a ticket here: what it is about, what happened, and any files that show it.'),
   },
   {
     target: '#faq-card',
@@ -12775,6 +12966,9 @@ function renderWelcome() {
   // this person can actually act on: a list that promises something somebody cannot
   // do is worse than a shorter list.
   const points = [
+    can('portal:use')
+      && t('welcome.point.portal',
+        'Open a ticket and follow your tickets under My tickets.'),
     can('users:write')
       && t('welcome.point.administer',
         'Add the people who work here, and decide what each of them may do.'),
@@ -16599,6 +16793,7 @@ async function refreshAll() {
   await loadSysConfig();
   await loadTicketSetup();
   await loadCustomers();
+  await loadPortal();
   await loadFAQ();
   await loadTickets();
   await loadUsers();
@@ -16670,6 +16865,7 @@ function wireForms() {
 
   wireTickets();
   wireCustomers();
+  wirePortal();
   wireSysConfig();
   wireCalendars();
   wireSla();
