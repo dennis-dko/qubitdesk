@@ -169,17 +169,19 @@ func TestATicketChangesAndGoesWithEverythingWrittenInIt(t *testing.T) {
 	}
 
 	latest := later.Add(time.Hour)
+	owed := latest.Add(8 * time.Hour)
 
 	if _, err := tables.tickets.AddArticle(ctx, &model.Article{
 		TicketID: ticket.ID, Sender: model.SenderAgent, Channel: model.ChannelNote, Body: "Rebooted the switch.",
 		CreatedAt: latest,
-	}, 20, nil, nil, false); err != nil {
+	}, 20, nil, nil, false, &owed); err != nil {
 		t.Fatalf("add an article: %v", err)
 	}
 
 	read, _ := tables.tickets.GetByID(ctx, ticket.ID)
-	if !read.UpdatedAt.Equal(latest) {
-		t.Errorf("the ticket was last changed at %v, want the article's moment %v", read.UpdatedAt, latest)
+	if !read.UpdatedAt.Equal(latest) || read.UpdateDue == nil || !read.UpdateDue.Equal(owed) {
+		t.Errorf("the ticket was last changed at %v and owes its next answer at %v, want the article's moment %v "+
+			"and %v", read.UpdatedAt, read.UpdateDue, latest, owed)
 	}
 
 	if minutes, _ := tables.tickets.AccountedMinutes(ctx, ticket.ID); minutes != 25 {

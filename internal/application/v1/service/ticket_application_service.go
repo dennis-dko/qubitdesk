@@ -207,6 +207,13 @@ func (s *TicketApplicationService) raise(ctx context.Context, caller *Principal,
 	s.raised(ctx, ticketID, events)
 }
 
+// WithClock reads the time from now instead of the wall.
+func (s *TicketApplicationService) WithClock(now func() time.Time) *TicketApplicationService {
+	s.now = now
+
+	return s
+}
+
 // WithConfig attaches the system configuration. Optional: without it every
 // option the service obeys keeps its default.
 func (s *TicketApplicationService) WithConfig(config ConfigReader) *TicketApplicationService {
@@ -363,6 +370,10 @@ func (s *TicketApplicationService) CreateTicket(
 	article.AuthorID = callerID(caller)
 	article.CreatedAt = now
 
+	if ticket.UpdateDue, err = s.updateOwed(ctx, ticket, []*model.Article{article}, state.Type); err != nil {
+		return nil, err
+	}
+
 	opened, err := s.tickets.Create(ctx, ticket, article, minutes, s.numbered(ctx, now))
 	if err != nil {
 		return nil, err
@@ -454,6 +465,12 @@ func (s *TicketApplicationService) UpdateTicket(
 		return ticket, nil
 	}
 
+	// After the state and the level, either of which decides it: a ticket put
+	// to wait or finished owes no answer, and one opened again owes one.
+	if ticket.UpdateDue, err = s.updateOwedNow(ctx, ticket); err != nil {
+		return nil, err
+	}
+
 	ticket.UpdatedAt = now
 
 	changed, err := s.tickets.Update(ctx, ticket, change.entries)
@@ -542,7 +559,13 @@ func (s *TicketApplicationService) AddArticle(
 		answered = &now
 	}
 
-	written, err := s.tickets.AddArticle(ctx, article, minutes, change.entries, answered, article.CustomerVisible)
+	updateDue, err := s.updateOwedNow(ctx, ticket, article)
+	if err != nil {
+		return nil, err
+	}
+
+	written, err := s.tickets.AddArticle(ctx, article, minutes, change.entries, answered, article.CustomerVisible,
+		updateDue)
 	if err != nil {
 		return nil, err
 	}

@@ -110,6 +110,10 @@ func TestAWaitEndsOnlyWhileItIsStillOver(t *testing.T) {
 	before := written("Printer")
 	printer, line := closing("Printer")
 
+	// Whatever the service worked out is owed next goes in with the move.
+	owed := over.Add(2 * time.Hour)
+	printer.UpdateDue = &owed
+
 	if wrote, err := tables.tickets.EndWait(ctx, printer, tables.open, true, over, line); err != nil || wrote {
 		t.Errorf("a ticket no longer in the state it was found in was moved: %v, %v", wrote, err)
 	}
@@ -128,9 +132,10 @@ func TestAWaitEndsOnlyWhileItIsStillOver(t *testing.T) {
 
 	read, err := tables.tickets.GetByID(ctx, printer.ID)
 	if err != nil || read.StateID != tables.closed || read.ClosedAt == nil || read.PendingUntil != nil ||
-		read.Locked || read.LockedAt != nil || read.Title != "Printer" || written("Printer") != before+1 {
+		read.Locked || read.LockedAt != nil || read.Title != "Printer" || written("Printer") != before+1 ||
+		read.UpdateDue == nil || !read.UpdateDue.Equal(owed) {
 		t.Errorf("the printer reads %+v, %v; want it closed and free, waiting for nothing, under its title, "+
-			"with one line more", read, err)
+			"owing what it was worked out to owe, with one line more", read, err)
 	}
 
 	router, line := closing("Router")
@@ -140,14 +145,15 @@ func TestAWaitEndsOnlyWhileItIsStillOver(t *testing.T) {
 	}
 
 	phone, line := closing("Phone")
+	phone.UpdateDue = &owed
 
 	if wrote, err := tables.tickets.EndWait(ctx, phone, waiting, false, over, line); err != nil || !wrote {
 		t.Fatalf("a wait that is over did not end: %v, %v", wrote, err)
 	}
 
 	if read, err := tables.tickets.GetByID(ctx, phone.ID); err != nil || !read.Locked || read.LockedAt == nil ||
-		!read.LockedAt.Equal(at) {
-		t.Errorf("the phone reads %+v, %v; want its lock left as it was", read, err)
+		!read.LockedAt.Equal(at) || read.UpdateDue == nil || !read.UpdateDue.Equal(owed) {
+		t.Errorf("the phone reads %+v, %v; want its lock left as it was and what it owes written", read, err)
 	}
 }
 
@@ -182,14 +188,14 @@ func TestALockIsFreedOnlyOnceItHasRunItsTime(t *testing.T) {
 	if _, err := tables.tickets.AddArticle(ctx, &model.Article{
 		TicketID: scanner.ID, Sender: model.SenderAgent, Channel: model.ChannelNote, CustomerVisible: true,
 		Body: "A new one is on its way.", CreatedAt: answered,
-	}, 0, nil, nil, true); err != nil {
+	}, 0, nil, nil, true, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := tables.tickets.AddArticle(ctx, &model.Article{
 		TicketID: keyboard.ID, Sender: model.SenderAgent, Channel: model.ChannelNote, CustomerVisible: true,
 		Body: "Which one?", CreatedAt: answered,
-	}, 0, nil, nil, true); err != nil {
+	}, 0, nil, nil, true, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -200,7 +206,7 @@ func TestALockIsFreedOnlyOnceItHasRunItsTime(t *testing.T) {
 	if _, err := tables.tickets.AddArticle(ctx, &model.Article{
 		TicketID: scanner.ID, Sender: model.SenderAgent, Channel: model.ChannelNote,
 		Body: "Ordered.", CreatedAt: answered.Add(10 * time.Minute),
-	}, 0, nil, nil, false); err != nil {
+	}, 0, nil, nil, false, nil); err != nil {
 		t.Fatal(err)
 	}
 

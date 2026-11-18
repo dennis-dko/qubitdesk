@@ -38,18 +38,18 @@ func (r *TicketRepository) EndWait(
 ) (bool, error) {
 	if !release {
 		return r.guarded(ctx, history,
-			"UPDATE tickets SET state_id = ?, closed_at = ?, pending_until = NULL, updated_at = ? "+
+			"UPDATE tickets SET state_id = ?, closed_at = ?, update_due = ?, pending_until = NULL, updated_at = ? "+
 				"WHERE id = ? AND state_id = ? AND pending_until IS NOT NULL AND pending_until <= ?",
-			ticket.StateID, ticket.ClosedAt, ticket.UpdatedAt, ticket.ID, from, now)
+			ticket.StateID, ticket.ClosedAt, ticket.UpdateDue, ticket.UpdatedAt, ticket.ID, from, now)
 	}
 
 	// The lock goes only while it is still held, or the history would say a
 	// lock was freed that was not there.
 	return r.guarded(ctx, history,
-		"UPDATE tickets SET state_id = ?, closed_at = ?, pending_until = NULL, locked = ?, locked_at = NULL, "+
-			"updated_at = ? WHERE id = ? AND state_id = ? AND pending_until IS NOT NULL AND pending_until <= ? "+
-			"AND locked = ?",
-		ticket.StateID, ticket.ClosedAt, false, ticket.UpdatedAt, ticket.ID, from, now, true)
+		"UPDATE tickets SET state_id = ?, closed_at = ?, update_due = ?, pending_until = NULL, locked = ?, "+
+			"locked_at = NULL, updated_at = ? WHERE id = ? AND state_id = ? AND pending_until IS NOT NULL "+
+			"AND pending_until <= ? AND locked = ?",
+		ticket.StateID, ticket.ClosedAt, ticket.UpdateDue, false, ticket.UpdatedAt, ticket.ID, from, now, true)
 }
 
 func (r *TicketRepository) FreeLock(

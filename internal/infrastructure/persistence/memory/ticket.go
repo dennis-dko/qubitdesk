@@ -150,6 +150,7 @@ func (r *TicketRepository) AddArticle(
 	history []model.HistoryEntry,
 	firstResponse *time.Time,
 	renewsLock bool,
+	updateDue *time.Time,
 ) (*model.Article, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -170,6 +171,7 @@ func (r *TicketRepository) AddArticle(
 		ticket.LockedAt = &renewed
 	}
 
+	ticket.UpdateDue = updateDue
 	r.tickets[ticket.ID] = ticket
 
 	stored := *article
@@ -195,6 +197,7 @@ func (r *TicketRepository) AddFollowUp(
 	article *model.Article,
 	history []model.HistoryEntry,
 	reopen *model.Reopening,
+	updateDue *time.Time,
 ) (*model.Article, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -213,6 +216,10 @@ func (r *TicketRepository) AddFollowUp(
 		ticket.PendingUntil = nil
 		ticket.ClosedAt = nil
 		entries = append(slices.Clone(history), reopen.History)
+	}
+
+	if reopen == nil || moved {
+		ticket.UpdateDue = updateDue
 	}
 
 	r.tickets[ticket.ID] = ticket

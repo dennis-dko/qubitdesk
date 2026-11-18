@@ -8229,6 +8229,7 @@ function drawTicketDetail(ticket, articles, history) {
       ticket.firstResponseAt
         ? fillIn(t('sla.answeredAt', '{0} - answered {1}'), [fmtMoment(ticket.firstResponseDue), fmtMoment(ticket.firstResponseAt)])
         : fmtMoment(ticket.firstResponseDue)) : []),
+    ...(ticket.updateDue ? fact(t('sla.updateDue', 'Next answer owed by'), fmtMoment(ticket.updateDue)) : []),
     ...(ticket.solutionDue ? fact(t('sla.solutionDue', 'Solution owed by'), fmtMoment(ticket.solutionDue)) : []),
     ...fact(t('ticket.owner', 'Owner'), ticket.ownerName || t('ticket.nobody', 'nobody')),
     ...fact(t('field.responsibleId', 'Responsible'), ticket.responsibleName || t('ticket.nobody', 'nobody')),

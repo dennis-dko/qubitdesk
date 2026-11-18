@@ -75,6 +75,15 @@ func (s *TicketApplicationService) endWaits(ctx context.Context, states []*model
 
 		ticket.UpdatedAt = now
 
+		articles, err := s.tickets.Articles(ctx, ticket.ID)
+		if err != nil {
+			return moved, err
+		}
+
+		if ticket.UpdateDue, err = s.updateOwed(ctx, ticket, articles, next.Type); err != nil {
+			return moved, err
+		}
+
 		wrote, err := s.tickets.EndWait(ctx, ticket, from, release, now, change.entries)
 		if err != nil {
 			return moved, err

@@ -1182,6 +1182,7 @@
   "sla.overdue": "überfällig",
   "sla.solutionDue": "Lösung fällig bis",
   "sla.title": "Service-Levels",
+  "sla.updateDue": "Nächste Antwort fällig bis",
   "statetype.closed": "geschlossen",
   "statetype.merged": "zusammengefasst",
   "statetype.new": "neu",

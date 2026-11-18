@@ -403,6 +403,10 @@ func (s *TicketApplicationService) openForCustomer(
 		return nil, err
 	}
 
+	if ticket.UpdateDue, err = s.updateOwed(ctx, ticket, []*model.Article{article}, state.Type); err != nil {
+		return nil, err
+	}
+
 	opened, err := s.tickets.Create(ctx, ticket, article, 0, s.numbered(ctx, now))
 	if err != nil {
 		return nil, err
@@ -521,6 +525,8 @@ func (s *TicketApplicationService) AnswerFromPortal(
 
 	var reopen *model.Reopening
 
+	leftIn := state.Type
+
 	if reopens {
 		open, err := s.stateNamed(ctx, model.StateOpen)
 		if err != nil {
@@ -530,9 +536,20 @@ func (s *TicketApplicationService) AnswerFromPortal(
 		moved := historyByCustomer(ticket.ID, now, caller)
 		moved.add(model.HistoryState, state.Name, open.Name)
 		reopen = &model.Reopening{From: state.ID, To: open.ID, History: moved.entries[0]}
+		leftIn = open.Type
 	}
 
-	written, moved, err := s.tickets.AddFollowUp(ctx, article, change.entries, reopen)
+	articles, err := s.tickets.Articles(ctx, ticket.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	updateDue, err := s.updateOwed(ctx, ticket, append(articles, article), leftIn)
+	if err != nil {
+		return nil, err
+	}
+
+	written, moved, err := s.tickets.AddFollowUp(ctx, article, change.entries, reopen, updateDue)
 	if err != nil {
 		return nil, err
 	}

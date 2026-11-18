@@ -11,7 +11,8 @@ import (
 
 // A service level is made on the setup screen, the queue's form names it for
 // the tickets the queue opens, and a ticket opened there says which level it is
-// owed under and by when its first answer is owed.
+// owed under and by when its first answer, its next answer and its solution
+// are owed.
 func TestAServiceLevelIsMadeNamedByAQueueAndShownOnATicket(t *testing.T) {
 	t.Parallel()
 
@@ -24,6 +25,7 @@ func TestAServiceLevelIsMadeNamedByAQueueAndShownOnATicket(t *testing.T) {
 	p.run("make Gold",
 		chromedp.SetValue(`#form-sla [name="name"]`, "Gold", chromedp.ByQuery),
 		chromedp.SetValue(`#form-sla [name="firstResponseMinutes"]`, "60", chromedp.ByQuery),
+		chromedp.SetValue(`#form-sla [name="updateMinutes"]`, "240", chromedp.ByQuery),
 		chromedp.SetValue(`#form-sla [name="solutionMinutes"]`, "480", chromedp.ByQuery),
 		p.click("#sla-submit"))
 	p.waitForText("#table-sla tbody", "Gold")
@@ -64,7 +66,9 @@ func TestAServiceLevelIsMadeNamedByAQueueAndShownOnATicket(t *testing.T) {
 		chromedp.WaitVisible("#ticket-detail", chromedp.ByID))
 	p.waitForText("#ticket-facts", "Gold")
 
-	if facts := p.text("#ticket-facts"); !strings.Contains(facts, "First answer owed by") || !strings.Contains(facts, "Solution owed by") {
-		t.Errorf("the ticket's facts read %q; want when its first answer and its solution are owed", facts)
+	if facts := p.text("#ticket-facts"); !strings.Contains(facts, "First answer owed by") ||
+		!strings.Contains(facts, "Next answer owed by") || !strings.Contains(facts, "Solution owed by") {
+		t.Errorf("the ticket's facts read %q; want when its first answer, its next answer and its solution are owed",
+			facts)
 	}
 }

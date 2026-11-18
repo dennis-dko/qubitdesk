@@ -44,6 +44,7 @@ func (r *TicketRepository) EndWait(
 	}
 
 	stored.StateID, stored.ClosedAt, stored.PendingUntil, stored.UpdatedAt = ticket.StateID, ticket.ClosedAt, nil, ticket.UpdatedAt
+	stored.UpdateDue = ticket.UpdateDue
 	if release {
 		stored.Locked, stored.LockedAt = false, nil
 	}

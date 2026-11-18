@@ -33,18 +33,22 @@ type TicketRepository interface {
 	// firstResponse is when the article answered the ticket for the first time
 	// where it did; a ticket already answered keeps the moment it was.
 	// renewsLock starts the time a locked ticket's lock runs for again, at the
-	// article's moment; a ticket not locked has none to start.
+	// article's moment; a ticket not locked has none to start. updateDue is when
+	// the next answer is owed once the article is written, written with it.
 	AddArticle(ctx context.Context, article *model.Article, minutes int,
-		history []model.HistoryEntry, firstResponse *time.Time, renewsLock bool) (*model.Article, error)
+		history []model.HistoryEntry, firstResponse *time.Time, renewsLock bool,
+		updateDue *time.Time) (*model.Article, error)
 
 	// AddFollowUp stores a customer's answer with the history saying so, marks
 	// the ticket changed at its moment and, where reopen is given, moves the
 	// ticket into the state it names - only while the ticket is still in the
 	// state the answer found it in, because somebody may have changed it since,
-	// and then their change stands and only the answer is written. It answers
-	// whether it moved the ticket.
+	// and then their change stands and only the answer is written. updateDue is
+	// when the next answer is owed in the state the answer leaves the ticket in,
+	// written where that state is the one it meant. It answers whether it moved
+	// the ticket.
 	AddFollowUp(ctx context.Context, article *model.Article, history []model.HistoryEntry,
-		reopen *model.Reopening) (*model.Article, bool, error)
+		reopen *model.Reopening, updateDue *time.Time) (*model.Article, bool, error)
 
 	Articles(ctx context.Context, ticketID uint) ([]*model.Article, error)
 
@@ -78,8 +82,9 @@ type TicketRepository interface {
 	Matching(ctx context.Context, criteria model.TicketCriteria, limit int) ([]uint, error)
 
 	// EndWait writes what the housekeeping changed on a ticket whose wait is
-	// over - its state, when it finished, that it waits no longer and when it
-	// changed - and with release frees its lock as well. It writes only while
+	// over - its state, when it finished, when its next answer is owed, that it
+	// waits no longer and when it changed - and with release frees its lock as
+	// well. It writes only while
 	// the ticket still waits in the state it was found in, for a moment that
 	// has come by now, and with release only while it is still locked: somebody
 	// may have changed it since it was found, and then their change stands and

@@ -66,13 +66,53 @@ type Ticket struct {
 
 	// SolutionDue is when the ticket is owed a finished state.
 	SolutionDue *time.Time
+
+	// UpdateDue is when the next answer is owed - the time between answers its
+	// service level promises, counted from UpdateFrom - and empty while the
+	// ticket waits or is finished, which nobody owes an answer in.
+	UpdateDue *time.Time
 }
 
 // Escalated says whether a promise the ticket was made has run out unkept: no
-// first answer by its moment, or not finished by its.
+// first answer by its moment, no answer by the moment the next was owed, or not
+// finished by its.
 func (t Ticket) Escalated(now time.Time) bool {
 	return (t.FirstResponseDue != nil && t.FirstResponseAt == nil && now.After(*t.FirstResponseDue)) ||
+		(t.UpdateDue != nil && now.After(*t.UpdateDue)) ||
 		(t.SolutionDue != nil && t.ClosedAt == nil && now.After(*t.SolutionDue))
+}
+
+// UpdateFrom is the moment the time between answers is counted from, as OTRS
+// counts it, read from a ticket's articles oldest first: the customer's first
+// article since the last answer they were shown, or that answer where the
+// agent wrote last. A note nobody outside saw and what the application wrote
+// count for neither, and a ticket with neither counts from its opening.
+//
+// From the customer's first article of the run rather than their last, because
+// writing again while waiting is not a reason to be owed an answer later.
+func UpdateFrom(articles []*Article, opened time.Time) time.Time {
+	from, customerSince := opened, false
+
+	for i := len(articles) - 1; i >= 0; i-- {
+		article := articles[i]
+
+		if !article.CustomerVisible {
+			continue
+		}
+
+		switch article.Sender {
+		case SenderCustomer:
+			from, customerSince = article.CreatedAt, true
+		case SenderAgent:
+			if customerSince {
+				return from
+			}
+
+			return article.CreatedAt
+		}
+	}
+
+	return from
 }
 
 // Channel is how something reached the service desk: a ticket's first contact,

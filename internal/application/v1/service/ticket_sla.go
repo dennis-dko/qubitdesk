@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"time"
 
@@ -151,6 +152,71 @@ func (s *TicketApplicationService) owe(ctx context.Context, ticket *model.Ticket
 	ticket.SolutionDue = deadline(ticket.CreatedAt, level.SolutionMinutes)
 
 	return nil
+}
+
+// updateOwed is when the ticket's next answer is owed, counted from
+// model.UpdateFrom in the service level's calendar: never where the level
+// promises no time between answers, and never while the ticket waits or is
+// finished - nobody owes an answer to a ticket waiting for something, as OTRS
+// counts no update time in a pending state, nor to one that is done.
+//
+// Worked out from the articles every time rather than kept up by each change,
+// because which article it counts from depends on the ones around it: a
+// customer writing twice while waiting is owed the first one's answer.
+func (s *TicketApplicationService) updateOwed(
+	ctx context.Context,
+	ticket *model.Ticket,
+	articles []*model.Article,
+	state model.StateType,
+) (*time.Time, error) {
+	if s.levels == nil || ticket.ServiceLevelID == nil || state == model.StateTypePendingReminder ||
+		state == model.StateTypePendingAuto || slices.Contains(model.FinishedStateTypes(), state) {
+		return nil, nil
+	}
+
+	level, err := s.levels.GetByID(ctx, *ticket.ServiceLevelID)
+	if apperror.KindOf(err) == apperror.KindNotFound {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if level.UpdateMinutes <= 0 {
+		return nil, nil
+	}
+
+	deadline, err := s.counter(ctx, level)
+	if err != nil {
+		return nil, err
+	}
+
+	return deadline(model.UpdateFrom(articles, ticket.CreatedAt), level.UpdateMinutes), nil
+}
+
+// updateOwedNow is updateOwed for a ticket as it is stored, its articles and
+// its state read for it.
+func (s *TicketApplicationService) updateOwedNow(
+	ctx context.Context,
+	ticket *model.Ticket,
+	written ...*model.Article,
+) (*time.Time, error) {
+	if s.levels == nil || ticket.ServiceLevelID == nil {
+		return nil, nil
+	}
+
+	articles, err := s.tickets.Articles(ctx, ticket.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	state, err := s.states.GetByID(ctx, ticket.StateID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.updateOwed(ctx, ticket, append(articles, written...), state.Type)
 }
 
 // counter is how a service level counts its minutes: in its calendar, or in the

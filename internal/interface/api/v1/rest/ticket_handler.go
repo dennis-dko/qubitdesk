@@ -66,6 +66,7 @@ type TicketResponse struct {
 	FirstResponseDue *time.Time `json:"firstResponseDue"`
 	FirstResponseAt  *time.Time `json:"firstResponseAt"`
 	SolutionDue      *time.Time `json:"solutionDue"`
+	UpdateDue        *time.Time `json:"updateDue"`
 	Escalated        bool       `json:"escalated"`
 }
 
@@ -603,7 +604,8 @@ func newTicketResponse(ticket *model.Ticket, names ticketNames) TicketResponse {
 		CreatedAt: ticket.CreatedAt, UpdatedAt: ticket.UpdatedAt, ClosedAt: ticket.ClosedAt,
 		PendingUntil:   ticket.PendingUntil,
 		ServiceLevelID: ticket.ServiceLevelID, FirstResponseDue: ticket.FirstResponseDue,
-		FirstResponseAt: ticket.FirstResponseAt, SolutionDue: ticket.SolutionDue, Escalated: ticket.Escalated(time.Now()),
+		FirstResponseAt: ticket.FirstResponseAt, SolutionDue: ticket.SolutionDue, UpdateDue: ticket.UpdateDue,
+		Escalated: ticket.Escalated(time.Now()),
 	}
 }
 
