@@ -465,8 +465,10 @@ const FIELD_NAMES = {
   body: 'Text',
   baseDn: 'Base DN',
   channel: 'Channel',
+  class: 'Class',
   contactId: 'Contact',
   code: 'Code',
+  comment: 'Comment',
   companyName: 'Company',
   companyUrl: 'Company website',
   confirmed: 'Confirmed accounts',
@@ -479,6 +481,7 @@ const FIELD_NAMES = {
   email: 'Email',
   expiresInDays: 'Valid for (days)',
   followUp: 'Answer to a closed ticket',
+  functionality: 'Functionality',
   footerText: 'Footer',
   host: 'Host',
   id: 'ID',
@@ -2680,6 +2683,7 @@ const PERMISSION_TITLES = {
   'faq:read': 'Read the knowledge base',
   'faq:write': 'Write the knowledge base',
   'reports:read': 'Evaluate tickets',
+  'catalog:write': 'Set up the general catalog',
   'portal:use': 'Use the customer portal',
 };
 
@@ -2708,6 +2712,7 @@ const PERMISSION_DETAILS = {
   'faq:read': 'The knowledge base, its internal articles included.',
   'faq:write': 'Write, change and remove knowledge base articles, and decide who may read each.',
   'reports:read': 'Figures over the tickets of the queues this role reaches: how many arrived, how many were closed, how long they took.',
+  'catalog:write': 'Add to and change the general catalog - the classes a configuration item can be of, its deployment and incident states and what each means, and the lists its details pick from - and retire a value nobody should pick any more.',
   'portal:use': 'As a customer: open tickets, read and answer one’s own, and read the public knowledge base. Nothing of anybody else’s.',
 };
 
@@ -2722,6 +2727,7 @@ const PERMISSION_GROUPS = {
   customers: 'Customers',
   faq: 'Knowledge base',
   reports: 'Evaluations',
+  catalog: 'General catalog',
   portal: 'Customer portal',
 };
 
@@ -10446,6 +10452,8 @@ const CHANGE_SENTENCES = {
   'role.updated': () => t('change.roleUpdated', 'Changed the role {0}'),
   'role.deleted': () => t('change.roleDeleted', 'Deleted the role {0}'),
   'roles.imported': () => t('change.rolesImported', 'Imported roles from a spreadsheet'),
+  'catalog.created': () => t('change.catalogCreated', 'Added {0} to the general catalog'),
+  'catalog.updated': () => t('change.catalogUpdated', 'Changed {0} in the general catalog'),
   'queue.created': () => t('change.queueCreated', 'Created the queue {0}'),
   'queue.updated': () => t('change.queueUpdated', 'Changed the queue {0}'),
   'queue.deleted': () => t('change.queueDeleted', 'Deleted the queue {0}'),

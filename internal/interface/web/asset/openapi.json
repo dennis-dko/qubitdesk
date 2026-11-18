@@ -61,6 +61,10 @@
     {
       "name": "portal",
       "description": "The customer's side: the tickets of the contact the account signs in as - their own, and their organisation's where the contact sees them - whatever queue they are in, and only what a customer is shown of them. Takes `portal:use`; a ticket the caller does not follow is not found."
+    },
+    {
+      "name": "catalog",
+      "description": "The general catalog, as KIX18 keeps it: the lists the configuration items and the changes pick from. Read by every account signed in; changed with `catalog:write`. Nothing is deleted from it - a value no longer offered is retired."
     }
   ],
   "paths": {
@@ -4988,6 +4992,102 @@
         "responses": {
           "200": {
             "description": "The categories"
+          }
+        }
+      }
+    },
+    "/general-catalog": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List the general catalog",
+        "description": "The values of the class `class` names, by name, or of every class by class and name. A value of a deployment or an incident state carries its `functionality`: what it means to the code.",
+        "parameters": [
+          {
+            "name": "class",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "A class, such as ITSM::ConfigItem::DeploymentState"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The values"
+          },
+          "401": {
+            "description": "Not signed in"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Add a value to the general catalog",
+        "description": "`class` and `name`, and the `functionality` the class asks for where it asks for one - none in a class whose values mean nothing to the code. A class holding no value yet is made by adding its first.",
+        "responses": {
+          "201": {
+            "description": "The value"
+          },
+          "400": {
+            "description": "A field the value cannot be kept with"
+          },
+          "409": {
+            "description": "The class already holds the name"
+          }
+        }
+      }
+    },
+    "/general-catalog/{id}": {
+      "put": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Change a value of the general catalog",
+        "description": "A field left out stays as it was; a value stays in the class it was added to, and `valid` false retires it.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The value"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Changed"
+          },
+          "400": {
+            "description": "A field the value cannot be kept with, or another class"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "The class already holds the name"
+          }
+        }
+      }
+    },
+    "/general-catalog/classes": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List the classes of the general catalog",
+        "description": "Every class a value is kept under, by name, with the functionalities a value of it may have - none for most.",
+        "responses": {
+          "200": {
+            "description": "The classes"
+          },
+          "401": {
+            "description": "Not signed in"
           }
         }
       }

@@ -1097,6 +1097,8 @@ func main() {
 		FAQ: rest.NewFAQHandler(appservice.NewFAQApplicationService(sqldb.NewFAQCategoryRepository(db, cfg.Dialect),
 			sqldb.NewFAQArticleRepository(db, cfg.Dialect), userRepo), authorizer),
 		Portal: rest.NewPortalHandler(tickets, authorizer),
+		GeneralCatalog: rest.NewGeneralCatalogHandler(
+			appservice.NewGeneralCatalogApplicationService(sqldb.NewGeneralCatalogRepository(db, cfg.Dialect)), authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves

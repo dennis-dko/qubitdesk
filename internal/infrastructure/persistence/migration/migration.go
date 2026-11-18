@@ -196,7 +196,133 @@ func All(dialect string) map[int64]migration.Migrate {
 		20261117040000: {UP: func(d migration.Datasource) error { return createNotificationDefinitions(d, dialect) }},
 		20261117040100: {UP: func(d migration.Datasource) error { return createNotificationMessages(d, dialect) }},
 		20261117040200: {UP: func(d migration.Datasource) error { return createNotificationOptOuts(d, dialect) }},
+
+		// The general catalog, the lists the configuration items and the changes
+		// pick from, as KIX18 ships them.
+		20261118010000: {UP: func(d migration.Datasource) error { return createGeneralCatalog(d, dialect) }},
+		20261118010100: {UP: func(d migration.Datasource) error { return seedGeneralCatalog(d, dialect) }},
 	}
+}
+
+// createGeneralCatalog keeps the general catalog, KIX18's general_catalog with
+// its one preference, the functionality, as a column: a class's name, a value's
+// name in it, what the value means to the code where its class means something,
+// and whether it is still offered. A class holds a name once. Nothing is
+// deleted from it, as KIX18 deletes nothing from it.
+func createGeneralCatalog(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE general_catalog (
+		%[1]s,
+		catalog_class VARCHAR(100) NOT NULL,
+		name VARCHAR(255) NOT NULL,
+		functionality VARCHAR(32) NOT NULL DEFAULT '',
+		comment VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		UNIQUE (catalog_class, name)
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect)))
+}
+
+// seedGeneralCatalog gives a new installation KIX18's general catalog: the
+// classes a configuration item can be of, the deployment and incident states
+// with the functionality KIX18 gives each - an expired item counts as
+// productive there, and so it does here - and the lists the classes' attributes
+// pick from. Under identifiers the interface translates, as the ticket states
+// are.
+//
+// The names are written out rather than taken from the model: a finished
+// migration says what it did, and must not change with a constant that is
+// allowed to.
+func seedGeneralCatalog(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect,
+		"INSERT INTO general_catalog (catalog_class, name, functionality) VALUES (?, ?, ?)")
+
+	for _, item := range []struct{ class, name, functionality string }{
+		{"ITSM::Core::IncidentState", "operational", "operational"},
+		{"ITSM::Core::IncidentState", "warning", "warning"},
+		{"ITSM::Core::IncidentState", "incident", "incident"},
+		{"ITSM::ConfigItem::Class", "computer", ""},
+		{"ITSM::ConfigItem::Class", "hardware", ""},
+		{"ITSM::ConfigItem::Class", "location", ""},
+		{"ITSM::ConfigItem::Class", "building", ""},
+		{"ITSM::ConfigItem::Class", "room", ""},
+		{"ITSM::ConfigItem::Class", "network", ""},
+		{"ITSM::ConfigItem::Class", "software", ""},
+		{"ITSM::ConfigItem::DeploymentState", "expired", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "inactive", "postproductive"},
+		{"ITSM::ConfigItem::DeploymentState", "maintenance", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "pilot", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "planned", "preproductive"},
+		{"ITSM::ConfigItem::DeploymentState", "production", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "repair", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "retired", "postproductive"},
+		{"ITSM::ConfigItem::DeploymentState", "review", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "test-qa", "preproductive"},
+		{"ITSM::ConfigItem::YesNo", "yes", ""},
+		{"ITSM::ConfigItem::YesNo", "no", ""},
+		{"ITSM::ConfigItem::Computer::Type", "desktop", ""},
+		{"ITSM::ConfigItem::Computer::Type", "phone", ""},
+		{"ITSM::ConfigItem::Computer::Type", "server", ""},
+		{"ITSM::ConfigItem::Computer::Type", "other", ""},
+		{"ITSM::ConfigItem::Computer::Type", "laptop", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "monitor", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "printer", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "switch", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "router", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "wlan-access-point", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "security-device", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "backup-device", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "mouse", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "keyboard", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "camera", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "beamer", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "modem", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "usb-device", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "docking-station", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "scanner", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "other", ""},
+		{"ITSM::ConfigItem::Location::Type", "building", ""},
+		{"ITSM::ConfigItem::Location::Type", "office", ""},
+		{"ITSM::ConfigItem::Location::Type", "floor", ""},
+		{"ITSM::ConfigItem::Location::Type", "room", ""},
+		{"ITSM::ConfigItem::Location::Type", "rack", ""},
+		{"ITSM::ConfigItem::Location::Type", "workplace", ""},
+		{"ITSM::ConfigItem::Location::Type", "outlet", ""},
+		{"ITSM::ConfigItem::Location::Type", "it-facility", ""},
+		{"ITSM::ConfigItem::Location::Type", "other", ""},
+		{"ITSM::ConfigItem::Network::Type", "lan", ""},
+		{"ITSM::ConfigItem::Network::Type", "wlan", ""},
+		{"ITSM::ConfigItem::Network::Type", "telco", ""},
+		{"ITSM::ConfigItem::Network::Type", "gsm", ""},
+		{"ITSM::ConfigItem::Network::Type", "other", ""},
+		{"ITSM::ConfigItem::Software::Type", "client-application", ""},
+		{"ITSM::ConfigItem::Software::Type", "middleware", ""},
+		{"ITSM::ConfigItem::Software::Type", "server-application", ""},
+		{"ITSM::ConfigItem::Software::Type", "client-os", ""},
+		{"ITSM::ConfigItem::Software::Type", "server-os", ""},
+		{"ITSM::ConfigItem::Software::Type", "admin-tool", ""},
+		{"ITSM::ConfigItem::Software::Type", "user-tool", ""},
+		{"ITSM::ConfigItem::Software::Type", "embedded", ""},
+		{"ITSM::ConfigItem::Software::Type", "other", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "single-licence", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "per-user", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "concurrent-users", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "per-processor", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "per-server", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "per-node", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "volume-licence", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "enterprise-licence", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "developer-licence", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "demo", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "time-restricted", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "freeware", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "unlimited", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "open-source", ""},
+	} {
+		if _, err := d.SQL.Exec(insert, item.class, item.name, item.functionality); err != nil {
+			return fmt.Errorf("seeding %s %s: %w", item.class, item.name, err)
+		}
+	}
+
+	return nil
 }
 
 // createNotificationOptOuts keeps the notifications each agent switched off for

@@ -38,11 +38,12 @@ type Handlers struct {
 	Plans     *rest.ExecPlanHandler
 	Jobs      *rest.JobHandler
 
-	Notifications *rest.NotificationDefinitionHandler
-	Told          *rest.NotificationHandler
-	Templates     *rest.ResponseTemplateHandler
-	FAQ           *rest.FAQHandler
-	Portal        *rest.PortalHandler
+	Notifications  *rest.NotificationDefinitionHandler
+	Told           *rest.NotificationHandler
+	Templates      *rest.ResponseTemplateHandler
+	FAQ            *rest.FAQHandler
+	Portal         *rest.PortalHandler
+	GeneralCatalog *rest.GeneralCatalogHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -332,6 +333,13 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.GET(base+"/portal/faq/articles", h.FAQ.PublishedArticles)
 	app.GET(base+"/portal/faq/articles/{id}", h.FAQ.PublishedArticle)
 	app.GET(base+"/portal/faq/categories", h.FAQ.PublishedCategories)
+
+	// The general catalog, read by everybody signed in and changed with
+	// catalog:write. No DELETE: a value is retired, as KIX18 retires it.
+	app.GET(base+"/general-catalog", h.GeneralCatalog.Items)
+	app.GET(base+"/general-catalog/classes", h.GeneralCatalog.Classes)
+	app.POST(base+"/general-catalog", h.GeneralCatalog.Create)
+	app.PUT(base+"/general-catalog/{id}", h.GeneralCatalog.Update)
 
 	app.GET(base+"/response-templates", h.Templates.List)
 	app.GET(base+"/response-templates/{id}", h.Templates.Get)

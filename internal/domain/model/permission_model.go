@@ -75,6 +75,12 @@ const (
 	// may read like the tickets they count.
 	PermReportRead = "reports:read"
 
+	// PermCatalogWrite is the general catalog: the lists the configuration items
+	// and the changes pick from, and what each value of them means to the code.
+	// Reading it takes nothing but being signed in, because every screen that
+	// offers one of its values has to say what they are.
+	PermCatalogWrite = "catalog:write"
+
 	// PermPortalUse is the customer's side: opening tickets, reading and answering
 	// their own, and the published knowledge base. It belongs to an account linked
 	// to a contact, and reaches that contact's tickets and nobody else's - an
@@ -96,6 +102,7 @@ func AllPermissions() []string {
 		PermCustomerRead, PermCustomerWrite,
 		PermFAQRead, PermFAQWrite,
 		PermReportRead,
+		PermCatalogWrite,
 		PermPortalUse,
 	}
 }
@@ -122,6 +129,7 @@ func AdminPermissions() []string {
 		PermCustomerRead, PermCustomerWrite,
 		PermFAQRead, PermFAQWrite,
 		PermReportRead,
+		PermCatalogWrite,
 	}
 }
 
