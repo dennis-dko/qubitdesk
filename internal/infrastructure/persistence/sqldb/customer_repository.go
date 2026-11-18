@@ -151,7 +151,7 @@ func NewContactRepository(db DB, dialect string) *ContactRepository {
 
 var _ repository.ContactRepository = (*ContactRepository)(nil)
 
-const contactColumns = "id, organisation_id, name, email, phone, note, valid, user_id, created_at"
+const contactColumns = "id, organisation_id, name, email, phone, note, valid, user_id, sees_organisation, created_at"
 
 func (r *ContactRepository) List(ctx context.Context, filter repository.CustomerFilter) ([]*model.Contact, uint, error) {
 	where, args := customerConditions(filter, "(LOWER(name) LIKE ? ESCAPE '!' OR LOWER(email) LIKE ? ESCAPE '!')")
@@ -209,11 +209,26 @@ func (r *ContactRepository) GetByID(ctx context.Context, id uint) (*model.Contac
 	return contact, nil
 }
 
+func (r *ContactRepository) GetByUserID(ctx context.Context, userID uint) (*model.Contact, error) {
+	contact, err := scanContact(r.db.QueryRowContext(ctx,
+		r.rebind("SELECT "+contactColumns+" FROM contacts WHERE user_id = ?"), userID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperror.NotFound("contact", strconv.FormatUint(uint64(userID), 10))
+	}
+
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+
+	return contact, nil
+}
+
 func (r *ContactRepository) Save(ctx context.Context, contact *model.Contact) (*model.Contact, error) {
 	id, err := r.insert(ctx,
-		"INSERT INTO contacts (organisation_id, name, email, phone, note, valid, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO contacts (organisation_id, name, email, phone, note, valid, sees_organisation, created_at) "+
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		contact.OrganisationID, contact.Name, nullableText(contact.Email), contact.Phone, contact.Note,
-		contact.Valid, contact.CreatedAt)
+		contact.Valid, contact.SeesOrganisation, contact.CreatedAt)
 	if err != nil {
 		return nil, translateContactErr(err, contact.Email)
 	}
@@ -223,10 +238,11 @@ func (r *ContactRepository) Save(ctx context.Context, contact *model.Contact) (*
 
 func (r *ContactRepository) Update(ctx context.Context, contact *model.Contact) (*model.Contact, error) {
 	found, err := r.update(ctx, "contacts",
-		"UPDATE contacts SET organisation_id = ?, name = ?, email = ?, phone = ?, note = ?, valid = ? WHERE id = ?",
+		"UPDATE contacts SET organisation_id = ?, name = ?, email = ?, phone = ?, note = ?, valid = ?, "+
+			"sees_organisation = ? WHERE id = ?",
 		contact.ID,
 		contact.OrganisationID, contact.Name, nullableText(contact.Email), contact.Phone, contact.Note,
-		contact.Valid, contact.ID)
+		contact.Valid, contact.SeesOrganisation, contact.ID)
 	if err != nil {
 		return nil, translateContactErr(err, contact.Email)
 	}
@@ -236,6 +252,27 @@ func (r *ContactRepository) Update(ctx context.Context, contact *model.Contact) 
 	}
 
 	return r.GetByID(ctx, contact.ID)
+}
+
+func (r *ContactRepository) LinkAccount(ctx context.Context, contactID, userID uint) (bool, error) {
+	linked, err := r.exec(ctx, "UPDATE contacts SET user_id = ? WHERE id = ? AND user_id IS NULL", userID, contactID)
+	if err != nil {
+		return false, apperror.Internal(err)
+	}
+
+	return linked > 0, nil
+}
+
+func (r *ContactRepository) CountLinkedWithRole(ctx context.Context, roleID uint) (int, error) {
+	var accounts int
+
+	if err := r.db.QueryRowContext(ctx, r.rebind(
+		"SELECT COUNT(*) FROM contacts c JOIN users u ON u.id = c.user_id WHERE u.role_id = ?"),
+		roleID).Scan(&accounts); err != nil {
+		return 0, apperror.Internal(err)
+	}
+
+	return accounts, nil
 }
 
 func (r *ContactRepository) Delete(ctx context.Context, id uint) error {
@@ -317,7 +354,7 @@ func scanContact(row scanner) (*model.Contact, error) {
 	)
 
 	err := row.Scan(&contact.ID, &organisation, &contact.Name, &email, &contact.Phone, &contact.Note,
-		&contact.Valid, &userID, &created)
+		&contact.Valid, &userID, &contact.SeesOrganisation, &created)
 	if err != nil {
 		return nil, err
 	}

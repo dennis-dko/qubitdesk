@@ -9,6 +9,7 @@ import (
 	"github.com/dennis-dko/go-ticket-system/internal/application/v1/query"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
+	domainservice "github.com/dennis-dko/go-ticket-system/internal/domain/service"
 	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 	"github.com/dennis-dko/go-ticket-system/internal/support/security"
 )
@@ -44,6 +45,10 @@ type UserApplicationService struct {
 	// a deletion has to warn about.
 	owned OwnedTickets
 
+	// contacts says which accounts contacts sign in to the portal with, which
+	// are given no role that administers.
+	contacts repository.ContactRepository
+
 	// purger removes an account together with everything that is its own.
 	//
 	// Deleting only the account row is not an option: the schema declares
@@ -55,18 +60,21 @@ type UserApplicationService struct {
 }
 
 // NewUserApplicationService needs the tickets an account owns to say what
-// deleting it would leave behind, and the purger to remove it in one go.
+// deleting it would leave behind, the purger to remove it in one go, and the
+// contacts to tell the accounts they sign in to the portal with.
 func NewUserApplicationService(
 	userRepo repository.UserRepository,
 	roleRepo repository.RoleRepository,
 	owned OwnedTickets,
 	purger UserPurger,
+	contacts repository.ContactRepository,
 ) *UserApplicationService {
 	return &UserApplicationService{
 		userRepository: userRepo,
 		roleRepository: roleRepo,
 		owned:          owned,
 		purger:         purger,
+		contacts:       contacts,
 	}
 }
 
@@ -215,6 +223,10 @@ func (s *UserApplicationService) UpdateUser(
 				"the built-in administrator cannot be moved to role %q, which lacks %q",
 				role.Name, model.PermRoleWrite).
 				WithCode("adminRoleMustAdminister", role.Name, model.PermRoleWrite)
+		}
+
+		if err := domainservice.RefuseAdministeringContact(ctx, s.contacts, existingUser, role); err != nil {
+			return nil, err
 		}
 
 		existingUser.RoleID = role.ID

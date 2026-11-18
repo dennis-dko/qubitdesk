@@ -41,6 +41,8 @@ val refusalValues: Map<String, Map<Int, String>> = mapOf(
     "roleStillAssigned" to mapOf(0 to "roleTitle"),
     "directoryRoleAdministers" to mapOf(0 to "roleTitle"),
     "adminRoleMustAdminister" to mapOf(0 to "roleTitle"),
+    "portalAccountAdministers" to mapOf(1 to "roleTitle"),
+    "roleHeldByPortalAccounts" to mapOf(0 to "roleTitle"),
     "macroStepInvalid" to mapOf(1 to "fieldName"),
 )
 

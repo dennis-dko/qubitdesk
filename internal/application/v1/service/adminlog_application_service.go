@@ -18,18 +18,21 @@ import (
 // it names once their account is erased, which is the one thing an erasure must
 // not leave behind; an id names nobody once its account is gone, because no id is
 // handed out twice. A role's name is not a person's and is read the same way, so
-// a role renamed since appears under its new name.
+// a role renamed since appears under its new name; a contact given the portal or
+// having it taken away is named the way an account is.
 type AdminLogService struct {
-	events repository.AdminEventRepository
-	users  repository.UserRepository
-	roles  repository.RoleRepository
-	now    func() time.Time
+	events   repository.AdminEventRepository
+	users    repository.UserRepository
+	roles    repository.RoleRepository
+	contacts repository.ContactRepository
+	now      func() time.Time
 }
 
-// NewAdminLogService needs the accounts and the roles, to name them.
+// NewAdminLogService needs the accounts, the roles and the contacts, to name
+// them.
 func NewAdminLogService(events repository.AdminEventRepository, users repository.UserRepository,
-	roles repository.RoleRepository) *AdminLogService {
-	return &AdminLogService{events: events, users: users, roles: roles, now: time.Now}
+	roles repository.RoleRepository, contacts repository.ContactRepository) *AdminLogService {
+	return &AdminLogService{events: events, users: users, roles: roles, contacts: contacts, now: time.Now}
 }
 
 // AdminLogEntry is a change as it is shown: its ids, and the names they carry now,
@@ -61,7 +64,7 @@ func (s *AdminLogService) Page(ctx context.Context, beforeID uint, limit int) ([
 		events = events[:limit]
 	}
 
-	names := namer{users: s.users, roles: s.roles, known: map[string]string{}}
+	names := namer{users: s.users, roles: s.roles, contacts: s.contacts, known: map[string]string{}}
 	entries := make([]AdminLogEntry, 0, len(events))
 
 	for _, event := range events {
@@ -77,6 +80,8 @@ func (s *AdminLogService) Page(ctx context.Context, beforeID uint, limit int) ([
 			entry.TargetName, err = names.user(ctx, event.TargetID)
 		case strings.HasPrefix(event.Action, "role."):
 			entry.TargetName, err = names.role(ctx, event.TargetID)
+		case strings.HasPrefix(event.Action, "contact."):
+			entry.TargetName, err = names.contact(ctx, event.TargetID)
 		}
 
 		if err != nil {
@@ -91,9 +96,10 @@ func (s *AdminLogService) Page(ctx context.Context, beforeID uint, limit int) ([
 
 // namer reads the names a page of the log needs, each once.
 type namer struct {
-	users repository.UserRepository
-	roles repository.RoleRepository
-	known map[string]string
+	users    repository.UserRepository
+	roles    repository.RoleRepository
+	contacts repository.ContactRepository
+	known    map[string]string
 }
 
 func (n namer) user(ctx context.Context, id uint) (string, error) {
@@ -118,9 +124,20 @@ func (n namer) role(ctx context.Context, id uint) (string, error) {
 	})
 }
 
-// read answers from what this page has already read, and an account or a role
-// that is gone with no name rather than an error: being gone is what the log says
-// about it.
+func (n namer) contact(ctx context.Context, id uint) (string, error) {
+	return n.read("contact", id, func() (string, error) {
+		contact, err := n.contacts.GetByID(ctx, id)
+		if err != nil {
+			return "", err
+		}
+
+		return contact.Name, nil
+	})
+}
+
+// read answers from what this page has already read, and an account, a role or
+// a contact that is gone with no name rather than an error: being gone is what
+// the log says about it.
 func (n namer) read(kind string, id uint, lookUp func() (string, error)) (string, error) {
 	key := kind + ":" + strconv.FormatUint(uint64(id), 10)
 	if name, found := n.known[key]; found {

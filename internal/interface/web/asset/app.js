@@ -496,6 +496,7 @@ const FIELD_NAMES = {
   ownerId: 'Owner',
   page: 'Page',
   parentId: 'Under',
+  password: 'Password',
   pendingUntil: 'Pending until',
   phone: 'Phone',
   port: 'Port',
@@ -698,6 +699,8 @@ const REFUSAL_VALUES = {
   roleStillAssigned: { 0: roleTitle },
   directoryRoleAdministers: { 0: roleTitle },
   adminRoleMustAdminister: { 0: roleTitle },
+  portalAccountAdministers: { 1: roleTitle },
+  roleHeldByPortalAccounts: { 0: roleTitle },
   macroStepInvalid: { 1: fieldName },
 };
 
@@ -7245,7 +7248,7 @@ async function loadContactPage() {
   const page = await api(`/contacts?${query}`);
   const items = page?.items ?? [];
 
-  fillTable(tbody, items.map(contactRow), 6, t('customer.contactsEmpty', 'No contacts.'));
+  fillTable(tbody, items.map(contactRow), 7, t('customer.contactsEmpty', 'No contacts.'));
   customerOverflow($('#contact-overflow'), items.length, page?.totalCount ?? 0);
 }
 
@@ -7256,9 +7259,11 @@ function contactRow(contact) {
     el('td', { class: 'text', text: contact.email || '–' }),
     el('td', { class: 'text', text: contact.phone || '–' }),
     el('td', { class: 'text', text: contact.organisationName || '–' }),
+    el('td', { text: contact.hasPortalAccount ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
     el('td', { text: contact.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
     el('td', { class: 'actions' },
       el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editCustomer('contact', contact) }),
+      ...(can('customers:write') ? portalActions(contact) : []),
       deleteButton({
         label: `${t('field.contactId', 'Contact')} "${contact.name}"`,
         path: `/contacts/${contact.id}`,
@@ -7267,6 +7272,100 @@ function contactRow(contact) {
         ask: () => deleteContact(contact),
       })),
   );
+}
+
+/**
+ * What a contact's row offers about the portal: access for one without it, and
+ * for one with it a new password or taking it away. Only for whoever keeps the
+ * customers, who is the one the server lets do it.
+ *
+ * Taking it away is a plain link, red only in the question it asks: a row's
+ * checkbox deletes what the row's first button carrying a deletion deletes, and
+ * a second such button in front of the contact's own would have "delete selected"
+ * take the portal away instead of deleting the contacts.
+ */
+function portalActions(contact) {
+  if (!contact.hasPortalAccount) {
+    return [el('button', {
+      class: 'link',
+      'data-action': 'portal-give',
+      text: t('customer.portalGive', 'give portal access'),
+      onclick: () => givePortal(contact, false),
+    })];
+  }
+
+  return [
+    el('button', {
+      class: 'link',
+      'data-action': 'portal-password',
+      text: t('customer.portalPassword', 'new portal password'),
+      onclick: () => givePortal(contact, true),
+    }),
+    el('button', {
+      class: 'link',
+      'data-action': 'portal-take',
+      text: t('customer.portalTake', 'take portal access away'),
+      onclick: () => takePortal(contact),
+    }),
+  ];
+}
+
+/**
+ * Gives a contact the portal, or the account they have a new password.
+ *
+ * Either way it is a password for one sign-in: the account has to choose its own
+ * before it can do anything, so what was typed here does not stay standing as a
+ * password two people know - and a new one ends whatever session the account
+ * had open, as a reset of any account's does. The question says so, and names
+ * the address the contact signs in with, because that is what they will be told.
+ */
+async function givePortal(contact, again) {
+  const chosen = await confirmDialog({
+    title: again
+      ? t('customer.portalPasswordTitle', 'New portal password')
+      : t('customer.portalGiveTitle', 'Give portal access'),
+    text: again
+      ? fillIn(t('customer.portalPasswordText',
+        'Give {0} a new password to sign in to the customer portal with once. A password of their own is '
+        + 'chosen at that sign-in, and any session of theirs ends now.'), [contact.name])
+      : fillIn(t('customer.portalGiveText',
+        '{0} signs in to the customer portal with the address {1} and this password, once: a password of '
+        + 'their own is chosen at that sign-in.'), [contact.name, contact.email || '–']),
+    confirmLabel: again
+      ? t('customer.portalPasswordConfirm', 'Set the password')
+      : t('customer.portalGiveConfirm', 'Give access'),
+    danger: false,
+    field: {
+      id: 'portal-password-field',
+      generateID: 'portal-password-generate',
+      label: t('field.password', 'Password'),
+      hint: fillIn(t('user.resetHint', 'At least {0} characters.'), [MIN_PASSWORD_LENGTH]),
+      minLength: MIN_PASSWORD_LENGTH,
+      generate: t('action.generate', 'Generate'),
+    },
+  });
+
+  if (!chosen) return;
+
+  await patch(`/contacts/${contact.id}/portal-access`, { password: chosen },
+    again ? t('msg.portalPasswordSet', 'New portal password set') : t('msg.portalGiven', 'Portal access given'),
+    refreshAll);
+}
+
+/** Takes the portal away from a contact, which erases the account they signed in with. */
+async function takePortal(contact) {
+  const proceed = await confirmDialog({
+    title: t('customer.portalTakeTitle', 'Take portal access away?'),
+    text: fillIn(t('customer.portalTakeText',
+      '{0} can no longer sign in to the customer portal: the account is erased. The tickets stay theirs.'),
+    [contact.name]),
+    confirmLabel: t('customer.portalTakeConfirm', 'Take it away'),
+  });
+
+  if (!proceed) return;
+
+  mutate(() => api(`/contacts/${contact.id}/portal-access`, { method: 'DELETE' }),
+    t('msg.portalTaken', 'Portal access taken away'), refreshAll);
 }
 
 /**
@@ -7317,7 +7416,10 @@ function editCustomer(kind, entry) {
   for (const field of card.fields) form.elements[field].value = entry[field] ?? '';
   form.elements.valid.checked = entry.valid;
 
-  if (kind === 'contact') offerFound('contactOrganisation', keptEntry(entry.organisationId, entry.organisationName));
+  if (kind === 'contact') {
+    form.elements.seesOrganisation.checked = entry.seesOrganisation;
+    offerFound('contactOrganisation', keptEntry(entry.organisationId, entry.organisationName));
+  }
 
   // Drawn rather than declared with a key, because it carries the entry's name;
   // see editRole for why the key has to come off.
@@ -7364,6 +7466,8 @@ function saveCustomer(kind, form) {
 
     if (organisation) sent.organisationId = Number(organisation);
     else if (id) sent.clearOrganisation = true;
+
+    sent.seesOrganisation = form.elements.seesOrganisation.checked;
   }
 
   const body = JSON.stringify(sent);
@@ -10012,6 +10116,8 @@ const CHANGE_SENTENCES = {
   'user.role': () => t('change.userRole', 'Gave {0} the role {1}'),
   'user.password': () => t('change.userPassword', 'Set a new password for {0}'),
   'users.imported': () => t('change.usersImported', 'Imported accounts from a spreadsheet'),
+  'contact.portalGiven': () => t('change.contactPortalGiven', 'Gave {0} access to the customer portal'),
+  'contact.portalTaken': () => t('change.contactPortalTaken', 'Took the customer portal away from {0}'),
   'role.created': () => t('change.roleCreated', 'Created the role {0}'),
   'role.updated': () => t('change.roleUpdated', 'Changed the role {0}'),
   'role.deleted': () => t('change.roleDeleted', 'Deleted the role {0}'),
@@ -11841,7 +11947,8 @@ const TOUR_STEPS = [
     title: () => t('tour.contacts.title', 'The people behind the tickets'),
     text: () => t('tour.contacts.text',
       'A ticket is for a contact, and for the organisation the contact belongs to unless it says otherwise. '
-      + 'Deleting a contact keeps the tickets for them, for nobody.'),
+      + 'Deleting a contact keeps the tickets for them, for nobody. A contact given portal access signs in '
+      + 'with their address and follows their own tickets there.'),
   },
   {
     target: '#told-card',

@@ -177,8 +177,8 @@ func (s *SessionService) reconcileExternal(
 }
 
 // administers reports whether the account holds rights over the installation
-// rather than over the work done in it; roleAdministers says which rights those
-// are.
+// rather than over the work done in it; Role.Administers says which rights
+// those are.
 //
 // A role that is not there counts as no permissions, which is the reading
 // principalFor already takes of the same condition: an account pointing at a
@@ -201,5 +201,5 @@ func (s *SessionService) administers(ctx context.Context, user *model.User) (boo
 		return false, err
 	}
 
-	return roleAdministers(role), nil
+	return role.Administers(), nil
 }

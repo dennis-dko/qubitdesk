@@ -549,7 +549,11 @@ func main() {
 	tokenRepo := sqldb.NewAPITokenRepository(db, cfg.Dialect)
 	passkeyRepo := sqldb.NewPasskeyRepository(db, cfg.Dialect)
 	directoryRunRepo := sqldb.NewDirectoryRunRepository(db, cfg.Dialect)
-	adminLog := appservice.NewAdminLogService(sqldb.NewAdminEventRepository(db, cfg.Dialect), userRepo, roleRepo)
+	// The contacts say which accounts they sign in to the portal with, and
+	// such an account is given no role that administers, from either side.
+	contactRepo := sqldb.NewContactRepository(db, cfg.Dialect)
+	adminLog := appservice.NewAdminLogService(sqldb.NewAdminEventRepository(db, cfg.Dialect), userRepo, roleRepo,
+		contactRepo)
 
 	auth := appservice.NewAuthService(userRepo, roleRepo)
 	apiTokens := appservice.NewAPITokenService(tokenRepo, sessionRepo, userRepo, auth)
@@ -618,8 +622,8 @@ func main() {
 		WithLimits(limits).
 		WithMetrics(app.Metrics())
 
-	users := appservice.NewUserApplicationService(userRepo, roleRepo, userRepo, userRepo)
-	roles := appservice.NewRoleApplicationService(roleRepo)
+	users := appservice.NewUserApplicationService(userRepo, roleRepo, userRepo, userRepo, contactRepo)
+	roles := appservice.NewRoleApplicationService(roleRepo, contactRepo)
 	queueRepo := sqldb.NewQueueRepository(db, cfg.Dialect)
 	catalogRepos := appservice.TicketCatalogRepositories{
 		States:     sqldb.NewTicketStateRepository(db, cfg.Dialect),
@@ -632,10 +636,11 @@ func main() {
 	templateRepo := sqldb.NewResponseTemplateRepository(db, cfg.Dialect)
 	queues := appservice.NewQueueApplicationService(queueRepo, roleRepo, levelRepo).WithTemplates(templateRepo)
 	customerRepos := appservice.TicketCustomerRepositories{
-		Contacts:      sqldb.NewContactRepository(db, cfg.Dialect),
+		Contacts:      contactRepo,
 		Organisations: sqldb.NewOrganisationRepository(db, cfg.Dialect),
 	}
-	customers := appservice.NewCustomerApplicationService(customerRepos.Organisations, customerRepos.Contacts)
+	customers := appservice.NewCustomerApplicationService(customerRepos.Organisations, customerRepos.Contacts).
+		WithPortalAccounts(appservice.PortalAccounts{Users: userRepo, Roles: roleRepo, Purger: userRepo})
 	ticketCatalog := appservice.NewTicketCatalogApplicationService(catalogRepos)
 	sysConfig := appservice.NewSysConfigService(settingsRepo)
 	calendarRepo := sqldb.NewCalendarRepository(db, cfg.Dialect)
@@ -735,7 +740,7 @@ func main() {
 	userSheets := appservice.NewUserWorkbookService(userRepo, roleRepo, users)
 	roleSheets := appservice.NewRoleWorkbookService(roleRepo, roles)
 
-	userDomain := domainservice.NewUserDomainService(userRepo, roleRepo)
+	userDomain := domainservice.NewUserDomainService(userRepo, roleRepo, contactRepo)
 
 	// The built-in administrator is created after the migrations have run, so
 	// there is always a way in even on a brand new database.
@@ -1013,6 +1018,14 @@ func main() {
 		setupHandler = setupHandler.FromInstaller(installerToken, sessions)
 	}
 
+	// A password reset has to reach the sessions as well as the password: a
+	// cookie is not re-checked against the password that opened it, so without
+	// this the account somebody was locked out of stays open wherever it already
+	// was. An account's own and a contact's portal account alike.
+	resetEnds := rest.NewSessionEnder(func(ctx context.Context, userID uint) error {
+		return sessions.LogoutOthers(ctx, userID, "")
+	})
+
 	v1.RegisterRoutes(app, v1.Handlers{
 		Auth: rest.NewAuthHandler(sessions, authorizer, cfg.AppName, instanceTimezone).
 			WithMaintenance(maintenanceState).
@@ -1023,19 +1036,12 @@ func main() {
 			// where that name becomes an account.
 			WithKerberos(func() bool { return kerberosAcceptor != nil && ldapClient.Enabled() }),
 		Users: rest.NewUserHandler(users, userDomain, authorizer, auth, instanceTimezone).
-			// A password reset has to reach the sessions as well as the password:
-			// a cookie is not re-checked against the password that opened it, so
-			// without this the account somebody was locked out of stays open
-			// wherever it already was.
-			WithSessionEnder(rest.NewSessionEnder(
-				func(ctx context.Context, userID uint) error {
-					return sessions.LogoutOthers(ctx, userID, "")
-				})),
+			WithSessionEnder(resetEnds),
 		Roles:    rest.NewRoleHandler(roles, authorizer),
 		Catalog:  rest.NewTicketCatalogHandler(ticketCatalog, authorizer),
 		Queues:   rest.NewQueueHandler(queues, authorizer),
 		Tickets:  rest.NewTicketHandler(tickets, authorizer),
-		Customer: rest.NewCustomerHandler(customers, authorizer),
+		Customer: rest.NewCustomerHandler(customers, authorizer).WithSessionEnder(resetEnds),
 		Me:       rest.NewMeHandler(auth, sessions, authorizer, instanceTimezone),
 		Push:     rest.NewPushHandler(push, authorizer),
 		Tokens:   rest.NewAPITokenHandler(apiTokens, authorizer),

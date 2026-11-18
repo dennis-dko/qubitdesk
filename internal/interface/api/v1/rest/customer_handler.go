@@ -16,11 +16,23 @@ import (
 type CustomerHandler struct {
 	customers service.CustomerService
 	authz     *Authorizer
+
+	// sessions ends the sessions of a contact's account given a new password,
+	// for the reason a reset of any account's ends them.
+	sessions *SessionEnder
 }
 
 // NewCustomerHandler creates the customer handler.
 func NewCustomerHandler(customers service.CustomerService, authz *Authorizer) *CustomerHandler {
 	return &CustomerHandler{customers: customers, authz: authz}
+}
+
+// WithSessionEnder gives the handler a way to end the sessions of a contact's
+// account given a new password.
+func (h *CustomerHandler) WithSessionEnder(sessions *SessionEnder) *CustomerHandler {
+	h.sessions = sessions
+
+	return h
 }
 
 // OrganisationResponse is an organisation as the API hands it out.
@@ -60,6 +72,7 @@ type ContactResponse struct {
 	Note             string    `json:"note"`
 	Valid            bool      `json:"valid"`
 	HasPortalAccount bool      `json:"hasPortalAccount"`
+	SeesOrganisation bool      `json:"seesOrganisation"`
 	CreatedAt        time.Time `json:"createdAt"`
 }
 
@@ -74,6 +87,13 @@ type ContactRequest struct {
 	OrganisationID    *uint   `json:"organisationId"`
 	ClearOrganisation bool    `json:"clearOrganisation"`
 	Valid             *bool   `json:"valid"`
+	SeesOrganisation  *bool   `json:"seesOrganisation"`
+}
+
+// PortalAccessRequest gives a contact the portal: the initial password the
+// account is made with, or given anew.
+type PortalAccessRequest struct {
+	Password string `json:"password"`
 }
 
 func newOrganisationResponse(o *model.Organisation) OrganisationResponse {
@@ -87,7 +107,7 @@ func newContactResponse(c *model.Contact, organisations map[uint]string) Contact
 	return ContactResponse{
 		ID: c.ID, OrganisationID: c.OrganisationID, OrganisationName: nameIn(organisations, c.OrganisationID),
 		Name: c.Name, Email: c.Email, Phone: c.Phone, Note: c.Note,
-		Valid: c.Valid, HasPortalAccount: c.UserID != nil, CreatedAt: c.CreatedAt,
+		Valid: c.Valid, HasPortalAccount: c.UserID != nil, SeesOrganisation: c.SeesOrganisation, CreatedAt: c.CreatedAt,
 	}
 }
 
@@ -312,6 +332,61 @@ func (h *CustomerHandler) DeleteContact(c *gofr.Context) (any, error) {
 	return map[string]string{"status": "deleted"}, nil
 }
 
+// GivePortalAccess handles PUT /api/v1/contacts/{id}/portal-access: the contact
+// is made an account to sign in to the portal with, under the password sent, or
+// the account they have is given it - an initial password either way.
+//
+// customers:write, not users:write, because the account it makes is the
+// contact's and can be nothing else: it holds the shipped customer role, and one
+// that holds anything of the staff side is refused here.
+func (h *CustomerHandler) GivePortalAccess(c *gofr.Context) (any, error) {
+	if _, err := h.authz.Require(c, model.PermCustomerWrite); err != nil {
+		return nil, err
+	}
+
+	id, err := pathID(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	var req PortalAccessRequest
+	if err := bind(c, &req); err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	contact, err := h.customers.GivePortalAccess(c, id, req.Password)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	// An account made a moment ago has none open; one given a new password may
+	// have, on a device of whoever knew the old one.
+	if contact.UserID != nil {
+		h.sessions.afterReset(c, *contact.UserID)
+	}
+
+	return h.contactResponse(c, contact)
+}
+
+// TakePortalAccess handles DELETE /api/v1/contacts/{id}/portal-access: the
+// account the contact signs in with is erased, and the tickets stay theirs.
+func (h *CustomerHandler) TakePortalAccess(c *gofr.Context) (any, error) {
+	if _, err := h.authz.Require(c, model.PermCustomerWrite); err != nil {
+		return nil, err
+	}
+
+	id, err := pathID(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	if err := h.customers.TakePortalAccess(c, id); err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return map[string]string{"status": "deleted"}, nil
+}
+
 // customerListFilter reads what a listing of organisations or contacts asks for.
 func customerListFilter(c *gofr.Context) (service.CustomerListFilter, error) {
 	organisation, err := queryUint(c, "organisation")
@@ -344,6 +419,6 @@ func (r OrganisationRequest) command() command.OrganisationCommand {
 func (r ContactRequest) command() command.ContactCommand {
 	return command.ContactCommand{
 		Name: r.Name, Email: r.Email, Phone: r.Phone, Note: r.Note, OrganisationID: r.OrganisationID,
-		ClearOrganisation: r.ClearOrganisation, Valid: r.Valid,
+		ClearOrganisation: r.ClearOrganisation, Valid: r.Valid, SeesOrganisation: r.SeesOrganisation,
 	}
 }

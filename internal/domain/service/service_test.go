@@ -32,7 +32,7 @@ func newFixture(t *testing.T) *fixture {
 	return &fixture{
 		users:      users,
 		roles:      roles,
-		userDomain: service.NewUserDomainService(users, roles),
+		userDomain: service.NewUserDomainService(users, roles, memory.NewContactRepository()),
 	}
 }
 

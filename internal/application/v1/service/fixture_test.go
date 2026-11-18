@@ -30,8 +30,9 @@ type fixture struct {
 	userDomain *domainservice.UserDomainService
 
 	// repositories, so a test can build a service the fixture does not wire
-	userRepo *memory.UserRepository
-	roleRepo *memory.RoleRepository
+	userRepo    *memory.UserRepository
+	roleRepo    *memory.RoleRepository
+	contactRepo *memory.ContactRepository
 
 	// owned is how many unfinished tickets each account owns, for the cases
 	// about what an account leaves behind.
@@ -58,12 +59,17 @@ func (o *ownedTickets) CountUnfinishedOwnedBy(_ context.Context, userID uint) (i
 // account survived. Whether the *real* erasure covers every table is a question
 // about SQL, and the integration tests ask it against all three databases.
 type memoryPurger struct {
-	users repository.UserRepository
-	owned *ownedTickets
+	users    repository.UserRepository
+	owned    *ownedTickets
+	contacts *memory.ContactRepository
 }
 
 func (p *memoryPurger) PurgeUser(ctx context.Context, userID uint) error {
 	delete(p.owned.byUser, userID)
+
+	if p.contacts != nil {
+		p.contacts.ForgetAccount(userID)
+	}
 
 	return p.users.Delete(ctx, userID)
 }
@@ -73,6 +79,8 @@ func newFixture(t *testing.T) *fixture {
 
 	userRepo := memory.NewUserRepository()
 	roleRepo := memory.NewRoleRepository(userRepo)
+	contactRepo := memory.NewContactRepository()
+	contactRepo.KnowAccounts(userRepo)
 	sessionRepo := memory.NewSessionRepository()
 	owned := &ownedTickets{byUser: map[uint]int{}}
 
@@ -80,14 +88,15 @@ func newFixture(t *testing.T) *fixture {
 
 	f := &fixture{
 		users: service.NewUserApplicationService(userRepo, roleRepo, owned,
-			&memoryPurger{users: userRepo, owned: owned}),
-		roles:      service.NewRoleApplicationService(roleRepo),
-		auth:       auth,
-		sessions:   service.NewSessionService(userRepo, roleRepo, sessionRepo, auth, time.Hour),
-		userDomain: domainservice.NewUserDomainService(userRepo, roleRepo),
-		userRepo:   userRepo,
-		roleRepo:   roleRepo,
-		owned:      owned,
+			&memoryPurger{users: userRepo, owned: owned, contacts: contactRepo}, contactRepo),
+		roles:       service.NewRoleApplicationService(roleRepo, contactRepo),
+		auth:        auth,
+		sessions:    service.NewSessionService(userRepo, roleRepo, sessionRepo, auth, time.Hour),
+		userDomain:  domainservice.NewUserDomainService(userRepo, roleRepo, contactRepo),
+		userRepo:    userRepo,
+		roleRepo:    roleRepo,
+		contactRepo: contactRepo,
+		owned:       owned,
 	}
 
 	user, err := f.users.CreateUser(context.Background(), command.CreateUserCommand{

@@ -27,6 +27,14 @@ type CustomerService interface {
 	CreateContact(ctx context.Context, cmd command.ContactCommand) (*model.Contact, error)
 	UpdateContact(ctx context.Context, id uint, cmd command.ContactCommand) (*model.Contact, error)
 	DeleteContact(ctx context.Context, id uint, confirmed bool) error
+
+	// GivePortalAccess makes the contact an account to sign in to the portal
+	// with, under the password given, or gives the account they have a new one;
+	// either way it is an initial password, to be replaced at the first sign-in.
+	GivePortalAccess(ctx context.Context, id uint, password string) (*model.Contact, error)
+
+	// TakePortalAccess erases the account the contact signs in with.
+	TakePortalAccess(ctx context.Context, id uint) error
 }
 
 // CustomerListFilter is what a listing of organisations or contacts asks for.
@@ -53,6 +61,10 @@ type CustomerApplicationService struct {
 	organisations repository.OrganisationRepository
 	contacts      repository.ContactRepository
 	now           func() time.Time
+
+	// accounts are what a contact's portal account is made with and erased
+	// with; nil keeps the contacts alone - see WithPortalAccounts.
+	accounts *PortalAccounts
 }
 
 // NewCustomerApplicationService works on the two tables alone.
@@ -213,11 +225,29 @@ func (s *CustomerApplicationService) UpdateContact(
 		return nil, err
 	}
 
+	was := *contact
+
 	if err := s.applyContact(ctx, contact, cmd); err != nil {
 		return nil, err
 	}
 
-	return s.contacts.Update(ctx, contact)
+	account, err := s.accountInStep(ctx, &was, contact)
+	if err != nil {
+		return nil, err
+	}
+
+	updated, err := s.contacts.Update(ctx, contact)
+	if err != nil {
+		return nil, err
+	}
+
+	if account != nil {
+		if _, err := s.accounts.Users.Update(ctx, account); err != nil {
+			return nil, err
+		}
+	}
+
+	return updated, nil
 }
 
 func (s *CustomerApplicationService) DeleteContact(ctx context.Context, id uint, confirmed bool) error {
@@ -234,6 +264,10 @@ func (s *CustomerApplicationService) DeleteContact(ctx context.Context, id uint,
 	if tickets > 0 && !confirmed {
 		return apperror.Conflictf("%d ticket(s) are for %q and would keep no contact; confirm to delete",
 			tickets, contact.Name).WithCode("contactDeletionNeedsConfirming", contact.Name, tickets)
+	}
+
+	if err := s.eraseWithContact(ctx, contact); err != nil {
+		return err
 	}
 
 	return s.contacts.Delete(ctx, id)
@@ -304,6 +338,10 @@ func (s *CustomerApplicationService) applyContact(ctx context.Context, contact *
 
 	if cmd.Valid != nil {
 		contact.Valid = *cmd.Valid
+	}
+
+	if cmd.SeesOrganisation != nil {
+		contact.SeesOrganisation = *cmd.SeesOrganisation
 	}
 
 	var invalid []string

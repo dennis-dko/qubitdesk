@@ -284,11 +284,18 @@ func (h *UserHandler) SetPassword(c *gofr.Context) (any, error) {
 // exists to lock somebody out, sessions that survive it are exactly what it was
 // meant to end, and nothing further along the path says so.
 func (h *UserHandler) endSessionsOf(c *gofr.Context, id uint) {
-	if h.sessions == nil {
+	h.sessions.afterReset(c, id)
+}
+
+// afterReset ends the open sessions of the account whose password was just
+// reset, and logs rather than reports a failure to: see endSessionsOf. Nothing
+// is ended without an ender.
+func (e *SessionEnder) afterReset(c *gofr.Context, id uint) {
+	if e == nil {
 		return
 	}
 
-	if err := h.sessions.end(c.Context, id); err != nil {
+	if err := e.end(c.Context, id); err != nil {
 		c.Logger.Errorf("the password of account %d was reset, but its open sessions "+
 			"could not be ended and are still signed in: %v", id, err)
 	}

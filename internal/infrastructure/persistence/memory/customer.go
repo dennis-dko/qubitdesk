@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -109,6 +110,10 @@ type ContactRepository struct {
 
 	mu      sync.Mutex
 	tickets map[uint]int
+
+	// users answers which role a linked account holds, for
+	// CountLinkedWithRole; without it none holds any - see KnowAccounts.
+	users *UserRepository
 }
 
 // NewContactRepository creates an empty contact repository.
@@ -117,6 +122,29 @@ func NewContactRepository() *ContactRepository {
 }
 
 var _ repository.ContactRepository = (*ContactRepository)(nil)
+
+// KnowAccounts lets the repository say which roles the accounts contacts sign
+// in with hold, as the database answers it by joining the two tables.
+func (r *ContactRepository) KnowAccounts(users *UserRepository) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.users = users
+}
+
+// ForgetAccount takes the account off the contact that signs in with it, which
+// is what the erasure of an account does to the contacts table.
+func (r *ContactRepository) ForgetAccount(userID uint) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, contact := range r.items.all() {
+		if contact.UserID != nil && *contact.UserID == userID {
+			contact.UserID = nil
+			_, _ = r.items.update(contact.ID, contact)
+		}
+	}
+}
 
 // UseInTickets makes the contact with this id look as if count tickets were for it.
 func (r *ContactRepository) UseInTickets(id uint, count int) {
@@ -145,20 +173,85 @@ func (r *ContactRepository) GetByID(_ context.Context, id uint) (*model.Contact,
 	return r.items.get(id)
 }
 
+func (r *ContactRepository) GetByUserID(_ context.Context, userID uint) (*model.Contact, error) {
+	for _, contact := range r.items.all() {
+		if contact.UserID != nil && *contact.UserID == userID {
+			return contact, nil
+		}
+	}
+
+	return nil, apperror.NotFound("contact", strconv.FormatUint(uint64(userID), 10))
+}
+
 func (r *ContactRepository) Save(_ context.Context, contact *model.Contact) (*model.Contact, error) {
 	if r.emailTaken(contact) {
 		return nil, contactEmailTaken(contact.Email)
 	}
 
-	return r.items.add(contact, func(c *model.Contact, id uint) { c.ID = id }), nil
+	saved := *contact
+	saved.UserID = nil
+
+	return r.items.add(&saved, func(c *model.Contact, id uint) { c.ID = id }), nil
 }
 
+// Update leaves the account where it was, as the database's statement does.
 func (r *ContactRepository) Update(_ context.Context, contact *model.Contact) (*model.Contact, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if r.emailTaken(contact) {
 		return nil, contactEmailTaken(contact.Email)
 	}
 
-	return r.items.update(contact.ID, contact)
+	stored, err := r.items.get(contact.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	updated := *contact
+	updated.UserID = stored.UserID
+
+	return r.items.update(contact.ID, &updated)
+}
+
+func (r *ContactRepository) LinkAccount(_ context.Context, contactID, userID uint) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// An update matching no row is not an error, as in the database.
+	contact, err := r.items.get(contactID)
+	if apperror.KindOf(err) == apperror.KindNotFound || (err == nil && contact.UserID != nil) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	contact.UserID = &userID
+	_, err = r.items.update(contactID, contact)
+
+	return err == nil, err
+}
+
+func (r *ContactRepository) CountLinkedWithRole(ctx context.Context, roleID uint) (int, error) {
+	r.mu.Lock()
+	users := r.users
+	r.mu.Unlock()
+
+	count := 0
+
+	for _, contact := range r.items.all() {
+		if contact.UserID == nil || users == nil {
+			continue
+		}
+
+		if user, err := users.GetByID(ctx, *contact.UserID); err == nil && user.RoleID == roleID {
+			count++
+		}
+	}
+
+	return count, nil
 }
 
 func (r *ContactRepository) Delete(_ context.Context, id uint) error {

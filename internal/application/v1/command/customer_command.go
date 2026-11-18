@@ -24,4 +24,5 @@ type ContactCommand struct {
 	OrganisationID    *uint
 	ClearOrganisation bool
 	Valid             *bool
+	SeesOrganisation  *bool
 }

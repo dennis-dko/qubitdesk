@@ -247,6 +247,8 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.POST(base+"/contacts", h.Customer.CreateContact)
 	app.PUT(base+"/contacts/{id}", h.Customer.UpdateContact)
 	app.DELETE(base+"/contacts/{id}", h.Customer.DeleteContact)
+	app.PUT(base+"/contacts/{id}/portal-access", h.Customer.GivePortalAccess)
+	app.DELETE(base+"/contacts/{id}/portal-access", h.Customer.TakePortalAccess)
 
 	// Where tickets are sorted to, and which role reaches each queue.
 	app.GET(base+"/queues", h.Queues.List)

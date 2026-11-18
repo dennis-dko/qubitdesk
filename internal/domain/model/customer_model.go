@@ -46,9 +46,16 @@ type Contact struct {
 	// Valid means what it means for an organisation.
 	Valid bool
 
-	// UserID is the account the contact signs in to the portal with. Nothing sets
-	// it before the portal does; the erasure of that account takes it off.
+	// UserID is the account the contact signs in to the portal with, made for
+	// the contact when somebody keeping the customers gives them the portal; the
+	// erasure of that account takes it off.
 	UserID *uint
+
+	// SeesOrganisation lets the contact follow their organisation's tickets in
+	// the portal as well as their own. Off unless somebody says otherwise, as
+	// KIX18's customer role ships the organisation's line switched off: a
+	// colleague's ticket is not news to everybody at the same company.
+	SeesOrganisation bool
 
 	CreatedAt time.Time
 }

@@ -630,6 +630,9 @@
         "responses": {
           "200": {
             "description": "Updated"
+          },
+          "409": {
+            "description": "The built-in administrator must keep a role that can administer, an account from the directory keeps its name and address, and an account a contact signs in to the portal with is given no role that administers"
           }
         }
       },
@@ -680,7 +683,7 @@
             "description": "Assigned"
           },
           "409": {
-            "description": "The built-in administrator must keep a role that can administer"
+            "description": "The built-in administrator must keep a role that can administer, and an account a contact signs in to the portal with is given none that does"
           }
         }
       }
@@ -784,7 +787,7 @@
             "description": "Updated"
           },
           "409": {
-            "description": "System roles cannot be renamed or weakened"
+            "description": "System roles cannot be renamed or weakened, and a role accounts of contacts hold is given no right that administers"
           }
         },
         "description": "A system role may be described differently and nothing else: not renamed, and its permissions not changed in either direction. It is the role the built-in administrator holds, and an installation that could weaken it could lock itself out of its own administration."
@@ -2491,7 +2494,7 @@
           "customers"
         ],
         "summary": "Read a contact",
-        "description": "`hasPortalAccount` says whether the contact signs in to the portal, not which account.",
+        "description": "`hasPortalAccount` says whether the contact signs in to the portal, not which account; `seesOrganisation` whether the portal shows them their organisation's tickets as well as their own.",
         "responses": {
           "200": {
             "description": "Contact"
@@ -2506,7 +2509,7 @@
           "customers"
         ],
         "summary": "Change a contact",
-        "description": "A field left out stays as it was; `clearOrganisation` takes the organisation off, because an id sent as null cannot be told apart from one not sent.",
+        "description": "A field left out stays as it was; `clearOrganisation` takes the organisation off, because an id sent as null cannot be told apart from one not sent. The account a contact signs in to the portal with follows their name and address, where it is theirs alone.",
         "responses": {
           "200": {
             "description": "Changed"
@@ -2518,7 +2521,7 @@
             "description": "Not found"
           },
           "409": {
-            "description": "Another contact already has the address, or the organisation is no longer offered"
+            "description": "Another contact or another account already has the address, the address of a contact with portal access was taken away, or the organisation is no longer offered"
           }
         }
       },
@@ -2527,7 +2530,7 @@
           "customers"
         ],
         "summary": "Delete a contact",
-        "description": "The tickets for the contact stay and keep no contact, as an account's stay when it goes. While tickets are for it, deleting needs `?confirm=true`, and the refusal says how many.",
+        "description": "The tickets for the contact stay and keep no contact, as an account's stay when it goes. While tickets are for it, deleting needs `?confirm=true`, and the refusal says how many. The account the contact signed in to the portal with goes too, where it was theirs alone.",
         "responses": {
           "204": {
             "description": "Deleted"
@@ -2537,6 +2540,47 @@
           },
           "409": {
             "description": "Tickets are for the contact and nobody confirmed"
+          }
+        }
+      }
+    },
+    "/contacts/{id}/portal-access": {
+      "put": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Give a contact the portal",
+        "description": "Makes the contact an account to sign in to the portal with - under their name and address, holding the shipped `customer` role - or gives the account they have a new password. Either way `password` is an initial one, replaced at the first sign-in. Needs `customers:write`, because the account can be nothing but the contact's: one that works on the staff side as well is refused.",
+        "responses": {
+          "200": {
+            "description": "The contact, with `hasPortalAccount`"
+          },
+          "400": {
+            "description": "No password, or one too short or too long"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "The contact is retired or has no address, an account already has the address, or the contact's account works on the staff side or comes from the directory"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Take the portal away from a contact",
+        "description": "Erases the account the contact signs in with, together with everything that is the account's own; the tickets stay the contact's. A contact without one is left as it is.",
+        "responses": {
+          "204": {
+            "description": "Taken away"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "The contact's account works on the staff side or comes from the directory"
           }
         }
       }

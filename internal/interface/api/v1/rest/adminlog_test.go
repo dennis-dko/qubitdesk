@@ -26,7 +26,7 @@ func (n noErrors) Errorf(format string, args ...any) { n.t.Errorf(format, args..
 func TestAnAdministrativeChangeIsRecordedOnceItWentThrough(t *testing.T) {
 	events := memory.NewAdminEventRepository()
 	users := memory.NewUserRepository()
-	log := service.NewAdminLogService(events, users, memory.NewRoleRepository(users))
+	log := service.NewAdminLogService(events, users, memory.NewRoleRepository(users), memory.NewContactRepository())
 
 	var handled string
 

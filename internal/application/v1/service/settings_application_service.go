@@ -466,7 +466,7 @@ func (s *SettingsService) SaveLDAP(ctx context.Context, config model.LDAPConfig)
 	// arrive holding the installation. roleForArrival would hand out the everyday
 	// role instead, and refusing here is what keeps the screen from saying one
 	// role while the accounts get another.
-	if roleAdministers(role) {
+	if role.Administers() {
 		return apperror.Invalidf("%q administers this installation and cannot be the "+
 			"role every account from the directory starts with", role.Name).
 			WithCode("directoryRoleAdministers", role.Name)

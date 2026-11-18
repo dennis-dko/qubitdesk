@@ -20,6 +20,18 @@ func (r *Role) Has(permission string) bool {
 	return slices.Contains(r.Permissions, permission)
 }
 
+// Administers reports whether the role holds rights over the installation
+// rather than over the work done in it: any of AdministeringPermissions.
+//
+// All three are asked about, because they are the same right a step or two
+// apart: settings:manage is the installation, roles:write can tick it on a role,
+// and users:write can hand that role - or the admin role itself - to its own
+// account. Guarding one without the others leaves the door beside the one that
+// was locked, and users:write was that door until 2026-11-13.
+func (r *Role) Administers() bool {
+	return slices.ContainsFunc(AdministeringPermissions(), r.Has)
+}
+
 // IsDefault reports whether this is one of the roles a fresh installation is
 // seeded with.
 //

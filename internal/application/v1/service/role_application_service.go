@@ -23,14 +23,19 @@ type RoleService interface {
 // this application ships keeps its name, its rights and its description, and
 // cannot be deleted.
 type RoleApplicationService struct {
-	roles repository.RoleRepository
+	roles    repository.RoleRepository
+	contacts repository.ContactRepository
 }
 
-// NewRoleApplicationService works on the roles alone. That the built-in
-// administrator keeps a role able to administer is enforced where an account
-// is moved, not here.
-func NewRoleApplicationService(roles repository.RoleRepository) *RoleApplicationService {
-	return &RoleApplicationService{roles: roles}
+// NewRoleApplicationService works on the roles, and asks the contacts how many
+// of the accounts holding a role they sign in to the portal with. That the
+// built-in administrator keeps a role able to administer is enforced where an
+// account is moved, not here.
+func NewRoleApplicationService(
+	roles repository.RoleRepository,
+	contacts repository.ContactRepository,
+) *RoleApplicationService {
+	return &RoleApplicationService{roles: roles, contacts: contacts}
 }
 
 var _ RoleService = (*RoleApplicationService)(nil)
@@ -155,6 +160,22 @@ func (s *RoleApplicationService) UpdateRole(
 		}
 
 		role.Permissions = clean
+
+		// The other way into a contact's account holding the installation: not
+		// moving the account to a role that administers, but ticking such a right
+		// on the role it already holds.
+		if role.Administers() {
+			linked, countErr := s.contacts.CountLinkedWithRole(ctx, role.ID)
+			if countErr != nil {
+				return nil, countErr
+			}
+
+			if linked > 0 {
+				return nil, apperror.Conflictf("%d account(s) holding %q sign in to the portal as contacts, and "+
+					"a right over the installation is not handed to them", linked, role.Name).
+					WithCode("roleHeldByPortalAccounts", role.Name, linked)
+			}
+		}
 	}
 
 	if role.Name == "" {

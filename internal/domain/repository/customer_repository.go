@@ -30,8 +30,24 @@ type ContactRepository interface {
 	List(ctx context.Context, filter CustomerFilter) ([]*model.Contact, uint, error)
 
 	GetByID(ctx context.Context, id uint) (*model.Contact, error)
+
+	// GetByUserID is the contact that signs in to the portal with the account,
+	// not found where none does.
+	GetByUserID(ctx context.Context, userID uint) (*model.Contact, error)
+
 	Save(ctx context.Context, contact *model.Contact) (*model.Contact, error)
+
+	// Update writes what a contact says about the person; it leaves the
+	// account alone, which only LinkAccount sets and the erasure takes off.
 	Update(ctx context.Context, contact *model.Contact) (*model.Contact, error)
+
+	// LinkAccount makes the account the one the contact signs in to the portal
+	// with, while the contact has none; false where it already had one by then.
+	LinkAccount(ctx context.Context, contactID, userID uint) (bool, error)
+
+	// CountLinkedWithRole reports how many accounts that contacts sign in with
+	// hold the role.
+	CountLinkedWithRole(ctx context.Context, roleID uint) (int, error)
 
 	// Delete removes the contact and takes it off the tickets it is on rather
 	// than taking them along, in one transaction: a ticket is the organisation's

@@ -16,7 +16,7 @@ import (
 // is read newest first, a page at a time, and says when there is more.
 func TestTheAdministrationLogNamesPeopleAsTheyAreNow(t *testing.T) {
 	f := newFixture(t)
-	log := service.NewAdminLogService(memory.NewAdminEventRepository(), f.userRepo, f.roleRepo)
+	log := service.NewAdminLogService(memory.NewAdminEventRepository(), f.userRepo, f.roleRepo, f.contactRepo)
 
 	admin, err := f.users.CreateUser(context.Background(), command.CreateUserCommand{
 		Name: "Ada", Email: "ada@example.com", Role: model.RoleAdmin,

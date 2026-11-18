@@ -20,7 +20,9 @@ var changesNothing = map[string]string{
 }
 
 // Every route that changes accounts, roles or settings is in the administration
-// log, or named above as one that changes nothing.
+// log, or named above as one that changes nothing. A contact's portal access is
+// read beside them, because giving it makes an account and taking it away
+// erases one, while the rest of a contact is the customers' and not logged.
 //
 // The log is a middleware with a table of routes, so a handler cannot forget to
 // record its change - and the table is what can be forgotten instead. A route
@@ -34,7 +36,7 @@ func TestEveryAdministrativeChangeIsInTheAdministrationLog(t *testing.T) {
 	var served []string
 
 	for _, match := range regexp.MustCompile(
-		`app\.(POST|PUT|DELETE)\(base\+"(/(?:users|roles|settings|setup|queues|ticket-states|ticket-priorities|ticket-types|calendars|service-levels|unlock-state-types|macros|exec-plans|jobs|notification-definitions|response-templates)[^"]*)"`).
+		`app\.(POST|PUT|DELETE)\(base\+"(/(?:users|roles|settings|setup|queues|ticket-states|ticket-priorities|ticket-types|calendars|service-levels|unlock-state-types|macros|exec-plans|jobs|notification-definitions|response-templates)[^"]*|/contacts/\{id\}/portal-access)"`).
 		FindAllStringSubmatch(router, -1) {
 		served = append(served, match[1]+" /api/v1"+match[2])
 	}
