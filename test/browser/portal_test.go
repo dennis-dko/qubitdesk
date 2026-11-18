@@ -32,6 +32,7 @@ func TestACustomerOpensAndAnswersATicketInThePortal(t *testing.T) {
 	t.Parallel()
 
 	p := open(t)
+	p.readyAdmin()
 	p.becomeCustomer()
 
 	p.run("open his tickets", p.click(`.tab[data-view="portal"]`),
@@ -117,6 +118,7 @@ func TestTheTourWalksACustomerThroughThePortal(t *testing.T) {
 	t.Parallel()
 
 	p := open(t)
+	p.readyAdmin()
 	p.becomeCustomer()
 
 	var portal bool
@@ -130,12 +132,10 @@ func TestTheTourWalksACustomerThroughThePortal(t *testing.T) {
 	p.walkTheTourOn(t, telephones[0], "a customer on "+telephones[0].name)
 }
 
-// becomeCustomer makes a contact with the portal as the administrator, and signs
-// in as the contact past the initial password, the greeting settled.
+// becomeCustomer makes a contact with the portal as the administrator signed in,
+// and signs in as the contact past the initial password, the greeting settled.
 func (p *page) becomeCustomer() {
 	p.t.Helper()
-
-	p.readyAdmin()
 
 	var carl struct {
 		ID uint `json:"id"`

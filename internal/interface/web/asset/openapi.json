@@ -4911,6 +4911,86 @@
           }
         }
       }
+    },
+    "/portal/faq/articles": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Search the published knowledge base",
+        "security": [],
+        "description": "Anybody may ask, signed in or not: a customer signed in to the portal reads what is meant for customers and what is public, and everybody else what is public alone. Never a retired article, and never one for the staff alone - the staff read those under `/faq`. By the words in the title, the keywords or the text with `q`, and by `category`, the latest written first. An article names its category, and nothing of who wrote it.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Words the article holds"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A category"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The articles"
+          },
+          "400": {
+            "description": "A category that is no number"
+          }
+        }
+      }
+    },
+    "/portal/faq/articles/{id}": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Read a published article",
+        "security": [],
+        "description": "Anybody may ask, signed in or not: a customer signed in to the portal reads what is meant for customers and what is public, and everybody else what is public alone. Never a retired article, and never one for the staff alone - the staff read those under `/faq`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "An article the caller may read"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The article"
+          },
+          "404": {
+            "description": "Not an article the caller may read"
+          }
+        }
+      }
+    },
+    "/portal/faq/categories": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "List the published categories",
+        "security": [],
+        "description": "The categories holding an article the caller may read, and the ones above those, so that each can be named by its place in the tree; a category holding nothing they may read is not among them. Anybody may ask, signed in or not: a customer signed in to the portal reads what is meant for customers and what is public, and everybody else what is public alone. Never a retired article, and never one for the staff alone - the staff read those under `/faq`.",
+        "responses": {
+          "200": {
+            "description": "The categories"
+          }
+        }
+      }
     }
   },
   "components": {

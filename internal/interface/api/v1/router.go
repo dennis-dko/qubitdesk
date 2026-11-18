@@ -326,6 +326,13 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.PUT(base+"/faq/articles/{id}", h.FAQ.UpdateArticle)
 	app.DELETE(base+"/faq/articles/{id}", h.FAQ.DeleteArticle)
 
+	// What is published of the knowledge base, to anybody who asks: a customer
+	// signed in to the portal reads what is meant for customers, and everybody
+	// else what is public. No right is asked, so none refuses.
+	app.GET(base+"/portal/faq/articles", h.FAQ.PublishedArticles)
+	app.GET(base+"/portal/faq/articles/{id}", h.FAQ.PublishedArticle)
+	app.GET(base+"/portal/faq/categories", h.FAQ.PublishedCategories)
+
 	app.GET(base+"/response-templates", h.Templates.List)
 	app.GET(base+"/response-templates/{id}", h.Templates.Get)
 	app.POST(base+"/response-templates", h.Templates.Create)

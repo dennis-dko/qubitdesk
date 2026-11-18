@@ -7407,6 +7407,145 @@ async function deleteContact(contact) {
   mutate(() => api(`/contacts/${contact.id}?confirm=true`, { method: 'DELETE' }), done, refreshAll);
 }
 
+// --------------------------------------------------------- published faq
+
+/**
+ * The categories each place reading the published knowledge base has been
+ * told, for naming an article's by its place in the tree.
+ */
+const publishedCategories = { portal: [], public: [] };
+
+/**
+ * Fills one of the two places the knowledge base is read from outside the
+ * staff - the portal's card, for a customer, and the sign-in screen's panel,
+ * for anybody - with its categories and what its search finds. Both ask the
+ * same routes, and the server decides what the asker may read: the places
+ * differ only in where they are.
+ */
+async function loadPublishedFAQ(place) {
+  publishedCategories[place] = (await api('/portal/faq/categories'))?.items ?? [];
+
+  const form = $(`#form-${place}-faq`);
+  if (!beingEdited(form)) {
+    const choices = publishedCategories[place]
+      .map((category) => ({ value: String(category.id), label: publishedCategoryPath(place, category.id) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    fillSelect(form.elements.category, choices,
+      { placeholder: t('faq.everyCategory', 'every category'), labelKey: 'label', valueKey: 'value' });
+  }
+
+  await findPublishedFAQ(place);
+}
+
+/** A published category named by its place in the tree, as a queue is. */
+function publishedCategoryPath(place, id) {
+  const byId = new Map(publishedCategories[place].map((category) => [category.id, category]));
+  const category = byId.get(id);
+
+  return category ? queuePath(category, byId) : '';
+}
+
+/** Draws what the place's search finds, a line each. */
+async function findPublishedFAQ(place) {
+  const form = $(`#form-${place}-faq`);
+  const query = new URLSearchParams();
+
+  if (form.elements.q.value.trim()) query.set('q', form.elements.q.value.trim());
+  if (form.elements.category.value) query.set('category', form.elements.category.value);
+
+  const found = (await api(`/portal/faq/articles?${query}`))?.items ?? [];
+
+  $(`#${place}-faq-list`).replaceChildren(...(found.length
+    ? found.map((article) => el('li', {},
+      el('button', {
+        type: 'button', class: 'link', text: article.title, onclick: () => openPublishedFAQ(place, article.id),
+      }),
+      el('span', { class: 'muted', text: ` · ${publishedCategoryPath(place, article.categoryId)}` })))
+    : [el('li', { class: 'muted', text: t('faq.empty', 'Nothing found.') })]));
+}
+
+/** Opens an article of the place's list below it. */
+async function openPublishedFAQ(place, id) {
+  const article = await api(`/portal/faq/articles/${id}`);
+
+  $(`#${place}-faq-article-title`).textContent = article.title;
+  $(`#${place}-faq-article-facts`).textContent = [
+    publishedCategoryPath(place, article.categoryId),
+    article.keywords,
+    fillIn(t('faq.writtenOn', 'written {0}'), [fmtMoment(article.updatedAt)]),
+  ].filter(Boolean).join(' · ');
+  $(`#${place}-faq-article-body`).textContent = article.body;
+  $(`#${place}-faq-article`).hidden = false;
+}
+
+/** Puts the place's article away, and what it said with it. */
+function closePublishedFAQ(place) {
+  $(`#${place}-faq-article`).hidden = true;
+  $(`#${place}-faq-article-title`).textContent = '';
+  $(`#${place}-faq-article-facts`).textContent = '';
+  $(`#${place}-faq-article-body`).textContent = '';
+}
+
+/**
+ * Offers the knowledge base on the sign-in screen where something is public,
+ * and says nothing where nothing is - or where the installation does not answer,
+ * which is not a reason to hold up signing in.
+ */
+async function offerPublicFAQ() {
+  let found = [];
+
+  try {
+    found = (await api('/portal/faq/articles'))?.items ?? [];
+  } catch {
+    found = [];
+  }
+
+  $('#login-faq-offer').hidden = found.length === 0;
+}
+
+/** Shows the sign-in screen's knowledge base in place of its form. */
+async function openPublicFAQ() {
+  $('#form-login').hidden = true;
+  $('#login-faq-offer').hidden = true;
+  $('#public-faq').hidden = false;
+
+  try {
+    await loadPublishedFAQ('public');
+  } catch (err) {
+    toastFailure(err);
+  }
+}
+
+/** Puts the sign-in screen's knowledge base away, and the form back. */
+function closePublicFAQ() {
+  $('#public-faq').hidden = true;
+  closePublishedFAQ('public');
+  $('#form-public-faq').reset();
+  $('#public-faq-list').replaceChildren();
+  $('#form-login').hidden = false;
+  offerPublicFAQ();
+}
+
+/** Wires the two places the knowledge base is read from outside the staff. */
+function wirePublishedFAQ() {
+  for (const place of ['portal', 'public']) {
+    const form = $(`#form-${place}-faq`);
+    let typing;
+
+    form.addEventListener('submit', (e) => { e.preventDefault(); findPublishedFAQ(place).catch((err) => toastFailure(err)); });
+    form.elements.category.addEventListener('change', () => findPublishedFAQ(place).catch((err) => toastFailure(err)));
+    form.elements.q.addEventListener('input', () => {
+      clearTimeout(typing);
+      typing = setTimeout(() => findPublishedFAQ(place).catch((err) => toastFailure(err)), 300);
+    });
+    $(`#${place}-faq-article-close`).addEventListener('click', () => closePublishedFAQ(place));
+  }
+
+  $('#login-faq-open').addEventListener('click', openPublicFAQ);
+  $('#public-faq-close').addEventListener('click', closePublicFAQ);
+}
+
 // ------------------------------------------------------------------ portal
 
 /** The ticket open on the portal's screen, or null. */
@@ -7422,6 +7561,7 @@ async function loadPortal() {
   if (!can('portal:use')) return;
 
   await loadPortalTickets();
+  await loadPublishedFAQ('portal');
 
   const form = $('#form-portal-ticket');
   let queues = [];
@@ -11258,6 +11398,8 @@ function showLogin(message) {
   const error = $('#login-error');
   error.textContent = message ?? '';
   error.hidden = !message;
+
+  if ($('#public-faq').hidden) offerPublicFAQ();
 }
 
 function hideLogin() {
@@ -11278,6 +11420,9 @@ function hideLogin() {
   $('#login-error').hidden = true;
   backToThePasswordForm();
   $('#form-login').reset();
+
+  if (!$('#public-faq').hidden) closePublicFAQ();
+  $('#login-faq-offer').hidden = true;
 }
 
 /**
@@ -11665,6 +11810,10 @@ function forgetTheLastAccount() {
   cache.faqVisibilities = [];
   closeFAQArticle();
   closePortalTicket();
+  closePublishedFAQ('portal');
+  $('#form-portal-faq').reset();
+  $('#portal-faq-list').replaceChildren();
+  publishedCategories.portal = [];
   $('#told-all-read').hidden = true;
 
   // Emptied rather than left to the next render, which may never come: a table
@@ -12151,6 +12300,15 @@ const TOUR_STEPS = [
     text: () => t('tour.portal.text',
       'Every ticket opened for you, the ones still being worked on first. Open one to read what the service desk '
       + 'answered and to answer it.'),
+  },
+  {
+    target: '#portal-faq-card',
+    view: 'portal',
+    permission: 'portal:use',
+    title: () => t('tour.portalFAQ.title', 'Answers already written'),
+    text: () => t('tour.portalFAQ.text',
+      'What the service desk has written down for customers, searched by words and by category. It may answer '
+      + 'your question before you open a ticket.'),
   },
   {
     target: '#portal-new-card',
@@ -16866,6 +17024,7 @@ function wireForms() {
   wireTickets();
   wireCustomers();
   wirePortal();
+  wirePublishedFAQ();
   wireSysConfig();
   wireCalendars();
   wireSla();

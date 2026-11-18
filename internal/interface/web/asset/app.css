@@ -2681,3 +2681,11 @@ input[readonly]:focus, textarea[readonly]:focus {
      cell, four pixels apart. */
   .actions { gap: 8px; }
 }
+
+/* The knowledge base as somebody outside the staff reads it: what a search
+   found, a line each, and the article opened from it below. */
+.published-faq-list { list-style: none; margin: 12px 0 0; padding: 0; }
+.published-faq-list li { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.published-faq-list li:last-child { border-bottom: 0; }
+.published-faq-article { margin-top: 16px; }
+.login-faq-offer { text-align: center; margin: 12px 0 0; }

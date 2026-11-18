@@ -450,6 +450,33 @@
     <!-- No draft of this one. It holds somebody's address, drafts are written to
          storage, and a shared machine would hand the next person the last one's
          name - which is the same reason signing out resets it. -->
+    <!-- What anybody may read of the knowledge base, offered on the sign-in
+         screen only where something is public: a link to an empty list is a
+         promise the screen does not keep. In place of the form while it is
+         open, and the form comes back with the button at its foot. -->
+    <div class="login-card public-faq" id="public-faq" hidden>
+      <h2 data-i18n="faq.title">Knowledge base</h2>
+        <form method="post" id="form-public-faq" class="form">
+          <div class="grid">
+            <label data-i18n="ticket.search">Search<input type="search" name="q" maxlength="255" data-i18n-placeholder="faq.searchHint" placeholder="words in the title or the text"></label>
+            <label data-i18n="field.categoryId">Category<select name="category"></select></label>
+          </div>
+          <div class="row">
+            <button type="submit" class="secondary" data-i18n="faq.find">Find</button>
+          </div>
+        </form>
+        <ul class="published-faq-list" id="public-faq-list"></ul>
+        <div class="published-faq-article" id="public-faq-article" hidden>
+          <h3 id="public-faq-article-title"></h3>
+          <p class="muted" id="public-faq-article-facts"></p>
+          <div class="ticket-article-body" id="public-faq-article-body"></div>
+          <button type="button" class="link" id="public-faq-article-close" data-i18n="faq.backToFound">back to what was found</button>
+        </div>
+      <div class="row">
+        <button type="button" class="link" id="public-faq-close" data-i18n="login.backToSignIn">back to signing in</button>
+      </div>
+    </div>
+
     <form method="post" id="form-login" data-no-draft class="login-card">
       <!-- The installation's picture and its name, in a band across the top.
            The heading is drawn by the script because the name in it is the
@@ -511,6 +538,9 @@
         </div>
       </div>
     </form>
+    <p class="login-faq-offer" id="login-faq-offer" hidden>
+      <button type="button" class="link" id="login-faq-open" data-i18n="login.faq">Look something up in the knowledge base</button>
+    </p>
   </div>
 
   <main>
@@ -587,6 +617,27 @@
             <button type="submit" id="portal-answer-submit" data-i18n="portal.send">Send</button>
           </div>
         </form>
+      </div>
+
+      <div class="card" id="portal-faq-card">
+        <h2 data-i18n="faq.title">Knowledge base</h2>
+        <p class="muted" data-i18n="portal.faqHint">Answers to what is often asked. Search by the words in an article's title, keywords or text.</p>
+        <form method="post" id="form-portal-faq" class="form">
+          <div class="grid">
+            <label data-i18n="ticket.search">Search<input type="search" name="q" maxlength="255" data-i18n-placeholder="faq.searchHint" placeholder="words in the title or the text"></label>
+            <label data-i18n="field.categoryId">Category<select name="category"></select></label>
+          </div>
+          <div class="row">
+            <button type="submit" class="secondary" data-i18n="faq.find">Find</button>
+          </div>
+        </form>
+        <ul class="published-faq-list" id="portal-faq-list"></ul>
+        <div class="published-faq-article" id="portal-faq-article" hidden>
+          <h3 id="portal-faq-article-title"></h3>
+          <p class="muted" id="portal-faq-article-facts"></p>
+          <div class="ticket-article-body" id="portal-faq-article-body"></div>
+          <button type="button" class="link" id="portal-faq-article-close" data-i18n="faq.backToFound">back to what was found</button>
+        </div>
       </div>
 
       <div class="card" id="portal-new-card">
