@@ -23,6 +23,11 @@ type Queue struct {
 	// with, where it names one.
 	ServiceLevelID *uint
 
+	// Portal says whether customers open tickets in the queue from the portal,
+	// as the queues OTRS offers a customer to choose from: a team's inbox is not
+	// every team's door to the customers.
+	Portal bool
+
 	// Valid says whether a ticket may still be put into the queue. One that is
 	// not keeps the tickets already in it.
 	Valid bool

@@ -50,34 +50,44 @@ func (h *TicketHandler) UploadAttachment(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	var req AttachmentRequest
-	if err := c.Bind(&req); err != nil {
-		return nil, toHTTPError(apperror.Invalidf("the upload could not be read: %v", err).
-			WithCode("uploadUnreadable"))
-	}
-
-	file, err := req.File.Open()
+	file, err := readUpload(c)
 	if err != nil {
-		return nil, toHTTPError(apperror.Invalidf("the upload could not be opened: %v", err).
-			WithCode("uploadUnreadable"))
-	}
-	defer func() { _ = file.Close() }()
-
-	// One byte past the bound is enough to know it is too large.
-	content, err := io.ReadAll(io.LimitReader(file, model.MaxAttachmentBytes+1))
-	if err != nil {
-		return nil, toHTTPError(apperror.Invalidf("the upload could not be read: %v", err).
-			WithCode("uploadUnreadable"))
+		return nil, toHTTPError(err)
 	}
 
-	attachment, err := h.tickets.AddAttachment(c, caller, id, articleID, service.AttachedFile{
-		Name: req.File.Filename, Type: req.File.Header.Get("Content-Type"), Content: content,
-	})
+	attachment, err := h.tickets.AddAttachment(c, caller, id, articleID, file)
 	if err != nil {
 		return nil, toHTTPError(err)
 	}
 
 	return newAttachmentResponse(attachment), nil
+}
+
+// readUpload reads the one file a request uploads, and no more of it than one
+// byte past what a file may hold - enough to know it is too large.
+func readUpload(c *gofr.Context) (service.AttachedFile, error) {
+	var req AttachmentRequest
+	if err := c.Bind(&req); err != nil {
+		return service.AttachedFile{}, apperror.Invalidf("the upload could not be read: %v", err).
+			WithCode("uploadUnreadable")
+	}
+
+	file, err := req.File.Open()
+	if err != nil {
+		return service.AttachedFile{}, apperror.Invalidf("the upload could not be opened: %v", err).
+			WithCode("uploadUnreadable")
+	}
+	defer func() { _ = file.Close() }()
+
+	content, err := io.ReadAll(io.LimitReader(file, model.MaxAttachmentBytes+1))
+	if err != nil {
+		return service.AttachedFile{}, apperror.Invalidf("the upload could not be read: %v", err).
+			WithCode("uploadUnreadable")
+	}
+
+	return service.AttachedFile{
+		Name: req.File.Filename, Type: req.File.Header.Get("Content-Type"), Content: content,
+	}, nil
 }
 
 // DownloadAttachment handles GET /api/v1/tickets/{id}/attachments/{attachment}.

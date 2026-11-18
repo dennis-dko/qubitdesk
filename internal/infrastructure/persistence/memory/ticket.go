@@ -60,7 +60,7 @@ func (r *TicketRepository) Create(
 	r.addArticle(&article, minutes)
 
 	r.addHistory([]model.HistoryEntry{{
-		TicketID: stored.ID, At: stored.CreatedAt, Actor: model.SenderAgent, ActorID: stored.CreatedBy,
+		TicketID: stored.ID, At: stored.CreatedAt, Actor: first.Sender, ActorID: stored.CreatedBy,
 		Event: model.HistoryCreated, NewValue: stored.Title,
 	}})
 
@@ -96,6 +96,7 @@ func (r *TicketRepository) List(_ context.Context, filter repository.TicketFilte
 		case filter.ContactID != nil && (ticket.ContactID == nil || *ticket.ContactID != *filter.ContactID):
 		case filter.OrganisationID != nil &&
 			(ticket.OrganisationID == nil || *ticket.OrganisationID != *filter.OrganisationID):
+		case filter.Follower != nil && !follows(filter.Follower, &ticket):
 		case search != "" && !strings.Contains(strings.ToLower(ticket.Title), search) &&
 			!strings.Contains(ticket.Number, search):
 		default:
@@ -176,6 +177,51 @@ func (r *TicketRepository) AddArticle(
 	r.addHistory(history)
 
 	return &stored, nil
+}
+
+// follows says whether the ticket is one the follower is shown: for them, or
+// for the organisation they follow.
+func follows(follower *repository.Follower, ticket *model.Ticket) bool {
+	if ticket.ContactID != nil && *ticket.ContactID == follower.ContactID {
+		return true
+	}
+
+	return follower.OrganisationID != nil && ticket.OrganisationID != nil &&
+		*ticket.OrganisationID == *follower.OrganisationID
+}
+
+func (r *TicketRepository) AddFollowUp(
+	_ context.Context,
+	article *model.Article,
+	history []model.HistoryEntry,
+	reopen *model.Reopening,
+) (*model.Article, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ticket, ok := r.tickets[article.TicketID]
+	if !ok {
+		return nil, false, apperror.NotFound("ticket", strconv.FormatUint(uint64(article.TicketID), 10))
+	}
+
+	ticket.UpdatedAt = article.CreatedAt
+	entries := history
+	moved := reopen != nil && ticket.StateID == reopen.From
+
+	if moved {
+		ticket.StateID = reopen.To
+		ticket.PendingUntil = nil
+		ticket.ClosedAt = nil
+		entries = append(slices.Clone(history), reopen.History)
+	}
+
+	r.tickets[ticket.ID] = ticket
+
+	stored := *article
+	r.addArticle(&stored, 0)
+	r.addHistory(entries)
+
+	return &stored, moved, nil
 }
 
 func (r *TicketRepository) Articles(_ context.Context, ticketID uint) ([]*model.Article, error) {

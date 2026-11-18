@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -364,16 +363,7 @@ func (s *TicketApplicationService) CreateTicket(
 	article.AuthorID = callerID(caller)
 	article.CreatedAt = now
 
-	zone, err := time.LoadLocation(s.zone(ctx))
-	if err != nil {
-		zone = time.UTC
-	}
-
-	day := now.In(zone).Format("20060102")
-
-	opened, err := s.tickets.Create(ctx, ticket, article, minutes, func(id uint) string {
-		return fmt.Sprintf("%s%08d", day, id)
-	})
+	opened, err := s.tickets.Create(ctx, ticket, article, minutes, s.numbered(ctx, now))
 	if err != nil {
 		return nil, err
 	}

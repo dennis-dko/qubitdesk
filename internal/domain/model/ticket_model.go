@@ -85,6 +85,9 @@ const (
 
 	// ChannelPhone is a call an agent wrote down.
 	ChannelPhone Channel = "phone"
+
+	// ChannelWeb is what a customer wrote in the portal.
+	ChannelWeb Channel = "web"
 )
 
 // AgentChannels lists the channels an agent writes a ticket or an article in by
@@ -94,17 +97,26 @@ func AgentChannels() []Channel {
 	return []Channel{ChannelNote, ChannelPhone}
 }
 
-// Sender is who an article came from, or who did something to a ticket. The
-// customer arrives with the portal and the mailboxes.
+// Sender is who an article came from, or who did something to a ticket.
 type Sender string
 
-// The senders so far: somebody on the staff side, and the application itself -
-// its scheduler moving a ticket whose wait is over, or freeing a lock that has
-// run its time.
+// The senders so far: somebody on the staff side, the customer the ticket is
+// for, writing in the portal, and the application itself - its scheduler moving
+// a ticket whose wait is over, or freeing a lock that has run its time.
 const (
-	SenderAgent  Sender = "agent"
-	SenderSystem Sender = "system"
+	SenderAgent    Sender = "agent"
+	SenderCustomer Sender = "customer"
+	SenderSystem   Sender = "system"
 )
+
+// Reopening is what a customer's answer does to a ticket that waits or is
+// finished: it moves it from the state the answer found it in to the one it is
+// open in again, with the line of history saying so.
+type Reopening struct {
+	From    uint
+	To      uint
+	History HistoryEntry
+}
 
 // Article is one thing written in a ticket: a note, a call, a message.
 type Article struct {

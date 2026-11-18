@@ -5503,7 +5503,7 @@ function stepChoices(kind, current) {
     queue: () => kept(queues).map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
       .sort((a, b) => a.label.localeCompare(b.label)),
     user: () => cache.users.map((user) => ({ value: String(user.id), label: user.name || user.email })),
-    channel: () => Object.keys(CHANNEL_TITLES).map((channel) => ({ value: channel, label: channelName(channel) })),
+    channel: () => AGENT_CHANNELS.map((channel) => ({ value: channel, label: channelName(channel) })),
   }[kind]?.() ?? [];
 
   if (current && !choices.some((choice) => choice.value === current)) {
@@ -7507,7 +7507,15 @@ function wireCustomers() {
 const CHANNEL_TITLES = {
   note: 'note',
   phone: 'phone call',
+  web: 'customer portal',
 };
+
+/**
+ * The channels an agent writes through by hand, which are the ones the forms
+ * offer: the portal is the customer's, and the server refuses it from anybody
+ * else.
+ */
+const AGENT_CHANNELS = ['note', 'phone'];
 
 /** How an article or a ticket arrived, in the reader's language. */
 function channelName(channel) {
@@ -8035,7 +8043,7 @@ function fillTicketForm(form, ticket, assignees) {
     { labelKey: 'label', valueKey: 'value' });
 
   fillSelect(form.elements.channel,
-    Object.keys(CHANNEL_TITLES).map((channel) => ({ value: channel, label: channelName(channel) })),
+    AGENT_CHANNELS.map((channel) => ({ value: channel, label: channelName(channel) })),
     { labelKey: 'label', valueKey: 'value' });
 
   for (const [field, current, name] of [
@@ -8354,7 +8362,7 @@ function wireTickets() {
 
   const article = $('#form-article');
   fillSelect(article.elements.channel,
-    Object.keys(CHANNEL_TITLES).map((channel) => ({ value: channel, label: channelName(channel) })),
+    AGENT_CHANNELS.map((channel) => ({ value: channel, label: channelName(channel) })),
     { labelKey: 'label', valueKey: 'value' });
   article.addEventListener('submit', (e) => { e.preventDefault(); saveArticle(e.target); });
 
@@ -8877,6 +8885,7 @@ function editQueue(queue) {
   form.elements.description.value = queue.description ?? '';
   form.elements.unlockMinutes.value = String(queue.unlockMinutes);
   form.elements.valid.checked = queue.valid;
+  form.elements.portal.checked = queue.portal;
 
   fillFollowUps(form);
   form.elements.followUp.value = queue.followUp;
@@ -8933,6 +8942,7 @@ function saveQueue(form) {
     followUp: form.elements.followUp.value,
     unlockMinutes: Number(form.elements.unlockMinutes.value),
     valid: form.elements.valid.checked,
+    portal: form.elements.portal.checked,
 
     // Said out loud when there is none: a parent sent as nothing cannot be told
     // apart from one that was not sent, and a correction would keep the old one.

@@ -59,3 +59,14 @@ type Contact struct {
 
 	CreatedAt time.Time
 }
+
+// Follows reports whether the portal shows the contact the ticket: one for
+// them, or one for their organisation where they see its tickets.
+func (c *Contact) Follows(ticket *Ticket) bool {
+	if ticket.ContactID != nil && *ticket.ContactID == c.ID {
+		return true
+	}
+
+	return c.SeesOrganisation && c.OrganisationID != nil && ticket.OrganisationID != nil &&
+		*ticket.OrganisationID == *c.OrganisationID
+}

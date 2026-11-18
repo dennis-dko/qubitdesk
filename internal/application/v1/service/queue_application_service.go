@@ -235,6 +235,10 @@ func (s *QueueApplicationService) apply(ctx context.Context, queue *model.Queue,
 		queue.Valid = *cmd.Valid
 	}
 
+	if cmd.Portal != nil {
+		queue.Portal = *cmd.Portal
+	}
+
 	switch {
 	case cmd.ClearServiceLevel && cmd.ServiceLevelID != nil:
 		invalid = append(invalid, "serviceLevelId")

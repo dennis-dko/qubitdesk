@@ -190,7 +190,7 @@ func TestEveryConfigOptionIsDescribedInGerman(t *testing.T) {
 // tableWords are the words of each family the script names from a table of its
 // own, by the prefix their keys share: the types a state can have, what an answer
 // to a closed ticket does, how far a role reaches into a queue, the channels an
-// agent writes through, the steps a macro can take, the events a plan can run on,
+// article arrives through, the steps a macro can take, the events a plan can run on,
 // what started a job's run, who a notification is sent to and who may read an
 // article of the knowledge base - each as the model has them. The model names the run triggers as constants and lists them nowhere,
 // because nothing but the screen asks for all three.
@@ -210,7 +210,7 @@ func tableWords() map[string][]string {
 		add("queueaccess.", string(level))
 	}
 
-	for _, channel := range model.AgentChannels() {
+	for _, channel := range append(model.AgentChannels(), model.ChannelWeb) {
 		add("channel.", string(channel))
 	}
 

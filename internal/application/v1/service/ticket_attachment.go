@@ -26,6 +26,22 @@ func (s *TicketApplicationService) AddAttachment(
 		return nil, err
 	}
 
+	attachment, err := boundedAttachment(ticket.ID, articleID, file)
+	if err != nil {
+		return nil, err
+	}
+
+	now := s.now().UTC()
+	change := historyOf(ticket.ID, now, caller)
+	change.add(model.HistoryAttachment, "", attachment.Filename)
+
+	return s.tickets.AddAttachment(ctx, attachment, now, change.entries)
+}
+
+// boundedAttachment is the file to keep with the article, refused where there is
+// nothing in it or more than a file may hold, with its name and type made
+// plain.
+func boundedAttachment(ticketID, articleID uint, file AttachedFile) (*model.Attachment, error) {
 	if len(file.Content) == 0 {
 		return nil, apperror.Invalidf("no file was uploaded").WithCode("noFileUploaded")
 	}
@@ -35,17 +51,11 @@ func (s *TicketApplicationService) AddAttachment(
 			WithCode("attachmentTooLarge", model.MaxAttachmentBytes>>20)
 	}
 
-	now := s.now().UTC()
-	attachment := &model.Attachment{
-		ArticleID: articleID, TicketID: ticket.ID,
+	return &model.Attachment{
+		ArticleID: articleID, TicketID: ticketID,
 		Filename: model.AttachmentName(file.Name), ContentType: model.AttachmentType(file.Type),
 		Size: len(file.Content), Content: file.Content,
-	}
-
-	change := historyOf(ticket.ID, now, caller)
-	change.add(model.HistoryAttachment, "", attachment.Filename)
-
-	return s.tickets.AddAttachment(ctx, attachment, now, change.entries)
+	}, nil
 }
 
 // AttachedFile is a file as it arrived, with the name and the type it was sent

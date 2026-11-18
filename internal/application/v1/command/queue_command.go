@@ -14,6 +14,7 @@ type QueueCommand struct {
 	FollowUp      *string
 	UnlockMinutes *int
 	Valid         *bool
+	Portal        *bool
 
 	// ServiceLevelID names the service level a new ticket in the queue starts
 	// with; ClearServiceLevel takes it off, for the reason ClearParent is said.

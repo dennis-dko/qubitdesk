@@ -42,6 +42,7 @@ type Handlers struct {
 	Told          *rest.NotificationHandler
 	Templates     *rest.ResponseTemplateHandler
 	FAQ           *rest.FAQHandler
+	Portal        *rest.PortalHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -225,6 +226,17 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.GET(base+"/tickets", h.Tickets.List)
 	app.POST(base+"/tickets/{id}/articles/{article}/attachments", h.Tickets.UploadAttachment)
 	app.GET(base+"/tickets/{id}/attachments/{attachment}", h.Tickets.DownloadAttachment)
+
+	// The customer's side, reached with portal:use: the tickets of the contact
+	// the account signs in as, whatever queue they are in.
+	app.GET(base+"/portal/tickets", h.Portal.Tickets)
+	app.POST(base+"/portal/tickets", h.Portal.Open)
+	app.GET(base+"/portal/tickets/{id}", h.Portal.Ticket)
+	app.GET(base+"/portal/tickets/{id}/articles", h.Portal.Articles)
+	app.POST(base+"/portal/tickets/{id}/articles", h.Portal.Answer)
+	app.POST(base+"/portal/tickets/{id}/articles/{article}/attachments", h.Portal.Upload)
+	app.GET(base+"/portal/tickets/{id}/attachments/{attachment}", h.Portal.Download)
+	app.GET(base+"/portal/queues", h.Portal.Queues)
 	app.GET(base+"/tickets/assignees", h.Tickets.Assignees)
 	app.POST(base+"/tickets", h.Tickets.Create)
 	app.GET(base+"/tickets/{id}", h.Tickets.Get)

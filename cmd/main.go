@@ -1096,6 +1096,7 @@ func main() {
 			appservice.NewResponseTemplateApplicationService(templateRepo, tickets, automationRefs), authorizer),
 		FAQ: rest.NewFAQHandler(appservice.NewFAQApplicationService(sqldb.NewFAQCategoryRepository(db, cfg.Dialect),
 			sqldb.NewFAQArticleRepository(db, cfg.Dialect), userRepo), authorizer),
+		Portal: rest.NewPortalHandler(tickets, authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves

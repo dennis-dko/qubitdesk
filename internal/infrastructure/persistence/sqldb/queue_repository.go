@@ -23,7 +23,7 @@ func NewQueueRepository(db DB, dialect string) *QueueRepository {
 
 var _ repository.QueueRepository = (*QueueRepository)(nil)
 
-const queueColumns = "id, name, parent_id, description, follow_up, unlock_minutes, valid, service_level_id"
+const queueColumns = "id, name, parent_id, description, follow_up, unlock_minutes, valid, service_level_id, portal"
 
 func (r *QueueRepository) GetAll(ctx context.Context) ([]*model.Queue, error) {
 	rows, err := r.db.QueryContext(ctx, "SELECT "+queueColumns+" FROM queues ORDER BY name")
@@ -96,9 +96,9 @@ func (r *QueueRepository) Save(ctx context.Context, queue *model.Queue) (*model.
 	err := r.withTx(ctx, func(tx base) error {
 		newID, err := tx.insert(ctx,
 			"INSERT INTO queues (name, parent_id, description, signature, auto_reply, follow_up, unlock_minutes, valid, "+
-				"service_level_id) VALUES (?, ?, ?, '', '', ?, ?, ?, ?)",
+				"service_level_id, portal) VALUES (?, ?, ?, '', '', ?, ?, ?, ?, ?)",
 			queue.Name, queue.ParentID, queue.Description, string(queue.FollowUp), queue.UnlockMinutes, queue.Valid,
-			queue.ServiceLevelID)
+			queue.ServiceLevelID, queue.Portal)
 		if err != nil {
 			return translateQueueErr(err, queue.Name)
 		}
@@ -120,10 +120,10 @@ func (r *QueueRepository) Update(ctx context.Context, queue *model.Queue) (*mode
 	err := r.withTx(ctx, func(tx base) error {
 		found, err := tx.update(ctx, "queues",
 			"UPDATE queues SET name = ?, parent_id = ?, description = ?, follow_up = ?, unlock_minutes = ?, valid = ?, "+
-				"service_level_id = ? WHERE id = ?",
+				"service_level_id = ?, portal = ? WHERE id = ?",
 			queue.ID,
 			queue.Name, queue.ParentID, queue.Description, string(queue.FollowUp), queue.UnlockMinutes, queue.Valid,
-			queue.ServiceLevelID, queue.ID)
+			queue.ServiceLevelID, queue.Portal, queue.ID)
 		if err != nil {
 			return translateQueueErr(err, queue.Name)
 		}
@@ -247,7 +247,7 @@ func scanQueue(row scanner) (*model.Queue, error) {
 	)
 
 	err := row.Scan(&queue.ID, &queue.Name, &parent, &queue.Description, &followUp, &queue.UnlockMinutes, &queue.Valid,
-		&level)
+		&level, &queue.Portal)
 	if err != nil {
 		return nil, err
 	}

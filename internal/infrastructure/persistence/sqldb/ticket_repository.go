@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -67,7 +68,7 @@ func (r *TicketRepository) Create(
 		}
 
 		return insertHistory(ctx, tx, []model.HistoryEntry{{
-			TicketID: newID, At: ticket.CreatedAt, Actor: model.SenderAgent, ActorID: ticket.CreatedBy,
+			TicketID: newID, At: ticket.CreatedAt, Actor: first.Sender, ActorID: ticket.CreatedBy,
 			Event: model.HistoryCreated, NewValue: ticket.Title,
 		}})
 	})
@@ -130,6 +131,16 @@ func (r *TicketRepository) List(ctx context.Context, filter repository.TicketFil
 	if filter.OrganisationID != nil {
 		where = append(where, "organisation_id = ?")
 		args = append(args, *filter.OrganisationID)
+	}
+
+	switch follower := filter.Follower; {
+	case follower == nil:
+	case follower.OrganisationID != nil:
+		where = append(where, "(contact_id = ? OR organisation_id = ?)")
+		args = append(args, follower.ContactID, *follower.OrganisationID)
+	default:
+		where = append(where, "contact_id = ?")
+		args = append(args, follower.ContactID)
 	}
 
 	if search := strings.TrimSpace(filter.Search); search != "" {
@@ -254,6 +265,59 @@ func (r *TicketRepository) AddArticle(
 	stored.ID = id
 
 	return &stored, nil
+}
+
+func (r *TicketRepository) AddFollowUp(
+	ctx context.Context,
+	article *model.Article,
+	history []model.HistoryEntry,
+	reopen *model.Reopening,
+) (*model.Article, bool, error) {
+	var (
+		id    uint
+		moved bool
+	)
+
+	err := r.withTx(ctx, func(tx base) error {
+		found, err := tx.update(ctx, "tickets", "UPDATE tickets SET updated_at = ? WHERE id = ?",
+			article.TicketID, article.CreatedAt, article.TicketID)
+		if err != nil {
+			return apperror.Internal(err)
+		}
+
+		if !found {
+			return apperror.NotFound("ticket", strconv.FormatUint(uint64(article.TicketID), 10))
+		}
+
+		entries := history
+
+		if reopen != nil {
+			changed, err := tx.exec(ctx,
+				"UPDATE tickets SET state_id = ?, pending_until = NULL, closed_at = NULL WHERE id = ? AND state_id = ?",
+				reopen.To, article.TicketID, reopen.From)
+			if err != nil {
+				return apperror.Internal(err)
+			}
+
+			if moved = changed > 0; moved {
+				entries = append(slices.Clone(history), reopen.History)
+			}
+		}
+
+		if id, err = insertArticle(ctx, tx, article, 0); err != nil {
+			return err
+		}
+
+		return insertHistory(ctx, tx, entries)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	stored := *article
+	stored.ID = id
+
+	return &stored, moved, nil
 }
 
 func (r *TicketRepository) Articles(ctx context.Context, ticketID uint) ([]*model.Article, error) {

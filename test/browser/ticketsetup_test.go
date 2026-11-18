@@ -138,9 +138,10 @@ func TestTheTicketSetupNamesWhatShipsInTheReadersLanguage(t *testing.T) {
 	}
 }
 
-// The queue card makes a queue under another with access for one role, shows it
-// by its place in the tree and who reaches it, moves it to the top - which the
-// form has to say out loud - and deletes it.
+// The queue card makes a queue under another with access for one role, offered
+// to customers in the portal, shows it by its place in the tree and who reaches
+// it, keeps the portal ticked when it is corrected, moves it to the top - which
+// the form has to say out loud - and deletes it.
 func TestTheQueueCardPlacesAQueueAndSaysWhoReachesIt(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +166,7 @@ func TestTheQueueCardPlacesAQueueAndSaysWhoReachesIt(t *testing.T) {
 	p.run("describe a queue", chromedp.SetValue(`#form-queue [name="name"]`, "Second level", chromedp.ByQuery),
 		p.chooseOption(`#form-queue [name="parentId"]`, p.queueID("Service Desk")),
 		p.chooseOption(`#queue-access-list select[data-role="`+agentRole+`"]`, "read"),
+		chromedp.Click(`#form-queue [name="portal"]`, chromedp.ByQuery),
 		p.click("#queue-submit"))
 	p.waitForText("#table-queue tbody", "Service Desk › Second level")
 
@@ -174,6 +176,16 @@ func TestTheQueueCardPlacesAQueueAndSaysWhoReachesIt(t *testing.T) {
 
 	p.pressInQueueRow("Service Desk › Second level", "button.link:not(.danger)")
 	p.run("the form holds it", chromedp.WaitVisible("#queue-cancel", chromedp.ByID))
+
+	var offered bool
+
+	p.run("read whether customers open tickets in it",
+		chromedp.Evaluate(`document.querySelector('#form-queue [name="portal"]').checked`, &offered))
+
+	if !offered {
+		t.Error("the queue opened for correcting is no longer offered in the portal")
+	}
+
 	p.run("move it to the top", p.chooseOption(`#form-queue [name="parentId"]`, ""), p.click("#queue-submit"))
 
 	moved := false

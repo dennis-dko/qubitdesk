@@ -434,6 +434,11 @@ func historyOf(ticketID uint, at time.Time, caller *Principal) *history {
 	return &history{ticketID: ticketID, at: at, by: model.SenderAgent, actor: callerID(caller)}
 }
 
+// historyByCustomer is the history of what a customer did in the portal.
+func historyByCustomer(ticketID uint, at time.Time, caller *Principal) *history {
+	return &history{ticketID: ticketID, at: at, by: model.SenderCustomer, actor: callerID(caller)}
+}
+
 // historyBySystem is the history of what the application did by itself, which
 // no account did.
 func historyBySystem(ticketID uint, at time.Time) *history {

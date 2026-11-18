@@ -814,8 +814,10 @@ func createQueues(d migration.Datasource, dialect string) error {
 		service_level_id %[3]s REFERENCES service_levels(id),
 		follow_up VARCHAR(16) NOT NULL,
 		unlock_minutes INT NOT NULL DEFAULT 0,
+		portal %[4]s NOT NULL DEFAULT %[6]s,
 		valid %[4]s NOT NULL DEFAULT %[5]s
-	)`, primaryKey(dialect), longText(dialect), foreignKeyID(dialect), boolean(dialect), trueLiteral(dialect)))
+	)`, primaryKey(dialect), longText(dialect), foreignKeyID(dialect), boolean(dialect), trueLiteral(dialect),
+		falseLiteral(dialect)))
 }
 
 // createQueueRoles keeps which role reaches which queue, and how far: to read
@@ -847,17 +849,17 @@ func createTicketTypes(d migration.Datasource, dialect string) error {
 // seedTheFirstQueue gives a new installation one queue its agents can work in,
 // so that the first ticket has somewhere to go before anybody has set anything
 // up. An answer to a closed ticket opens it again, which is what somebody
-// answering expects.
+// answering expects, and customers open their tickets in it from the portal.
 //
 // The names are written out rather than taken from the model: a finished
 // migration says what it did, and must not change with a constant that is
 // allowed to.
 func seedTheFirstQueue(d migration.Datasource, dialect string) error {
 	insertQueue := sqldb.Rebind(dialect,
-		"INSERT INTO queues (name, description, signature, auto_reply, follow_up) VALUES (?, ?, ?, ?, ?)")
+		"INSERT INTO queues (name, description, signature, auto_reply, follow_up, portal) VALUES (?, ?, ?, ?, ?, ?)")
 
 	if _, err := d.SQL.Exec(insertQueue, "Service Desk",
-		"Where tickets arrive until an installation sorts them further", "", "", "reopen"); err != nil {
+		"Where tickets arrive until an installation sorts them further", "", "", "reopen", true); err != nil {
 		return fmt.Errorf("seeding the first queue: %w", err)
 	}
 

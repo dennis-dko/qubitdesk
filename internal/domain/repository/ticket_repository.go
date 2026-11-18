@@ -12,10 +12,10 @@ import (
 // transaction, so the history cannot fall behind the ticket it describes.
 type TicketRepository interface {
 	// Create stores a new ticket, the article it was opened with, the time noted
-	// with that article and the line of history saying it was opened - and its
-	// number, worked out by numberOf from the id the row is given. One
-	// transaction, so nobody reads a ticket without a number or without the
-	// article it was opened with.
+	// with that article and the line of history saying it was opened, by the
+	// article's sender - and its number, worked out by numberOf from the id the
+	// row is given. One transaction, so nobody reads a ticket without a number or
+	// without the article it was opened with.
 	Create(ctx context.Context, ticket *model.Ticket, first *model.Article, minutes int,
 		numberOf func(id uint) string) (*model.Ticket, error)
 
@@ -36,6 +36,15 @@ type TicketRepository interface {
 	// article's moment; a ticket not locked has none to start.
 	AddArticle(ctx context.Context, article *model.Article, minutes int,
 		history []model.HistoryEntry, firstResponse *time.Time, renewsLock bool) (*model.Article, error)
+
+	// AddFollowUp stores a customer's answer with the history saying so, marks
+	// the ticket changed at its moment and, where reopen is given, moves the
+	// ticket into the state it names - only while the ticket is still in the
+	// state the answer found it in, because somebody may have changed it since,
+	// and then their change stands and only the answer is written. It answers
+	// whether it moved the ticket.
+	AddFollowUp(ctx context.Context, article *model.Article, history []model.HistoryEntry,
+		reopen *model.Reopening) (*model.Article, bool, error)
 
 	Articles(ctx context.Context, ticketID uint) ([]*model.Article, error)
 
@@ -96,6 +105,13 @@ type TicketRepository interface {
 	Watchers(ctx context.Context, ticketID uint) ([]uint, error)
 }
 
+// Follower is a contact as the portal shows them tickets: those for them, and
+// those for their organisation where OrganisationID names it.
+type Follower struct {
+	ContactID      uint
+	OrganisationID *uint
+}
+
 // TicketFilter says which tickets a listing allows, and which page of them.
 type TicketFilter struct {
 	// QueueIDs are the queues the caller reaches. No queue is no ticket: the
@@ -112,6 +128,10 @@ type TicketFilter struct {
 	// given.
 	ContactID      *uint
 	OrganisationID *uint
+
+	// Follower narrows it to the tickets a contact follows in the portal, when
+	// given.
+	Follower *Follower
 
 	// Search narrows it to tickets whose title or number holds the words.
 	Search string

@@ -57,6 +57,10 @@
     {
       "name": "automation",
       "description": "What the application does to tickets by itself: the macros, run as the application on every ticket they are given. Takes `automation:write`."
+    },
+    {
+      "name": "portal",
+      "description": "The customer's side: the tickets of the contact the account signs in as - their own, and their organisation's where the contact sees them - whatever queue they are in, and only what a customer is shown of them. Takes `portal:use`; a ticket the caller does not follow is not found."
     }
   ],
   "paths": {
@@ -4662,6 +4666,248 @@
           },
           "404": {
             "description": "Not found"
+          }
+        }
+      }
+    },
+    "/portal/tickets": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "List my tickets",
+        "description": "The tickets the caller follows, the most recently changed first, a page at a time: those still being worked on, or the finished ones with `?finished=true`. Each names its state as stored, with its type, and who it is for - somebody else on a ticket of the organisation. An account that signs in as no contact follows none.",
+        "parameters": [
+          {
+            "name": "finished",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "The finished tickets instead of those being worked on"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "At most this many, 50 unless said and 200 at the most"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "From 1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of tickets"
+          },
+          "400": {
+            "description": "A limit or a page that is no number, or a limit above 200"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Open a ticket",
+        "description": "Opens a ticket for the contact the caller signs in as: `title` and `body`, and `queueId` where the portal offers more than one queue - new, normal and unclassified, as any ticket starts, and owed what its queue promises. The body is its first article, from the customer and shown to them.",
+        "responses": {
+          "201": {
+            "description": "The ticket, as the customer is shown it"
+          },
+          "400": {
+            "description": "No title or no text, or a queue the portal does not offer"
+          },
+          "409": {
+            "description": "The account signs in as no contact, the contact is retired, or the portal offers no queue"
+          }
+        }
+      }
+    },
+    "/portal/tickets/{id}": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Read one of my tickets",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A ticket the caller follows"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The ticket"
+          },
+          "404": {
+            "description": "Not a ticket the caller follows"
+          }
+        }
+      }
+    },
+    "/portal/tickets/{id}/articles": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Read what I am shown of a ticket",
+        "description": "The articles a customer is shown, the oldest first, each with who wrote it and its files.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A ticket the caller follows"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The articles"
+          },
+          "404": {
+            "description": "Not a ticket the caller follows"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Answer a ticket",
+        "description": "The customer's answer: `body`, and a `subject` that is the ticket's title unless given. A ticket that waits is open again; a finished one follows its queue - opened again, refused, or left as it is while the answer opens a new ticket. `ticketId` in the answer says which ticket it landed in.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A ticket the caller follows"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The article"
+          },
+          "400": {
+            "description": "No text, or a subject too long"
+          },
+          "404": {
+            "description": "Not a ticket the caller follows"
+          },
+          "409": {
+            "description": "The ticket is finished and its queue takes no answer, or the contact is retired"
+          }
+        }
+      }
+    },
+    "/portal/tickets/{id}/articles/{article}/attachments": {
+      "post": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Attach a file to my answer",
+        "description": "A multipart upload of one `file`, kept with an article the caller wrote - never with an agent's - and bounded as every file is.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A ticket the caller follows"
+          },
+          {
+            "name": "article",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "An article the caller wrote in that ticket"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The file, without its content"
+          },
+          "400": {
+            "description": "No file, or one too large"
+          },
+          "404": {
+            "description": "Not a ticket the caller follows, or not an article they wrote"
+          }
+        }
+      }
+    },
+    "/portal/tickets/{id}/attachments/{attachment}": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Download a file",
+        "description": "Always as application/octet-stream, for the reason the staff's download is. Only a file of an article the customer is shown; any other is not found.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A ticket the caller follows"
+          },
+          {
+            "name": "attachment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A file of an article the caller is shown"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file"
+          },
+          "404": {
+            "description": "Not a file the caller is shown"
+          }
+        }
+      }
+    },
+    "/portal/queues": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "List the queues a ticket is opened in",
+        "description": "The queues the portal offers that still take tickets, by name.",
+        "responses": {
+          "200": {
+            "description": "The queues"
+          },
+          "409": {
+            "description": "The account signs in as no contact, or the contact is retired"
           }
         }
       }

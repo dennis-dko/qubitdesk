@@ -32,6 +32,9 @@ type QueueResponse struct {
 	UnlockMinutes int    `json:"unlockMinutes"`
 	Valid         bool   `json:"valid"`
 
+	// Portal says whether customers open tickets in the queue from the portal.
+	Portal bool `json:"portal"`
+
 	// ServiceLevelID is the service level a new ticket in the queue starts with.
 	ServiceLevelID *uint `json:"serviceLevelId"`
 
@@ -60,6 +63,7 @@ type QueueRequest struct {
 	FollowUp      *string               `json:"followUp"`
 	UnlockMinutes *int                  `json:"unlockMinutes"`
 	Valid         *bool                 `json:"valid"`
+	Portal        *bool                 `json:"portal"`
 	Access        *[]QueueAccessRequest `json:"access"`
 
 	ServiceLevelID    *uint `json:"serviceLevelId"`
@@ -82,7 +86,7 @@ func newQueueResponse(caller *service.Principal, queue *model.Queue) QueueRespon
 
 	return QueueResponse{
 		ID: queue.ID, Name: queue.Name, ParentID: queue.ParentID, Description: queue.Description,
-		FollowUp: string(queue.FollowUp), UnlockMinutes: queue.UnlockMinutes, Valid: queue.Valid,
+		FollowUp: string(queue.FollowUp), UnlockMinutes: queue.UnlockMinutes, Valid: queue.Valid, Portal: queue.Portal,
 		ServiceLevelID: queue.ServiceLevelID, Reach: string(reach), Access: access,
 	}
 }
@@ -90,7 +94,7 @@ func newQueueResponse(caller *service.Principal, queue *model.Queue) QueueRespon
 func (r QueueRequest) command() command.QueueCommand {
 	cmd := command.QueueCommand{
 		Name: r.Name, ParentID: r.ParentID, ClearParent: r.ClearParent, Description: r.Description,
-		FollowUp: r.FollowUp, UnlockMinutes: r.UnlockMinutes, Valid: r.Valid,
+		FollowUp: r.FollowUp, UnlockMinutes: r.UnlockMinutes, Valid: r.Valid, Portal: r.Portal,
 		ServiceLevelID: r.ServiceLevelID, ClearServiceLevel: r.ClearServiceLevel,
 	}
 
