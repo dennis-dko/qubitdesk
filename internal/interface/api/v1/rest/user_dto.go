@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/common"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/application/v1/common"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 )
 
 // UserResponse is the wire representation of a user. It carries no password

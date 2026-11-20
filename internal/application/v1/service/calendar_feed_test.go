@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/command"
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/memory"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/go-ticket-system/internal/application/v1/command"
+	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/memory"
+	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
 // feedFixture is the planned fixture with somebody's calendar feed beside it.
@@ -190,7 +190,7 @@ func TestAFeedReadsNothingTheOwnerCouldNotReadThemselves(t *testing.T) {
 	key := f.subscribe(t)
 	f.read(t, key)
 
-	f.unread(t, "timepulsecal_somethingnobodywasgiven", "a key nobody was given")
+	f.unread(t, "gtscal_somethingnobodywasgiven", "a key nobody was given")
 	f.unread(t, strings.TrimPrefix(key, service.CalendarFeedKeyPrefix), "the key without its prefix")
 
 	role, err := f.roles.CreateRole(ctx, "auditor", "", []string{model.PermUserRead})

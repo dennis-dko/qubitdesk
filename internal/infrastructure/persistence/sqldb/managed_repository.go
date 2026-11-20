@@ -3,8 +3,8 @@ package sqldb
 import (
 	"context"
 
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
+	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
 // ManagedAccountRepository keeps the managers' assignments in a SQL database.

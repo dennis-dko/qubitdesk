@@ -7,8 +7,8 @@ import (
 
 	"gofr.dev/pkg/gofr/migration"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
 )
 
 // All returns the migration set for the given dialect, keyed by version.
@@ -2068,11 +2068,11 @@ func rememberWhichTokenOpenedASession(d migration.Datasource, dialect string) er
 // the old marker is gone.
 func sealUnderTheNewMarker(d migration.Datasource) error {
 	return execAll(d,
-		"UPDATE users SET totp_secret = REPLACE(totp_secret, 'gtr.v1:', 'timepulse.v1:') "+
+		"UPDATE users SET totp_secret = REPLACE(totp_secret, 'gtr.v1:', 'gts.v1:') "+
 			"WHERE totp_secret LIKE 'gtr.v1:%'",
-		"UPDATE settings SET value = REPLACE(value, 'gtr.v1:', 'timepulse.v1:') "+
+		"UPDATE settings SET value = REPLACE(value, 'gtr.v1:', 'gts.v1:') "+
 			"WHERE value LIKE 'gtr.v1:%'",
-		`UPDATE settings SET value = REPLACE(value, '"gtr.v1:', '"timepulse.v1:') `+
+		`UPDATE settings SET value = REPLACE(value, '"gtr.v1:', '"gts.v1:') `+
 			`WHERE value LIKE '%"gtr.v1:%'`,
 	)
 }

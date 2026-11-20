@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/document"
+	"github.com/dennis-dko/go-ticket-system/internal/support/document"
 )
 
 // What the screen says with a cell's colour reaches the document beside the cell,

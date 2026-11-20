@@ -1,4 +1,4 @@
-module github.com/dennis-dko/timepulse
+module github.com/dennis-dko/go-ticket-system
 
 go 1.27.4
 

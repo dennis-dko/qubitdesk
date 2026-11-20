@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/timepulse/internal/support/backup"
-	"github.com/dennis-dko/timepulse/internal/support/security"
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/go-ticket-system/internal/support/backup"
+	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	"github.com/dennis-dko/go-ticket-system/test/harness"
 )
 
 const backupPassphrase = "the installation's own passphrase"
@@ -315,7 +315,7 @@ func sealedBackup(t *testing.T, lines ...any) []byte {
 
 // The installer reads a backup whole before it takes it, so what the restore
 // would refuse is refused on the installer's own screen: a backup cut short, as
-// a download that stopped is, and one from a newer version of TimePulse than
+// a download that stopped is, and one from a newer version of Go-Ticket-System than
 // this one. Both used to be taken - only their first line was read - and then
 // refused by the restore, which runs after the installer has handed over, where
 // a refusal can only end the process.
@@ -323,7 +323,7 @@ func TestTheInstallerRefusesWhatTheRestoreWouldRefuse(t *testing.T) {
 	t.Parallel()
 
 	header := func(schema int64) sqldb.BackupHeader {
-		return sqldb.BackupHeader{Format: "timepulse-backup", Version: 1, Application: "TimePulse",
+		return sqldb.BackupHeader{Format: "gts-backup", Version: 1, Application: "Go-Ticket-System",
 			Dialect: "sqlite", Schema: schema, CreatedAt: time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)}
 	}
 

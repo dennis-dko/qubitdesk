@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/test/oidctest"
+	"github.com/dennis-dko/go-ticket-system/test/oidctest"
 )
 
 // The provider sends the browser back only to an address on this machine.

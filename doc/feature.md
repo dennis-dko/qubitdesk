@@ -17,11 +17,11 @@ What the application does, and the rules it keeps while doing it.
 | Live log | The process log, filterable and searchable, for the built-in administrator |
 | Administration log | Who created, changed or deleted an account or a role, saved a setting, switched maintenance mode, made or downloaded a backup or restarted the application, kept across restarts and readable under *Settings* by whoever administers |
 | Backups | The whole installation in one file sealed with `BACKUP_PASSPHRASE`, made under *Settings* now and downloaded, or on a schedule and kept on the server, the oldest going past the number set; restored through the installer into an empty database of any of the three dialects |
-| A way back in | `timepulse-web recover` on the server gives the built-in administrator a one-time password and takes its second factor off; an administrator removes a lost second factor from anybody else's account |
+| A way back in | `go-ticket-system-web recover` on the server gives the built-in administrator a one-time password and takes its second factor off; an administrator removes a lost second factor from anybody else's account |
 | Managers | Switched on under *Settings*, off as shipped: a manager looks after the time and projects of the accounts an administrator assigned to them, choosing whose under *Whose time*. Whoever is looked after sees who under *My account* and the manager's name on every entry they booked or changed; a manager learns that a day was away, never why, and never sees anybody's working times |
 | Version | The running build in the footer of every page |
 | API access | Personal tokens, scoped by the owner's current role |
-| Android app | The installation's own web interface in an app, so everything the browser does in the same design, connected by scanning the code a new token is shown with, which signs it in; released with every version as `timepulse-mobile_<version>.apk`, signed with one key so each release installs over the last - and offered by the app itself: at every start it asks the installation which release it runs, and downloads and installs that release's app at a press once it is newer, Android asking to confirm |
+| Android app | The installation's own web interface in an app, so everything the browser does in the same design, connected by scanning the code a new token is shown with, which signs it in; released with every version as `go-ticket-system-mobile_<version>.apk`, signed with one key so each release installs over the last - and offered by the app itself: at every start it asks the installation which release it runs, and downloads and installs that release's app at a press once it is newer, Android asking to confirm |
 | Stopwatch | Start and stop the clock; the measured time becomes an entry, to the second. A start pressed late can be corrected, a clock left running is booked up to the time the work ended, and switching to the next project books the clock and carries on from the same second |
 | Reminders | A banner names the last working day with nothing booked on it and leads to the booking form on that day; another says when the stopwatch has run longer than its owner chose - ten hours unless they chose otherwise - with a notification as well where the browser allows one, and pushed to a closed browser where the installation pushes. The Android app shows both as notifications of its own, open or not. Both are chosen under *My account* |
 | Finding entries | The list narrows by project, by period and by text in the description, and the export follows the same filters |
@@ -43,7 +43,7 @@ What the application does, and the rules it keeps while doing it.
 | Leave | Days of leave a year, from a year on, and for each year what is left of them: what the year gives, what the year before left over - carried in, or owed where it was overdrawn - and what is taken and still planned, counted from the days of leave recorded on working days |
 | Public holidays | The public holidays of seventeen countries - Austria, Belgium, Czechia, Denmark, Finland, France, Germany, Ireland, Italy, Luxembourg, the Netherlands, Norway, Poland, Portugal, Sweden, the United Kingdom and the United States - worked out in the binary rather than fetched from anywhere. A country is chosen first, Germany standing ready, and a second picker follows where its holidays differ: a German state or a British nation always, and Alsace, Moselle, South Tyrol, the Azores or Madeira where they keep a day or two more than the rest of their country. The installation chooses under *Settings*, and anybody can choose another place - or none - under *My account*. A holiday a country moves off a weekend is kept on the weekday it moves to, and said to be. They are named in the calendar and on the week, leave is not recorded on them, and from the day every working day counts from they ask nothing |
 | Transport | Optional HTTPS with automatic Let's Encrypt certificates |
-| Installable | A manifest and icons per installation - its own name, and TimePulse's mark - so the page installs as an app on a telephone or a desktop, with shortcuts to the time entries, the calendar and the overtime. Browsers offer this over HTTPS or on localhost only. *My account* shows the installation's address beside the offer, as text and as a QR code, to open it on a telephone by scanning it rather than typing it |
+| Installable | A manifest and icons per installation - its own name, and Go-Ticket-System's mark - so the page installs as an app on a telephone or a desktop, with shortcuts to the time entries, the calendar and the overtime. Browsers offer this over HTTPS or on localhost only. *My account* shows the installation's address beside the offer, as text and as a QR code, to open it on a telephone by scanning it rather than typing it |
 | Booking offline | The installed application opens without a network from the shell it kept, and says the installation cannot be reached rather than showing a dead page. A booking made in the form while the connection is gone waits on the device, a banner says how many wait, and they are sent - once each - when it is back; one the installation then refuses stays with its reason until it is corrected. Nothing the installation answers is ever shown from a copy. Over HTTPS or on localhost only, like installing |
 | Operations | Health and liveness endpoints, Prometheus metrics, tracing (all from GoFr), administered under *Settings* |
 
@@ -265,7 +265,7 @@ address, and that decides the rest:
   to the calendar there as a subscribed one. The code is the key as much as the
   text is, and leaves the screen with it.
 - **It is hidden in the log.** Every reading is logged under its address, so the
-  process log writes `timepulsecal_[hidden]` in place of the key - on the console as
+  process log writes `gtscal_[hidden]` in place of the key - on the console as
   well as in the log viewer - and whoever reads the log learns that a calendar
   was read, not how to read it. Traces and metrics name the route, never the
   address.
@@ -366,7 +366,7 @@ sentence assembled on the server in English.
 
 **The logo stands at the left of the bar once somebody has signed in, and
 nowhere else.** The browser tab, the sign-in screen and the installed app's icons
-show TimePulse's own mark whatever is uploaded — decided on 2026-11-18, because
+show Go-Ticket-System's own mark whatever is uploaded — decided on 2026-11-18, because
 those places say which program this is, before anybody has signed in to the
 installation that runs it.
 
@@ -394,10 +394,10 @@ leave it as.
 The choice is remembered per logo. Uploading a different logo forgets it, because
 a selection made against one picture means nothing against another.
 
-**Until a logo is configured, the bar shows a chip with TimePulse's T.** That slot
+**Until a logo is configured, the bar shows a chip with Go-Ticket-System's T.** That slot
 belongs to whoever runs the installation, and filling it with our mark would make
 an unbranded installation look branded by somebody else, so the chip only stands
-in for a logo. The application's own mark — TimePulse's T and P, a pulse running
+in for a logo. The application's own mark — Go-Ticket-System's T and P, a pulse running
 through them and a clock in the P — has its own places: the browser tab, the
 sign-in card, the installer, the installed app's icons, the `.exe`, the Android
 app, and the button beside the title that leads to the welcome screen. It is
@@ -407,17 +407,17 @@ drawn (`internal/interface/web/asset/favicon.svg`) rather than a font character.
 the two icon files from the same geometry whenever it changes, and tests fail
 until they have.
 
-**Every installation is called TimePulse, and the title is added to that name.**
-It follows after a bar, as in *TimePulse | htp.net*. The full name appears in the
+**Every installation is called Go-Ticket-System, and the title is added to that name.**
+It follows after a bar, as in *Go-Ticket-System | htp.net*. The full name appears in the
 header, on the sign-in card, in an authenticator app, on a passkey prompt, at the
 foot of an exported document and in a subscribed calendar. With nothing written,
-the name is *TimePulse* alone. `APP_NAME` names none of these; it is the name the
+the name is *Go-Ticket-System* alone. `APP_NAME` names none of these; it is the name the
 framework records traces under.
 
 **The tab can add something shorter of its own**, under *Browser tab* beside the
 title. The two additions are one until the header's is too long for a tab: a
 browser cuts a tab off after a couple of dozen characters, and somebody has six
-of them open — "TimePulse | Beispiel GmbH & Co. KG" reads as "TimePulse |
+of them open — "Go-Ticket-System | Beispiel GmbH & Co. KG" reads as "Go-Ticket-System |
 Beispie…" in every one. Left empty, the tab adds what the header adds. It
 translates like the other texts.
 

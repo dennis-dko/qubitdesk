@@ -12,7 +12,7 @@ import (
 	"github.com/chromedp/cdproto/webauthn"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/go-ticket-system/test/harness"
 )
 
 // Passkeys are the one feature that cannot be tested by calling the API: the
@@ -396,7 +396,7 @@ func (p *page) createAccount(t *testing.T, email, password, role string) {
 	p.run("create "+email, chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
 
 			const r = await fetch('/api/v1/users', {
 				method: 'POST',

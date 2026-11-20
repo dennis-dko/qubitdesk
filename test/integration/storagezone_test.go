@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/go-ticket-system/test/harness"
 )
 
 // A MySQL installation refuses to start in another zone than its times were

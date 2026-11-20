@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/go-ticket-system/test/harness"
 )
 
 // Nothing a chart says runs past the edge of its drawing on a telephone, in

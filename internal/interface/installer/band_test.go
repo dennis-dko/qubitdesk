@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// The installer opens on the sign-in card's band: TimePulse's mark on its white
+// The installer opens on the sign-in card's band: Go-Ticket-System's mark on its white
 // field and the heading in white beside it, on the same anthracite over the same
 // accent line.
 //

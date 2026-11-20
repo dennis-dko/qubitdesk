@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/openid"
-	"github.com/dennis-dko/timepulse/test/oidctest"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/openid"
+	"github.com/dennis-dko/go-ticket-system/test/oidctest"
 )
 
 func configFor(p *oidctest.Provider) model.OpenIDConfig {

@@ -6,8 +6,8 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
 )
 
 // VacationRepository is an in-memory repository.VacationRepository.

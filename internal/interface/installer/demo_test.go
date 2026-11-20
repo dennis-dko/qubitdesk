@@ -37,7 +37,7 @@ func TestASaveHandsOverWhetherDemoDataWasAskedFor(t *testing.T) {
 			}
 
 			body := fmt.Sprintf(`{"dialect":"sqlite","name":%q%s}`,
-				filepath.ToSlash(filepath.Join(dir, "timepulse")), c.extra)
+				filepath.ToSlash(filepath.Join(dir, "go-ticket-system")), c.extra)
 			req := httptest.NewRequest(http.MethodPost, "/install/save", strings.NewReader(body))
 			req.Header.Set("X-Setup-Token", "the-token")
 

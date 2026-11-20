@@ -13,7 +13,7 @@ import (
 // Branding is what an installation calls itself, as far as the served document
 // is concerned.
 //
-// A name and nothing else. The tab and the installed app show TimePulse's mark
+// A name and nothing else. The tab and the installed app show Go-Ticket-System's mark
 // whatever logo an installation uploads - the logo is drawn at the left of the
 // bar, by the page, once somebody has signed in.
 type Branding struct {

@@ -1,4 +1,4 @@
-package io.github.dennisdko.timepulse
+package io.github.dennisdko.goticketsystem
 
 import android.Manifest
 import android.content.Intent
@@ -159,7 +159,7 @@ private fun UpdateDialog(update: Update, words: Language, onInstall: () -> Unit,
             val said = update.said ?: if (refused) {
                 words.text(
                     "mobile.update.notAllowed",
-                    "TimePulse may not install apps yet. Allow it under Install unknown apps, then press again.",
+                    "Go-Ticket-System may not install apps yet. Allow it under Install unknown apps, then press again.",
                 )
             } else {
                 null

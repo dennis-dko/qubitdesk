@@ -51,7 +51,7 @@ var configDocs = []string{
 // so their absence from this code is correct rather than a gap.
 //
 // GOFR_TELEMETRY and SHUTDOWN_GRACE_PERIOD are GoFr's own and are consumed inside
-// the framework; TIMEPULSE_VERSION is read by compose to choose the image tag and never
+// the framework; GTS_VERSION is read by compose to choose the image tag and never
 // reaches the process. Each is named here rather than matched by prefix, so the
 // next one is a decision somebody writes down. SHUTDOWN_GRACE_PERIOD was read by
 // main as well while GoFr's Run returned before its shutdown had finished; Run
@@ -59,11 +59,11 @@ var configDocs = []string{
 //
 // APP_NAME is GoFr's as well since 2026-11-18. GoFr names its traces and its
 // health answer after it. It used to name the installation on screen too, which
-// is TimePulse now, with whatever is written under Settings added after a bar.
+// is Go-Ticket-System now, with whatever is written under Settings added after a bar.
 var notOurs = map[string]bool{
 	"APP_NAME":              true,
 	"GOFR_TELEMETRY":        true,
-	"TIMEPULSE_VERSION":     true,
+	"GTS_VERSION":     true,
 	"SHUTDOWN_GRACE_PERIOD": true,
 }
 

@@ -16,12 +16,12 @@ import (
 	cdppage "github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
-	"github.com/dennis-dko/timepulse/test/oidctest"
+	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/go-ticket-system/test/oidctest"
 )
 
 // readmePictures names the directory the README's pictures are written to.
-const readmePictures = "TIMEPULSE_README_PICTURES"
+const readmePictures = "GTS_README_PICTURES"
 
 // The README's pictures are taken from the application rather than drawn.
 //

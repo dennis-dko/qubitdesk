@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
-	"github.com/dennis-dko/timepulse/internal/support/imaging"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/support/i18n"
+	"github.com/dennis-dko/go-ticket-system/internal/support/imaging"
 )
 
 // manifestPath is where a browser reads what the installed app is called and
@@ -58,7 +58,7 @@ type installable struct {
 	words map[string]i18n.Translator
 
 	// icons is the mark at each of appIconSizes. The installed app shows
-	// TimePulse's mark whatever logo an installation uploads, so there is one
+	// Go-Ticket-System's mark whatever logo an installation uploads, so there is one
 	// picture per size for the life of the process.
 	icons map[int][]byte
 }

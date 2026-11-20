@@ -5,10 +5,10 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/imaging"
+	"github.com/dennis-dko/go-ticket-system/internal/support/imaging"
 )
 
-// The mark is drawn at the size asked for, and is the mark: TimePulse's T and P
+// The mark is drawn at the size asked for, and is the mark: Go-Ticket-System's T and P
 // in white on a tile that runs from a lighter blue at the top to a darker one at
 // the bottom, the bowl of the P open around a clock, and nothing outside the
 // tile's rounded corners.

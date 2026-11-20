@@ -61,14 +61,14 @@ const magic = "TPBACKUP"
 
 var (
 	// ErrNotABackup says the file is not one this package writes.
-	ErrNotABackup = errors.New("this is not a TimePulse backup")
+	ErrNotABackup = errors.New("this is not a Go-Ticket-System backup")
 
 	// ErrWrongPassphrase says the passphrase does not open the file - or the file
 	// was changed, which an authenticated cipher cannot tell apart.
 	ErrWrongPassphrase = errors.New("the passphrase does not open this backup, or the file has been changed")
 
 	// ErrNewerFormat says a later version wrote the file.
-	ErrNewerFormat = errors.New("this backup was written by a newer version of TimePulse")
+	ErrNewerFormat = errors.New("this backup was written by a newer version of Go-Ticket-System")
 
 	// ErrTooLarge says the file, or what it decompresses to, is past its bound.
 	ErrTooLarge = errors.New("the backup is larger than a backup may be")
@@ -221,11 +221,11 @@ func (b *bounded) Read(p []byte) (int, error) {
 // Name is the file name of a backup made at the moment given, in UTC so that
 // the names sort as the moments do.
 func Name(at time.Time) string {
-	return "timepulse-" + at.UTC().Format("20060102-150405") + Extension
+	return "gts-" + at.UTC().Format("20060102-150405") + Extension
 }
 
 // namePattern is every name Name gives, and nothing else.
-var namePattern = regexp.MustCompile(`^timepulse-\d{8}-\d{6}\.tpbak$`)
+var namePattern = regexp.MustCompile(`^gts-\d{8}-\d{6}\.tpbak$`)
 
 // ValidName reports whether a name is one Name gives. Nothing else is ever read
 // from or deleted in the backup directory, so a name that came with a request

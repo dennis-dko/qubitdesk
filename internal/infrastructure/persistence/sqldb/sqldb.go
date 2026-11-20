@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
 // Dialect names as understood by GoFr's DB_DIALECT setting.

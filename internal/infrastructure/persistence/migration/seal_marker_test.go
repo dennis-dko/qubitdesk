@@ -3,11 +3,11 @@ package migration_test
 import (
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 )
 
 // beforeTheNewMarker is the last version an installation can have run while a
-// sealed value carried the marker from before the project was called TimePulse.
+// sealed value carried the marker from before the project was called Go-Ticket-System.
 const beforeTheNewMarker = int64(20261110010000)
 
 // Every value sealed under the old marker is moved to the new one wherever a
@@ -55,7 +55,7 @@ func TestASecretSealedUnderTheOldMarkerIsMovedToTheNewOne(t *testing.T) {
 	migrate(t, db, beforeTheNewMarker, latest(t))
 
 	wantPeople := map[string]string{
-		"sealed@example.com": "timepulse.v1:" + body,
+		"sealed@example.com": "gts.v1:" + body,
 		"plain@example.com":  "JBSWY3DPEHPK3PXP",
 		"none@example.com":   "",
 	}
@@ -72,10 +72,10 @@ func TestASecretSealedUnderTheOldMarkerIsMovedToTheNewOne(t *testing.T) {
 	}
 
 	wantSettings := map[string]string{
-		model.SettingSecretKeyCheck: "timepulse.v1:" + body,
-		model.SettingWebPushKey:     "timepulse.v1:" + body,
-		model.SettingLDAPSettings:   `{"url":"ldap://dir:389","bindPassword":"timepulse.v1:` + body + `"}`,
-		model.SettingOpenID:         `{"issuer":"https://id.example.com","clientSecret":"timepulse.v1:` + body + `"}`,
+		model.SettingSecretKeyCheck: "gts.v1:" + body,
+		model.SettingWebPushKey:     "gts.v1:" + body,
+		model.SettingLDAPSettings:   `{"url":"ldap://dir:389","bindPassword":"gts.v1:` + body + `"}`,
+		model.SettingOpenID:         `{"issuer":"https://id.example.com","clientSecret":"gts.v1:` + body + `"}`,
 		model.SettingHolidayPlace:   "DE-BY",
 	}
 

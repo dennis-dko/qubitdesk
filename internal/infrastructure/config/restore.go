@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
 )
 
 // HoldsAccounts reports whether the database a connection reaches already

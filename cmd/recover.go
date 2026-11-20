@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
-	appservice "github.com/dennis-dko/timepulse/internal/application/v1/service"
-	appconfig "github.com/dennis-dko/timepulse/internal/infrastructure/config"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	appservice "github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
+	appconfig "github.com/dennis-dko/go-ticket-system/internal/infrastructure/config"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/go-ticket-system/internal/support/security"
 )
 
 // recoverTimeout bounds the whole command, so a database that answers the ping

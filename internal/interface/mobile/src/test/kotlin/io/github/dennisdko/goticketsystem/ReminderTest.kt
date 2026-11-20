@@ -1,4 +1,4 @@
-package io.github.dennisdko.timepulse
+package io.github.dennisdko.goticketsystem
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

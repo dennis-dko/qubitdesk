@@ -100,11 +100,11 @@ const (
 
 // Branding is the instance's own labelling, editable by the administrator.
 type Branding struct {
-	// Title is what the installation adds to TimePulse in the header, and in the
+	// Title is what the installation adds to Go-Ticket-System in the header, and in the
 	// browser tab where TabTitle is empty. See Named.
 	Title string
 
-	// TabTitle is what the browser tab adds to TimePulse instead, where an
+	// TabTitle is what the browser tab adds to Go-Ticket-System instead, where an
 	// installation wants the tab to say something shorter.
 	//
 	// The two were one field, which is the right answer until the header's
@@ -129,7 +129,7 @@ type Branding struct {
 	// again.
 	//
 	// The logo is drawn at the left of the bar and nowhere else: the sign-in
-	// screen, the browser tab and the installed app show TimePulse's mark.
+	// screen, the browser tab and the installed app show Go-Ticket-System's mark.
 	LogoDataURI string
 
 	// LogoBanner is the copy the bar draws. LogoHeader is the smaller one it drew
@@ -162,7 +162,7 @@ type Branding struct {
 	Translations map[string]BrandingText
 }
 
-// NameIn is what this installation calls itself in one language: TimePulse, and
+// NameIn is what this installation calls itself in one language: Go-Ticket-System, and
 // the addition written for that language or else the untranslated one.
 //
 // What the server writes itself asks this - the prompt a passkey device shows,
@@ -179,7 +179,7 @@ func (b Branding) NameIn(language string) string {
 	return Named(b.Title)
 }
 
-// TabName is what the browser tab is called: TimePulse, and the tab's own
+// TabName is what the browser tab is called: Go-Ticket-System, and the tab's own
 // addition or else the title's.
 //
 // The one place that asks this question rather than reading either field, so
@@ -194,9 +194,9 @@ func (b Branding) TabName() string {
 }
 
 // Brand is the name of every installation. What an administrator writes under
-// Settings is added to it after a bar - "TimePulse | htp.net" - and never takes
+// Settings is added to it after a bar - "Go-Ticket-System | htp.net" - and never takes
 // its place, decided by the maintainer on 2026-11-18.
-const Brand = "TimePulse"
+const Brand = "Go-Ticket-System"
 
 // Named is what an installation is called with addition written beside the
 // brand.

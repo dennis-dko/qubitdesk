@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/service"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/memory"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/service"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/memory"
+	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
 // definition finds a declaration of the visibility rule, whatever it is called.

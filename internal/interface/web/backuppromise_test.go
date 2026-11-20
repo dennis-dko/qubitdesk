@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/go-ticket-system/internal/support/i18n"
 )
 
 // The Backups card says what a restore takes, and it said "the same SECRET_KEY"

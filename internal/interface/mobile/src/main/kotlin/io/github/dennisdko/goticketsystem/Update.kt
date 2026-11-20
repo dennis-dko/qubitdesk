@@ -1,4 +1,4 @@
-package io.github.dennisdko.timepulse
+package io.github.dennisdko.goticketsystem
 
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -145,7 +145,7 @@ fun transfer(input: InputStream, output: OutputStream, size: Long, progress: (Fl
 }
 
 /** apkName is what the app is called inside its installation session, where nothing else sees it. */
-private const val apkName = "timepulse.apk"
+private const val apkName = "gts.apk"
 
 /**
  * answerTo is where Android says how the installation of [session] went: the

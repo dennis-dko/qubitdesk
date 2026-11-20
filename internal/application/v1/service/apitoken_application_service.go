@@ -5,15 +5,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
+	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/go-ticket-system/internal/support/security"
 )
 
 // APITokenPrefix marks the value as a token of this application, so a leaked
 // string is recognisable in a log or a repository scan.
-const APITokenPrefix = "timepulse_"
+const APITokenPrefix = "gts_"
 
 // maxTokensPerUser bounds how many tokens one account can accumulate.
 const maxTokensPerUser = 20

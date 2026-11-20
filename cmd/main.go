@@ -25,27 +25,27 @@ import (
 	gofrmigration "gofr.dev/pkg/gofr/migration"
 	"modernc.org/sqlite"
 
-	appservice "github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	domainservice "github.com/dennis-dko/timepulse/internal/domain/service"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/announce"
-	appconfig "github.com/dennis-dko/timepulse/internal/infrastructure/config"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/directory"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/imageupdate"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/kerberos"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/logsink"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/openid"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/migration"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/selfupdate"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/tlsserver"
-	v1 "github.com/dennis-dko/timepulse/internal/interface/api/v1"
-	"github.com/dennis-dko/timepulse/internal/interface/api/v1/rest"
-	"github.com/dennis-dko/timepulse/internal/interface/installer"
-	"github.com/dennis-dko/timepulse/internal/interface/web"
-	"github.com/dennis-dko/timepulse/internal/support/backup"
-	"github.com/dennis-dko/timepulse/internal/support/hosting"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	appservice "github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	domainservice "github.com/dennis-dko/go-ticket-system/internal/domain/service"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/announce"
+	appconfig "github.com/dennis-dko/go-ticket-system/internal/infrastructure/config"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/directory"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/imageupdate"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/kerberos"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/logsink"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/openid"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/migration"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/selfupdate"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/tlsserver"
+	v1 "github.com/dennis-dko/go-ticket-system/internal/interface/api/v1"
+	"github.com/dennis-dko/go-ticket-system/internal/interface/api/v1/rest"
+	"github.com/dennis-dko/go-ticket-system/internal/interface/installer"
+	"github.com/dennis-dko/go-ticket-system/internal/interface/web"
+	"github.com/dennis-dko/go-ticket-system/internal/support/backup"
+	"github.com/dennis-dko/go-ticket-system/internal/support/hosting"
+	"github.com/dennis-dko/go-ticket-system/internal/support/security"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=...".
@@ -540,7 +540,7 @@ func main() {
 	if misread != nil {
 		app.Logger().Warnf("database: %v", misread)
 	}
-	app.Logger().Infof("TimePulse %s starting (dialect=%s)", version, cfg.Dialect)
+	app.Logger().Infof("Go-Ticket-System %s starting (dialect=%s)", version, cfg.Dialect)
 
 	db := app.GetSQL()
 
@@ -721,7 +721,7 @@ func main() {
 	//
 	// One function rather than one per caller - it was written inline for the
 	// first of them, and the second would have been the same six lines again.
-	// Without the settings it is still TimePulse, which is what it is called
+	// Without the settings it is still Go-Ticket-System, which is what it is called
 	// whatever they say.
 	instanceNameIn := func(ctx context.Context, language string) string {
 		branding, err := settingsService.Branding(ctx)
@@ -1136,7 +1136,7 @@ func main() {
 			// Present only where the deployment added the overlay that runs it;
 			// see deploy/compose.update.yaml for what that grants and why the
 			// application is not the thing granted it.
-			WithImageUpdater(imageupdate.New(os.Getenv("TIMEPULSE_UPDATE_REQUESTS"))).
+			WithImageUpdater(imageupdate.New(os.Getenv("GTS_UPDATE_REQUESTS"))).
 			WithConnection(ds),
 		Backups:    rest.NewBackupHandler(backups, authorizer),
 		Timers:     rest.NewTimerHandler(timers, authorizer, instanceTimezone),
@@ -1281,7 +1281,7 @@ func sayingWhy(all map[int64]gofrmigration.Migrate, console io.Writer) map[int64
 // Declaring is not publishing, which is worth knowing before writing an alert
 // against one of these. The registration creates the instrument; the exporter
 // emits a series only once it has a value, so a fresh installation that has had
-// no refused sign-in publishes no timepulse_signin_failures_total at all rather than
+// no refused sign-in publishes no gts_signin_failures_total at all rather than
 // publishing it as zero.
 //
 // So "nothing has gone wrong yet" and "this metric does not exist" are the same

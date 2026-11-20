@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/command"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/go-ticket-system/internal/application/v1/command"
+	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
 // correct changes an entry through the service, as the form does.

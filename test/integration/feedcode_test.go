@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/qrcode"
+	"github.com/dennis-dko/go-ticket-system/internal/support/qrcode"
 )
 
 // A new calendar address comes with a QR code of itself, for the phone a

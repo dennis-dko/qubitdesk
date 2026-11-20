@@ -13,7 +13,7 @@ import (
 // A running version cannot be told a new name, so a release that published the
 // web binary under any other one would be offered on every installation and then
 // found to have no binary for its platform. The name has changed twice - to a
-// -web binary, and to TimePulse's - and each time the versions from before were
+// -web binary, and to Go-Ticket-System's - and each time the versions from before were
 // left asking for a name releases no longer carry, which was decided rather than
 // overlooked. This is what keeps it from happening by accident.
 func TestTheReleasePublishesTheNameThisVersionUpdatesBy(t *testing.T) {

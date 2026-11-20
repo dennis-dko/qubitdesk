@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/go-ticket-system/internal/support/security"
 )
 
 // sealedEverywhere keeps every kind of secret a SECRET_KEY seals, sealed with
@@ -68,7 +68,7 @@ func sealedEverywhere(t *testing.T, db *sql.DB, key *security.Sealer) uint {
 			Issuer: "https://id.example.com", ClientSecret: seal("the-client-secret"),
 		}),
 		model.SettingWebPushKey:     seal("the-private-push-key"),
-		model.SettingSecretKeyCheck: seal("timepulse"),
+		model.SettingSecretKeyCheck: seal("go-ticket-system"),
 	} {
 		if err := settings.Set(ctx, name, value); err != nil {
 			t.Fatalf("store %s: %v", name, err)

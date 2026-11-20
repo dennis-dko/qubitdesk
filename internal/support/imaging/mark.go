@@ -13,7 +13,7 @@ import (
 	"golang.org/x/image/vector"
 )
 
-// The mark, in the 560-unit box favicon.svg is drawn in: TimePulse's T and P in
+// The mark, in the 560-unit box favicon.svg is drawn in: Go-Ticket-System's T and P in
 // white on a blue tile, a pulse running out of the T into the P, and a clock in
 // the P's bowl.
 //

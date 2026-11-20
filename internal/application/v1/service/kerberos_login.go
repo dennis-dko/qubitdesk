@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 )
 
 // ExternalDirectory finds somebody in the directory by the name they are known

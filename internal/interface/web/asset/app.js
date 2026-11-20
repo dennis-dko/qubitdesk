@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Single-page UI for the TimePulse API.
+ * Single-page UI for the Go-Ticket-System API.
  *
  * Plain DOM APIs on purpose: the assets are embedded in the Go binary, so
  * keeping the UI build-step-free means `go build` is the only build there is.
@@ -265,7 +265,7 @@ function refusalFrom(res, body) {
     // token is still good, and asks for a new token where it was taken back. Not
     // on signing out, which the app sees in the requests and answers by
     // disconnecting - told then too, it would sign straight back in.
-    window.TimePulseSession?.ended();
+    window.Go-Ticket-SystemSession?.ended();
   }
 
   return err;
@@ -358,7 +358,7 @@ async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers ?? {}) };
 
   if (!SAFE_METHODS.has(method)) {
-    headers['X-CSRF-Token'] = readCookie('timepulse_csrf');
+    headers['X-CSRF-Token'] = readCookie('gts_csrf');
   }
 
   // A request this page makes by itself - a check on a timer - says so, and the
@@ -2859,7 +2859,7 @@ function directoryRoleChoices() {
  * typed it and this application does not leave one person's half-written work on
  * screen for the next.
  */
-const DRAFT_PREFIX = 'timepulse.draft.';
+const DRAFT_PREFIX = 'gts.draft.';
 
 /**
  * Where one account's drafts are kept, apart from anybody else's.
@@ -2906,7 +2906,7 @@ function draftableFields(form) {
  * A form exposes its controls as named properties of itself, and those come
  * first: a form holding <input name="id"> answers form.id with that input. Two
  * forms here do - the time entry and the role - so both wrote their draft under
- * the key "timepulse.draft.[object HTMLInputElement]", which is one key for two forms.
+ * the key "gts.draft.[object HTMLInputElement]", which is one key for two forms.
  * They overwrote each other, and on the way back in the first of them restored
  * whatever the other had left, then wrote its own emptiness over the top.
  *
@@ -3221,12 +3221,12 @@ function restoreDrafts() {
  * Both are always filled now:
  *
  *   middle  the application's own mark, beside the title, always
- *   left    the uploaded logo, or a chip with TimePulse's T where there is none
+ *   left    the uploaded logo, or a chip with Go-Ticket-System's T where there is none
  *
  * The chip carried the first letter of the configured title while that title
- * was the installation's whole name. Every installation is called TimePulse now
+ * was the installation's whole name. Every installation is called Go-Ticket-System now
  * and the title only follows it, so the first letter of the title was a letter
- * of the addition - an H beside TimePulse | htp.net - and the chip carries the
+ * of the addition - an H beside Go-Ticket-System | htp.net - and the chip carries the
  * name's own initial instead. It still never reads as a picture that failed to
  * load, which is what a generic glyph would.
  */
@@ -4048,7 +4048,7 @@ function t(key, fallback) {
  * kept behind this - see adoptBrowserDefaults.
  */
 function adoptionMarker(userID) {
-  return `timepulse.adopted.${userID}`;
+  return `gts.adopted.${userID}`;
 }
 
 /**
@@ -4200,7 +4200,7 @@ function keepTheShell() {
 }
 
 /** Where this account's bookings made without a connection wait on this device. */
-const OUTBOX_PREFIX = 'timepulse_outbox_';
+const OUTBOX_PREFIX = 'gts_outbox_';
 
 /**
  * Whose outbox this page reads, or none before anybody is signed in.
@@ -4288,7 +4288,7 @@ async function alreadyBooked(kept) {
 }
 
 /** The name the outbox is sent under, one page at a time across every tab. */
-const OUTBOX_LOCK = 'timepulse-outbox';
+const OUTBOX_LOCK = 'gts-outbox';
 
 /** Whether this page is sending the outbox now, where tabs cannot be asked. */
 let sendingOutbox = false;
@@ -8266,7 +8266,7 @@ function drawWelcome(title) {
  * is added to it after a bar and never takes its place; the server writes the
  * same rule in model.Named, and the two have to agree.
  */
-const BRAND = 'TimePulse';
+const BRAND = 'Go-Ticket-System';
 
 /** What an installation is called with the addition written beside the brand. */
 function named(addition) {
@@ -8294,7 +8294,7 @@ function drawBranding(branding) {
   // chose. The tab's name resolved rather than both fields, since the tab is the
   // only thing that reads it.
   try {
-    localStorage.setItem('timepulse.branding', JSON.stringify({
+    localStorage.setItem('gts.branding', JSON.stringify({
       title: tabTitle,
     }));
   } catch {
@@ -8309,7 +8309,7 @@ function drawBranding(branding) {
 
   // The one place an installation's logo is drawn: the left of the bar, once
   // somebody has signed in. The sign-in screen and the browser tab carry
-  // TimePulse's own mark whatever is uploaded - decided by the maintainer on
+  // Go-Ticket-System's own mark whatever is uploaded - decided by the maintainer on
   // 2026-11-18 - and the button beside the title carries it as well.
   //
   // It is the installation's slot, so with no logo it does not fall back to our
@@ -8965,7 +8965,7 @@ let pendingLogo = '';
  * Shows the chosen image at the size the bar will give it, before saving.
  *
  * The left of the bar is the one place the logo is drawn - the sign-in screen
- * and the browser tab carry TimePulse's own mark - and it draws the banner-sized
+ * and the browser tab carry Go-Ticket-System's own mark - and it draws the banner-sized
  * copy, so the preview shows the part chosen for the banner.
  */
 function setLogoPreview(dataURI) {
@@ -9087,7 +9087,7 @@ function wireAdmin() {
 
     // No reload after it, though there was one for as long as the logo was the
     // tab's icon: every engine takes that from the document it was given, so a
-    // changed logo meant a new document. The tab keeps TimePulse's mark now, and
+    // changed logo meant a new document. The tab keeps Go-Ticket-System's mark now, and
     // the one place the logo is drawn is redrawn by loadBranding like everything
     // else on the page.
     saveForm(e.target, async () => {
@@ -9931,7 +9931,7 @@ let ticketsOffered = false;
  * sign-in that works clears it. sessionStorage, so it is this tab's and ends
  * with it.
  */
-const TICKET_HELD_BACK_KEY = 'timepulse.kerberos.heldBack';
+const TICKET_HELD_BACK_KEY = 'gts.kerberos.heldBack';
 
 /** Whether the page may try the ticket before anybody asks it to. */
 function mayTryTheTicketUnasked() {
@@ -11032,8 +11032,8 @@ const TOUR_STEPS = [
     permission: 'settings:manage',
     title: () => t('tour.branding.title', 'What this installation looks like'),
     text: () => t('tour.branding.text',
-      'What follows TimePulse, banner, logo and footer. The logo stands at the left of the header once '
-      + "somebody has signed in; the browser tab and the sign-in screen always show TimePulse's own."),
+      'What follows Go-Ticket-System, banner, logo and footer. The logo stands at the left of the header once '
+      + "somebody has signed in; the browser tab and the sign-in screen always show Go-Ticket-System's own."),
   },
   {
     target: '#form-managers',
@@ -11561,7 +11561,7 @@ async function greetAfterSignIn() {
 function greetedThisVisit() {
   if (!me.user) return true;
 
-  const key = `timepulse_greeted_${me.user.id}`;
+  const key = `gts_greeted_${me.user.id}`;
 
   try {
     if (sessionStorage.getItem(key)) return true;
@@ -11979,8 +11979,8 @@ const SETUP_STEPS = {
   branding: {
     title: () => t('setup.branding.title', 'Add to the name'),
     text: () => t('setup.branding.text',
-      'Every installation is called TimePulse. What you write here follows it after a bar, '
-      + 'as in TimePulse | htp.net, in the header and the browser tab. Optional, but it is '
+      'Every installation is called Go-Ticket-System. What you write here follows it after a bar, '
+      + 'as in Go-Ticket-System | htp.net, in the header and the browser tab. Optional, but it is '
       + 'what tells a test instance apart from the real one at a glance.'),
     // One field per language, rather than one field.
     //
@@ -11991,7 +11991,7 @@ const SETUP_STEPS = {
     // texts on the appearance screen are not, which is why that one has a
     // switcher instead.
     fields: () => BRANDING_LANGUAGES.map((language) => el('label', {
-      text: `${t('setup.instanceName', 'After “TimePulse |”')} — ${languageName(language)}`,
+      text: `${t('setup.instanceName', 'After “Go-Ticket-System |”')} — ${languageName(language)}`,
     }, el('input', { type: 'text', name: `title.${language}`, maxlength: '80' }))),
     submit: async (values) => {
       const written = {};
@@ -12520,7 +12520,7 @@ function renderUpdate(state) {
   if (state.imageOutcome === 'none') {
     image.textContent = t('update.imageNothingNewer',
       'The last image update found nothing newer than the image this runs, so '
-      + 'nothing was changed. Where TIMEPULSE_VERSION names a version, the image follows '
+      + 'nothing was changed. Where GTS_VERSION names a version, the image follows '
       + 'that setting rather than this card.');
   } else if (state.imageOutcome) {
     showRefusal(image, {
@@ -12748,7 +12748,7 @@ async function theVersionChanged() {
 }
 
 /** Where a message waits out a reload. */
-const AFTER_RELOAD_KEY = 'timepulse_after_reload';
+const AFTER_RELOAD_KEY = 'gts_after_reload';
 
 /**
  * Keeps one sentence for the document that comes next.
@@ -14366,7 +14366,7 @@ async function downloadDocument(doc, name) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-CSRF-Token': readCookie('timepulse_csrf'),
+      'X-CSRF-Token': readCookie('gts_csrf'),
     },
     body: JSON.stringify(doc),
   });
@@ -14390,7 +14390,7 @@ async function sendWorkbook(dryRun) {
   const res = await reach(`${API}/timesheets/import`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'X-CSRF-Token': readCookie('timepulse_csrf') },
+    headers: { 'X-CSRF-Token': readCookie('gts_csrf') },
     body,
   });
 
@@ -15149,7 +15149,7 @@ function buildSheetCard(spec) {
       + `?lang=${encodeURIComponent(activeLanguage())}`, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'X-CSRF-Token': readCookie('timepulse_csrf') },
+      headers: { 'X-CSRF-Token': readCookie('gts_csrf') },
       body: form,
     });
 
@@ -15692,7 +15692,7 @@ async function notifyTheLongStopwatch() {
   const options = {
     body: fillIn(t('timer.longBody', 'Since {1}, longer than the {0} you chose.'),
       [alertHoursText(), fmtMoment(runningTimer.startedAt)]),
-    tag: 'timepulse-stopwatch',
+    tag: 'gts-stopwatch',
   };
 
   try {
@@ -15731,14 +15731,14 @@ function fillReminders() {
 /**
  * The Android app's notifications, where the page is shown in it. The app's
  * WebView has no Notification of its own, so the app registers
- * TimePulseNotifications instead: state() answers in the words of the
+ * Go-Ticket-SystemNotifications instead: state() answers in the words of the
  * browser's Notification.permission - granted, default or denied - and request()
- * asks the phone, which answers by dispatching timepulse-notifications on the window
+ * asks the phone, which answers by dispatching gts-notifications on the window
  * once its owner has chosen. The reminders themselves the app shows as
  * notifications of its own, open or closed, asking the installation itself.
  */
 function appNotifications() {
-  return window.TimePulseNotifications ?? null;
+  return window.Go-Ticket-SystemNotifications ?? null;
 }
 
 /**
@@ -16084,7 +16084,7 @@ function wireInstall() {
   // Inside the Android app there is nothing left to offer: it is the app the card
   // is about. The app is known by the bridge it registers for saving files, which
   // its WebView puts on the window before any script of the page runs.
-  if ('TimePulseFiles' in window) {
+  if ('Go-Ticket-SystemFiles' in window) {
     const card = $('#install-card');
     if (card) card.hidden = true;
   }
@@ -16619,7 +16619,7 @@ function passkeysWithheldBecause() {
       + 'in through the directory: the one place that can end its sign-in.');
   }
 
-  if ('TimePulseFiles' in window) {
+  if ('Go-Ticket-SystemFiles' in window) {
     return t('passkey.elsewhereApp', 'The app signs in with the token it was connected with, and '
       + 'needs no passkey. Passkeys are set up and used in a browser.');
   }
@@ -17455,7 +17455,7 @@ const THEME_RECHECK_MS = 60_000;
  * cleared on the way out, so the next person starts from the clock.
  */
 function setThemePreference(preference) {
-  const theme = window.timePulseTheme;
+  const theme = window.gtsTheme;
 
   document.documentElement.dataset.themePreference = preference;
   document.documentElement.dataset.theme = theme.resolve(preference);
@@ -17509,7 +17509,7 @@ function applyAccountTheme() {
 /** Wires the appearance picker and keeps "automatic" honest as the day passes. */
 function wireTheme() {
   const picker = $('#theme-picker');
-  const theme = window.timePulseTheme;
+  const theme = window.gtsTheme;
 
   picker.value = theme.stored();
   picker.addEventListener('change', (e) => setThemeForAccount(e.target.value));
@@ -17668,7 +17668,7 @@ function showScreenTab(view, key, { focus = false } = {}) {
   }
 
   try {
-    sessionStorage.setItem(`timepulse.tab.${view.id}`, key);
+    sessionStorage.setItem(`gts.tab.${view.id}`, key);
   } catch {
     // Private browsing refuses storage; the screen then opens on its first tab.
   }
@@ -17701,7 +17701,7 @@ function rememberedScreenTab(view) {
   let key = null;
 
   try {
-    key = sessionStorage.getItem(`timepulse.tab.${view.id}`);
+    key = sessionStorage.getItem(`gts.tab.${view.id}`);
   } catch {
     return null;
   }
@@ -17882,7 +17882,7 @@ function rememberedView() {
   if (!me.user) return '';
 
   try {
-    return localStorage.getItem(`timepulse_view_${me.user.id}`) ?? '';
+    return localStorage.getItem(`gts_view_${me.user.id}`) ?? '';
   } catch {
     return '';
   }
@@ -17899,7 +17899,7 @@ function rememberView(name) {
   if (name === 'welcome') return;
 
   try {
-    localStorage.setItem(`timepulse_view_${me.user.id}`, name);
+    localStorage.setItem(`gts_view_${me.user.id}`, name);
   } catch {
     // Nothing to do about a storage that will not take it.
   }
@@ -18476,7 +18476,7 @@ function wireForms() {
   $('#notify-allow').addEventListener('click', async () => {
     const app = appNotifications();
 
-    // The phone answers in its own time, with timepulse-notifications below.
+    // The phone answers in its own time, with gts-notifications below.
     if (app) {
       app.request();
 
@@ -18488,7 +18488,7 @@ function wireForms() {
     drawNotifyState();
   });
 
-  window.addEventListener('timepulse-notifications', drawNotifyState);
+  window.addEventListener('gts-notifications', drawNotifyState);
 
   $('#export-me').addEventListener('click', () => mutate(
     () => downloadFile(`${API}/me/export`, t('export.filename', 'everything-about-me'), 'zip'),

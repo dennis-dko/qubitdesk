@@ -6,7 +6,7 @@
   <!-- No external anything: this page is served by a binary that has not
        reached its database yet, and may be running somewhere with no route to
        the internet at all. -->
-  <title>Set up TimePulse</title>
+  <title>Set up Go-Ticket-System</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <style>
     :root {
@@ -41,7 +41,7 @@
       padding: 32px 20px;
     }
     main { margin: 0 auto; max-width: 640px; }
-    /* The sign-in card's band, rule for rule: TimePulse's mark on its white
+    /* The sign-in card's band, rule for rule: Go-Ticket-System's mark on its white
        field and the heading in white beside it, over the accent's line.
        TestTheHeadingIsTheSignInCardsBand holds these to app.css's .login-band,
        .login-emblem, .login-mark and the band's heading. */
@@ -197,7 +197,7 @@
 </head>
 <body>
 <main>
-  <!-- Opened as the sign-in card opens: TimePulse's mark on its white field
+  <!-- Opened as the sign-in card opens: Go-Ticket-System's mark on its white field
        and the heading beside it, on the band. The mark is favicon.svg's
        drawing, number for number, which TestTheMarkBesideTheTitleIsTheTabIcon
        holds this copy to. Beside the heading rather than in it, because the
@@ -222,7 +222,7 @@
       </g>
     </svg>
     </div>
-    <h1 id="heading" data-i18n="title">Set up TimePulse</h1>
+    <h1 id="heading" data-i18n="title">Set up Go-Ticket-System</h1>
   </div>
   <p class="muted intro" data-i18n="intro">
     This installation has no database yet. Nothing can be stored, and nobody can
@@ -303,7 +303,7 @@
             Four projects, eight weeks of bookings, a week of leave and two templates,
             in the built-in administrator's account, which is given the role that
             records time as well. Only into an empty database, and only for trying
-            TimePulse out.
+            Go-Ticket-System out.
           </span>
         </span>
       </label>
@@ -951,7 +951,7 @@
   async function claimTheSession() {
     const csrf = document.cookie.split(';')
       .map((c) => c.trim())
-      .find((c) => c.startsWith('timepulse_csrf='));
+      .find((c) => c.startsWith('gts_csrf='));
 
     try {
       await fetch('/api/v1/setup/claim', {
@@ -960,7 +960,7 @@
         credentials: 'same-origin',
         headers: {
           'X-Setup-Token': $('token').value.trim(),
-          'X-CSRF-Token': csrf ? csrf.slice('timepulse_csrf='.length) : '',
+          'X-CSRF-Token': csrf ? csrf.slice('gts_csrf='.length) : '',
         },
       });
     } catch {
@@ -977,7 +977,7 @@
       const state = await res.json();
 
       if (state.appName) {
-        // Looked up rather than concatenated. The name is TimePulse on every
+        // Looked up rather than concatenated. The name is Go-Ticket-System on every
         // installation, so this branch is always taken - which made a hard-coded
         // "Set up ..." the one English line every German reader was guaranteed to
         // meet, at the top of the page.

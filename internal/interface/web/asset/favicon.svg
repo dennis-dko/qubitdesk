@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 560" role="img" aria-label="TimePulse">
-  <!-- TimePulse's T and P in white on a blue tile: a pulse runs out of the
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 560" role="img" aria-label="Go-Ticket-System">
+  <!-- Go-Ticket-System's T and P in white on a blue tile: a pulse runs out of the
        stem of the T into the P, and the P's bowl holds a clock. The mark the
        maintainer chose on 2026-11-18, in place of the hourglass that stood here.
        Filled rather than stroked, as that one was: this is seen at sixteen
@@ -11,7 +11,7 @@
        The installed app's icons and the Windows icon are drawn from these
        numbers by imaging.Mark, the Android app's icons carry the same paths,
        and tests fail when any of them parts from this file. -->
-  <title>TimePulse</title>
+  <title>Go-Ticket-System</title>
   <defs>
     <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0a69a7"/>

@@ -3,7 +3,7 @@ package common
 import (
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 )
 
 // ProjectResult result model

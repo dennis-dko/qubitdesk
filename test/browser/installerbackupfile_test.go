@@ -11,7 +11,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/go-ticket-system/test/harness"
 )
 
 // The backup file is chosen on a field of the installer's own rather than with
@@ -28,7 +28,7 @@ func TestTheInstallerSaysWhichBackupFileWasChosen(t *testing.T) {
 	ctx, done := installerInGerman(t, app)
 	defer done()
 
-	path := filepath.Join(t.TempDir(), "timepulse-20261120-001922.tpbak")
+	path := filepath.Join(t.TempDir(), "gts-20261120-001922.tpbak")
 	if err := os.WriteFile(path, bytes.Repeat([]byte{1}, 3290), 0o600); err != nil {
 		t.Fatalf("writing a file to choose: %v", err)
 	}
@@ -56,11 +56,11 @@ func TestTheInstallerSaysWhichBackupFileWasChosen(t *testing.T) {
 		t.Fatalf("choosing a backup file: %v", err)
 	}
 
-	if !strings.Contains(before, "Sicherungsdatei wählen") || strings.Contains(before, "timepulse-") {
+	if !strings.Contains(before, "Sicherungsdatei wählen") || strings.Contains(before, "gts-") {
 		t.Errorf("before a file is chosen the field says %q, want what to do, in German", before)
 	}
 
-	if !strings.Contains(chosen, "timepulse-20261120-001922.tpbak") || !strings.Contains(chosen, "3 kB") {
+	if !strings.Contains(chosen, "gts-20261120-001922.tpbak") || !strings.Contains(chosen, "3 kB") {
 		t.Errorf("with a file chosen the field says %q, want its name and 3 kB", chosen)
 	}
 

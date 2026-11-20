@@ -2488,7 +2488,7 @@ body:has(#login-screen:not([hidden])) > :is(.topbar, .banner, #standing-notices,
   visibility: hidden;
 }
 
-/* TimePulse's mark in the sign-in band, at the height an installation's logo was
+/* Go-Ticket-System's mark in the sign-in band, at the height an installation's logo was
    given there before the band became the application's alone - so the band kept
    its height when the logo left it. */
 .login-mark {

@@ -27,7 +27,7 @@ var oldNameKeptOnPurpose = map[string]string{
 	"internal/infrastructure/persistence/migration/seal_marker_test.go": "it seals secrets the old way to prove that conversion",
 }
 
-// The project was renamed to TimePulse on 2026-11-17, and the sweep that did it
+// The project was renamed to Go-Ticket-System on 2026-11-17, and the sweep that did it
 // looked for the spellings it thought of. One got past it: the Android app's
 // download keeper marked every page it prepared with the former name in camel
 // case, which nothing reported, because nothing reads that mark but the script

@@ -7,7 +7,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/dennis-dko/timepulse/internal/support/hosting"
+	"github.com/dennis-dko/go-ticket-system/internal/support/hosting"
 )
 
 // The binary to re-execute, resolved when the package is initialised rather

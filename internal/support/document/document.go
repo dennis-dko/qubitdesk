@@ -15,7 +15,7 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/go-ticket-system/internal/support/i18n"
 )
 
 // The page, in millimetres, and the room left around it.

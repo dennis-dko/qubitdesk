@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-ldap/ldap/v3"
 
-	appservice "github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	appservice "github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 )
 
 // An entry without a mail address is listed by its identifier.
