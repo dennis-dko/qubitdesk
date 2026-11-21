@@ -83,6 +83,11 @@
         <path d="M5 17.5A2.5 2.5 0 0 1 7.5 15H18"/>
         <path d="M9 8.5h5M9 11.5h3.5"/>
       </symbol>
+      <symbol id="icon-assets" viewBox="0 0 24 24">
+        <path d="M4 7.5 12 3.5l8 4-8 4z"/>
+        <path d="M4 12l8 4 8-4"/>
+        <path d="M4 16.5l8 4 8-4"/>
+      </symbol>
       <symbol id="icon-ticketsetup" viewBox="0 0 24 24">
         <path d="M4 7h9M17 7h3M4 17h3M11 17h9"/>
         <circle cx="15" cy="7" r="2"/>
@@ -224,6 +229,7 @@
       <button class="tab" data-view="users" data-perm="users:read" data-i18n="nav.users">Users<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-users"/></svg></button>
       <button class="tab" data-view="roles" data-perm="roles:read" data-i18n="nav.roles">Roles<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-roles"/></svg></button>
       <button class="tab" data-view="ticketsetup" data-perm="queues:write" data-i18n="nav.ticketSetup">Ticket setup<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-ticketsetup"/></svg></button>
+      <button class="tab" data-view="assets" data-perm="catalog:write" data-i18n="nav.assets">Assets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-assets"/></svg></button>
       <button class="tab" data-view="automation" data-perm="automation:write" data-i18n="nav.automation">Automation<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-automation"/></svg></button>
       <button class="tab" data-view="settings" data-i18n="nav.settings">My account<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-account"/></svg></button>
       <button class="tab" data-view="admin" id="tab-admin" hidden data-perm="settings:manage" data-i18n="nav.admin">Settings<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-admin"/></svg></button>
@@ -1427,6 +1433,50 @@
           <div class="row">
             <button type="submit" id="template-submit" data-i18n="action.create">Create</button>
             <button type="button" class="link" id="template-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- The configuration management database, as KIX18 keeps it. So far its
+         general catalog: the lists the configuration items pick from. -->
+    <section id="view-assets" class="view" hidden>
+      <div class="card" id="catalog-card" data-perm="catalog:write">
+        <h2 data-i18n="gencatalog.title">General catalog</h2>
+        <p class="muted" data-i18n="gencatalog.hint">The lists configuration items pick from, each value under a class naming its list. A value nobody should pick any more is retired; nothing is deleted.</p>
+        <form method="post" id="form-catalog-class" class="form">
+          <div class="grid">
+            <label data-i18n="gencatalog.class">List<select name="class" data-not-an-edit></select></label>
+          </div>
+        </form>
+        <div class="table-wrap">
+          <table id="table-catalog">
+            <thead>
+              <tr>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="field.functionality">Functionality</th>
+                <th data-i18n="field.comment">Comment</th>
+                <th data-i18n="catalog.valid">Valid</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form method="post" id="form-catalog" class="form">
+          <h3 id="catalog-form-title" data-i18n="gencatalog.create">Add a value</h3>
+          <input type="hidden" name="id">
+          <datalist id="catalog-classes"></datalist>
+          <div class="grid">
+            <label data-i18n="field.class">Class<input type="text" name="class" maxlength="100" list="catalog-classes" required data-i18n-placeholder="gencatalog.classHint" placeholder="such as ITSM::ConfigItem::Laptop::Brand"></label>
+            <label data-i18n="field.name">Name<input type="text" name="name" maxlength="255" required></label>
+            <label id="catalog-functionality" data-i18n="field.functionality">Functionality<select name="functionality"></select></label>
+            <label class="wide" data-i18n="field.comment">Comment<input type="text" name="comment" maxlength="2000" data-i18n-placeholder="field.optional" placeholder="optional"></label>
+          </div>
+          <label class="switch"><input type="checkbox" name="valid" checked><span class="switch-track"></span><span class="switch-label" data-i18n="gencatalog.offered">Offered to pick</span></label>
+          <div class="row">
+            <button type="submit" id="catalog-submit" data-i18n="action.create">Create</button>
+            <button type="button" class="link" id="catalog-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
           </div>
         </form>
       </div>

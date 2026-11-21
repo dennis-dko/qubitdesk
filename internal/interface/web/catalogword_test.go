@@ -23,6 +23,17 @@ func shippedPriorities(t *testing.T) map[string]struct{} {
 	return seededNames(t, "seedTicketPriorities", `"([a-z-]+)"`)
 }
 
+// shippedCatalogValues reads the values of the general catalog that ship, as
+// ticketStates reads the states.
+func shippedCatalogValues(t *testing.T) map[string]struct{} {
+	return seededNames(t, "seedGeneralCatalog", `\{"[^"]+", "([a-z-]+)", "[a-z]*"\}`)
+}
+
+// shippedCatalogClasses reads the classes of the general catalog that ship.
+func shippedCatalogClasses(t *testing.T) map[string]struct{} {
+	return seededNames(t, "seedGeneralCatalog", `\{"([^"]+)", "[a-z-]+", "[a-z]*"\}`)
+}
+
 // shippedTicketTypes reads the ticket types that ship, as ticketStates reads the
 // states.
 func shippedTicketTypes(t *testing.T) map[string]struct{} {
@@ -47,7 +58,7 @@ func seededNames(t *testing.T, function, name string) map[string]struct{} {
 	}
 
 	// Only the list being walked: a statement above it has quoted words too.
-	list := regexp.MustCompile(`(?s)range \[\](?:string|struct \{.*?\})\{(.*?)\s*\} \{`).FindSubmatch(seed)
+	list := regexp.MustCompile(`(?s)range \[\](?:string|struct ?\{.*?\})\{(.*?)\s*\} \{`).FindSubmatch(seed)
 	if list == nil {
 		t.Fatalf("%s no longer walks a list of what it seeds", function)
 	}
@@ -76,8 +87,10 @@ func scriptTitles(t *testing.T, table string) map[string]struct{} {
 
 	titles := map[string]struct{}{}
 
-	for _, match := range regexp.MustCompile(`(?m)^\s*'?([A-Za-z-]+)'?:`).FindAllStringSubmatch(body[1], -1) {
-		titles[match[1]] = struct{}{}
+	// A key is quoted where it is not a plain name - the general catalog's
+	// classes carry colons - and bare where it is.
+	for _, match := range regexp.MustCompile(`(?m)^\s*(?:'([^']+)'|([A-Za-z-]+)):`).FindAllStringSubmatch(body[1], -1) {
+		titles[match[1]+match[2]] = struct{}{}
 	}
 
 	return titles
@@ -120,6 +133,9 @@ func TestEveryShippedValueAndStateTypeIsNamedInBothLanguages(t *testing.T) {
 		{"status.", "SHIPPED_STATE_TITLES", ticketStates(t)},
 		{"priority.", "SHIPPED_PRIORITY_TITLES", shippedPriorities(t)},
 		{"tickettype.", "SHIPPED_TYPE_TITLES", shippedTicketTypes(t)},
+		{"catalogvalue.", "SHIPPED_CATALOG_TITLES", shippedCatalogValues(t)},
+		{"catalogclass.", "CATALOG_CLASS_TITLES", shippedCatalogClasses(t)},
+		{"functionality.", "FUNCTIONALITY_TITLES", set("functionality.")},
 		{"statetype.", "STATE_TYPE_TITLES", set("statetype.")},
 		{"followup.", "FOLLOW_UP_TITLES", set("followup.")},
 		{"queueaccess.", "ACCESS_TITLES", set("queueaccess.")},
@@ -232,6 +248,12 @@ func tableWords() map[string][]string {
 
 	for _, visibility := range model.FAQVisibilities() {
 		add("faqvisibility.", string(visibility))
+	}
+
+	for _, class := range []string{model.CatalogDeploymentState, model.CatalogIncidentState} {
+		for _, functionality := range model.Functionalities(class) {
+			add("functionality.", functionality)
+		}
 	}
 
 	return words

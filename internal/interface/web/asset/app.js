@@ -7488,6 +7488,268 @@ function wirePublishedFAQ() {
   $('#public-faq-close').addEventListener('click', closePublicFAQ);
 }
 
+/** The classes of the general catalog that ship, in the reader's words; one an installation made is shown as it was typed. */
+const CATALOG_CLASS_TITLES = {
+  'ITSM::ConfigItem::Class': 'Configuration item classes',
+  'ITSM::ConfigItem::DeploymentState': 'Deployment states',
+  'ITSM::Core::IncidentState': 'Incident states',
+  'ITSM::ConfigItem::YesNo': 'Yes or no',
+  'ITSM::ConfigItem::Computer::Type': 'Computer types',
+  'ITSM::ConfigItem::Hardware::Type': 'Hardware types',
+  'ITSM::ConfigItem::Location::Type': 'Location types',
+  'ITSM::ConfigItem::Network::Type': 'Network types',
+  'ITSM::ConfigItem::Software::Type': 'Software types',
+  'ITSM::ConfigItem::Software::LicenceType': 'Licence types',
+};
+
+/** The values of the general catalog that ship, by the identifier they are kept under. */
+const SHIPPED_CATALOG_TITLES = {
+  operational: 'operational',
+  warning: 'warning',
+  incident: 'incident',
+  computer: 'computer',
+  hardware: 'hardware',
+  location: 'location',
+  building: 'building',
+  room: 'room',
+  network: 'network',
+  software: 'software',
+  expired: 'expired',
+  inactive: 'inactive',
+  maintenance: 'maintenance',
+  pilot: 'pilot',
+  planned: 'planned',
+  production: 'production',
+  repair: 'repair',
+  retired: 'retired',
+  review: 'review',
+  'test-qa': 'test/QA',
+  yes: 'yes',
+  no: 'no',
+  desktop: 'desktop',
+  phone: 'phone',
+  server: 'server',
+  other: 'other',
+  laptop: 'laptop',
+  monitor: 'monitor',
+  printer: 'printer',
+  switch: 'switch',
+  router: 'router',
+  'wlan-access-point': 'WLAN access point',
+  'security-device': 'security device',
+  'backup-device': 'backup device',
+  mouse: 'mouse',
+  keyboard: 'keyboard',
+  camera: 'camera',
+  beamer: 'projector',
+  modem: 'modem',
+  'usb-device': 'USB device',
+  'docking-station': 'docking station',
+  scanner: 'scanner',
+  office: 'office',
+  floor: 'floor',
+  rack: 'rack',
+  workplace: 'workplace',
+  outlet: 'outlet',
+  'it-facility': 'IT facility',
+  lan: 'LAN',
+  wlan: 'WLAN',
+  telco: 'telephony',
+  gsm: 'GSM',
+  'client-application': 'client application',
+  middleware: 'middleware',
+  'server-application': 'server application',
+  'client-os': 'client operating system',
+  'server-os': 'server operating system',
+  'admin-tool': 'administration tool',
+  'user-tool': 'user tool',
+  embedded: 'embedded',
+  'single-licence': 'single licence',
+  'per-user': 'per user',
+  'concurrent-users': 'concurrent users',
+  'per-processor': 'per processor',
+  'per-server': 'per server',
+  'per-node': 'per node',
+  'volume-licence': 'volume licence',
+  'enterprise-licence': 'enterprise licence',
+  'developer-licence': 'developer licence',
+  demo: 'demo',
+  'time-restricted': 'time restricted',
+  freeware: 'freeware',
+  unlimited: 'unlimited',
+  'open-source': 'open source',
+};
+
+/** What a deployment or an incident state means to the code, in the reader's words. */
+const FUNCTIONALITY_TITLES = {
+  preproductive: 'before use',
+  productive: 'in use',
+  postproductive: 'after use',
+  operational: 'working',
+  warning: 'warned of',
+  incident: 'broken',
+};
+
+/** A class of the general catalog in the reader's words, or as it was typed. */
+function catalogClassTitle(name) {
+  return CATALOG_CLASS_TITLES[name] ? t(`catalogclass.${name}`, CATALOG_CLASS_TITLES[name]) : name;
+}
+
+/** A value of the general catalog in the reader's words where it shipped, or as it was typed. */
+function catalogValueTitle(name) {
+  return SHIPPED_CATALOG_TITLES[name] ? t(`catalogvalue.${name}`, SHIPPED_CATALOG_TITLES[name]) : name;
+}
+
+/** What a value means to the code, in the reader's words. */
+function functionalityTitle(name) {
+  return name ? t(`functionality.${name}`, FUNCTIONALITY_TITLES[name] ?? name) : '–';
+}
+
+/** The classes of the general catalog, with what a value of each may mean. */
+let generalCatalogClasses = [];
+
+/**
+ * Fills the general catalog's card for whoever may change it: the classes to
+ * choose a list from, and the values of the one chosen.
+ */
+async function loadGeneralCatalog() {
+  if (!can('catalog:write')) return;
+
+  generalCatalogClasses = (await api('/general-catalog/classes'))?.items ?? [];
+
+  const chooser = $('#form-catalog-class');
+  if (!beingEdited(chooser)) {
+    fillSelect(chooser.elements.class, generalCatalogClasses
+      .map((entry) => ({ value: entry.name, label: catalogClassTitle(entry.name) }))
+      .sort((a, b) => a.label.localeCompare(b.label)), { labelKey: 'label', valueKey: 'value' });
+  }
+
+  $('#catalog-classes').replaceChildren(...generalCatalogClasses.map((entry) => el('option', { value: entry.name })));
+
+  const form = $('#form-catalog');
+  if (!beingEdited(form) && !form.elements.id.value) {
+    form.elements.class.value = chooser.elements.class.value;
+    offerFunctionalities(form);
+  }
+
+  await loadGeneralCatalogItems();
+}
+
+/** Draws the values of the chosen class. */
+async function loadGeneralCatalogItems() {
+  const chosen = $('#form-catalog-class').elements.class.value;
+  const items = chosen ? (await api(`/general-catalog?class=${encodeURIComponent(chosen)}`))?.items ?? [] : [];
+
+  fillTable($('#table-catalog tbody'), items.map((item) => el('tr', {},
+    el('td', { class: 'text', text: catalogValueTitle(item.name) }),
+    el('td', { text: functionalityTitle(item.functionality) }),
+    el('td', { class: 'text', text: item.comment || '–' }),
+    el('td', { text: item.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editGeneralCatalogItem(item) })),
+  )), 5, t('gencatalog.empty', 'No values.'));
+}
+
+/**
+ * Offers the functionalities of the class the form names, and puts the field
+ * away for a class whose values mean nothing to the code - where the server
+ * refuses one, so a field left showing would be a question with no right answer.
+ */
+function offerFunctionalities(form, chosen = '') {
+  const offered = generalCatalogClasses.find((entry) => entry.name === form.elements.class.value.trim())?.functionalities ?? [];
+
+  fillSelect(form.elements.functionality, offered.map((name) => ({ value: name, label: functionalityTitle(name) })),
+    { labelKey: 'label', valueKey: 'value' });
+  form.elements.functionality.value = chosen || offered[0] || '';
+
+  $('#catalog-functionality').hidden = offered.length === 0;
+  form.elements.functionality.required = offered.length > 0;
+}
+
+/** Opens a value in the form, to correct it; its class stays the one it is in. */
+function editGeneralCatalogItem(item) {
+  const form = $('#form-catalog');
+
+  form.elements.id.value = String(item.id);
+  form.elements.class.value = item.class;
+  form.elements.class.readOnly = true;
+  form.elements.name.value = item.name;
+  form.elements.comment.value = item.comment;
+  form.elements.valid.checked = item.valid;
+  offerFunctionalities(form, item.functionality);
+
+  // Drawn rather than declared with a key, because it carries the value's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#catalog-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('catalogFormTitle', () => {
+    heading.textContent = fillIn(t('gencatalog.edit', 'Edit the value {0}'), [catalogValueTitle(item.name)]);
+  });
+
+  swapTheLabel($('#catalog-submit'), 'action.save', 'Save');
+  $('#catalog-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the form back to adding a value to the class chosen above it. */
+function resetGeneralCatalogForm() {
+  const form = $('#form-catalog');
+
+  form.reset();
+  form.elements.id.value = '';
+  form.elements.class.readOnly = false;
+  form.elements.class.value = $('#form-catalog-class').elements.class.value;
+  offerFunctionalities(form);
+
+  stopRedrawing('catalogFormTitle');
+  swapTheLabel($('#catalog-form-title'), 'gencatalog.create', 'Add a value');
+  swapTheLabel($('#catalog-submit'), 'action.create', 'Create');
+  $('#catalog-cancel').hidden = true;
+}
+
+/** Sends the form: a new value, or the correction of the one it holds. */
+function saveGeneralCatalogItem(form) {
+  const id = form.elements.id.value;
+  const offered = !$('#catalog-functionality').hidden;
+  const sent = {
+    name: form.elements.name.value.trim(),
+    comment: form.elements.comment.value.trim(),
+    valid: form.elements.valid.checked,
+    functionality: offered ? form.elements.functionality.value : '',
+    ...(id ? {} : { class: form.elements.class.value.trim() }),
+  };
+  const body = JSON.stringify(sent);
+
+  mutate(
+    () => (id ? api(`/general-catalog/${id}`, { method: 'PUT', body }) : api('/general-catalog', { method: 'POST', body })),
+    id ? t('msg.catalogSaved', 'Value saved') : t('msg.catalogCreated', 'Value added'),
+    async (item) => {
+      const chooser = $('#form-catalog-class');
+      resetGeneralCatalogForm();
+      await loadGeneralCatalog();
+
+      if (item?.class && chooser.elements.class.value !== item.class) {
+        chooser.elements.class.value = item.class;
+        await loadGeneralCatalogItems();
+      }
+    },
+  );
+}
+
+/** Wires the general catalog's card. */
+function wireGeneralCatalog() {
+  $('#form-catalog-class').addEventListener('change', () => {
+    resetGeneralCatalogForm();
+    loadGeneralCatalogItems().catch((err) => toastFailure(err));
+  });
+  $('#form-catalog-class').addEventListener('submit', (e) => e.preventDefault());
+  $('#form-catalog').addEventListener('submit', (e) => { e.preventDefault(); saveGeneralCatalogItem(e.target); });
+  $('#form-catalog').elements.class.addEventListener('input', (e) => offerFunctionalities(e.target.form));
+  $('#catalog-cancel').addEventListener('click', resetGeneralCatalogForm);
+}
+
 // ------------------------------------------------------------------ portal
 
 /** The ticket open on the portal's screen, or null. */
@@ -11729,6 +11991,8 @@ function forgetTheLastAccount() {
   cache.faqVisibilities = [];
   closeFAQArticle();
   closePortalTicket();
+  generalCatalogClasses = [];
+  resetGeneralCatalogForm();
   closePublishedFAQ('portal');
   $('#form-portal-faq').reset();
   $('#portal-faq-list').replaceChildren();
@@ -12591,6 +12855,15 @@ const TOUR_STEPS = [
     text: () => t('tour.templates.text',
       'An answer template is offered to whoever writes in a ticket of its queue, or of every queue, with the '
       + 'ticket\'s placeholders filled in their words. It starts an article; it does not send one.'),
+  },
+  {
+    target: '#catalog-card',
+    view: 'assets',
+    permission: 'catalog:write',
+    title: () => t('tour.catalog.title', 'What there is to pick from'),
+    text: () => t('tour.catalog.text',
+      'The general catalog: the classes a configuration item can be of, where in its life one is and how it is '
+      + 'doing, and the lists its details pick from. A value nobody should pick any more is retired, never deleted.'),
   },
   {
     target: '#macro-card',
@@ -17133,6 +17406,7 @@ async function refreshAll() {
   await loadSysConfig();
   await loadTicketSetup();
   await loadCustomers();
+  await loadGeneralCatalog();
   await loadPortal();
   await loadFAQ();
   await loadTickets();
@@ -17207,6 +17481,7 @@ function wireForms() {
   wireCustomers();
   wirePortal();
   wirePublishedFAQ();
+  wireGeneralCatalog();
   wireSysConfig();
   wireCalendars();
   wireSla();

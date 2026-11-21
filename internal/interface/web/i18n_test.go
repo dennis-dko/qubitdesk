@@ -315,6 +315,20 @@ func TestNoTranslationIsUnused(t *testing.T) {
 				}
 			}
 
+			// And the general catalog's, looked up as t(`catalogvalue.${name}`) and
+			// t(`catalogclass.${class}`) from what the server sent.
+			if name, isValue := strings.CutPrefix(key, "catalogvalue."); isValue {
+				if _, known := shippedCatalogValues(t)[name]; known {
+					continue
+				}
+			}
+
+			if class, isClass := strings.CutPrefix(key, "catalogclass."); isClass {
+				if _, known := shippedCatalogClasses(t)[class]; known {
+					continue
+				}
+			}
+
 			// The rest of the families the script names from a table of its own,
 			// looked up as t(`statetype.${type}`) and the like from what the server
 			// lists - see tableWords.
