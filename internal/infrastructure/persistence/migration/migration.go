@@ -208,6 +208,17 @@ func All(dialect string) map[int64]migration.Migrate {
 		// ships the definitions of its classes.
 		20261121010000: {UP: func(d migration.Datasource) error { return createClassDefinitions(d, dialect) }},
 		20261121010100: {UP: func(d migration.Datasource) error { return seedClassDefinitions(d, dialect) }},
+
+		// The configuration items, each in versions written under its class's
+		// definition.
+		20261121020000: {UP: func(d migration.Datasource) error { return createConfigItems(d, dialect) }},
+		20261121020100: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_config_items_class", "config_items", "class_id")
+		}},
+		20261121020200: {UP: func(d migration.Datasource) error { return createConfigItemVersions(d, dialect) }},
+		20261121020300: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_config_item_versions_item", "config_item_versions", "item_id")
+		}},
 	}
 }
 
@@ -1335,6 +1346,48 @@ func createClassDefinitions(d migration.Datasource, dialect string) error {
 		created_at %[4]s NOT NULL,
 		created_by INT NOT NULL DEFAULT 0,
 		UNIQUE (class_id, version)
+	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect), timestamp(dialect)))
+}
+
+// createConfigItems keeps the configuration items: numbered, of a class, and
+// carrying what their newest version says - its name and its two states - so a
+// listing reads a row an item. The number is written in the transaction that
+// makes the row, as a ticket's is, and is nullable for that moment.
+//
+// version_id names the newest version without a key: a version points at its
+// item, and a key both ways round would make neither insertable first.
+// created_by and changed_by are ids without a key, read as names when shown.
+func createConfigItems(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE config_items (
+		%[1]s,
+		number VARCHAR(40) UNIQUE,
+		class_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		name VARCHAR(255) NOT NULL,
+		deployment_state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		incident_state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		version_id INT NOT NULL DEFAULT 0,
+		version_count INT NOT NULL DEFAULT 0,
+		created_at %[3]s NOT NULL,
+		changed_at %[3]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0,
+		changed_by INT NOT NULL DEFAULT 0
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
+}
+
+// createConfigItemVersions keeps what an item said at each moment, under the
+// definition its class had then; its values as JSON, by the definition's keys.
+// A version is never changed: a change to an item is its next version.
+func createConfigItemVersions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE config_item_versions (
+		%[1]s,
+		item_id %[2]s NOT NULL REFERENCES config_items(id),
+		definition_id %[2]s NOT NULL REFERENCES ci_class_definitions(id),
+		name VARCHAR(255) NOT NULL,
+		deployment_state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		incident_state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		data %[3]s NOT NULL,
+		created_at %[4]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0
 	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect), timestamp(dialect)))
 }
 

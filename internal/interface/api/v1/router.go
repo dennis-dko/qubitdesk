@@ -47,6 +47,7 @@ type Handlers struct {
 	GeneralCatalog *rest.GeneralCatalogHandler
 
 	ClassDefinitions *rest.ClassDefinitionHandler
+	ConfigItems      *rest.ConfigItemHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -356,6 +357,15 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.GET(base+"/cmdb/classes", h.ClassDefinitions.Classes)
 	app.GET(base+"/cmdb/classes/{id}/definitions", h.ClassDefinitions.Definitions)
 	app.POST(base+"/cmdb/classes/{id}/definitions", h.ClassDefinitions.AddDefinition)
+
+	// The configuration items, read with assets:read and written with
+	// assets:write. No PUT: a change to an item is its next version.
+	app.GET(base+"/cmdb/items", h.ConfigItems.List)
+	app.GET(base+"/cmdb/items/{id}", h.ConfigItems.Get)
+	app.GET(base+"/cmdb/items/{id}/versions", h.ConfigItems.Versions)
+	app.POST(base+"/cmdb/items", h.ConfigItems.Create)
+	app.POST(base+"/cmdb/items/{id}/versions", h.ConfigItems.AddVersion)
+	app.DELETE(base+"/cmdb/items/{id}", h.ConfigItems.Delete)
 
 	app.GET(base+"/response-templates", h.Templates.List)
 	app.GET(base+"/response-templates/{id}", h.Templates.Get)

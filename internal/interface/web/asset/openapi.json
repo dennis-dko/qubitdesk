@@ -65,6 +65,10 @@
     {
       "name": "catalog",
       "description": "The general catalog, as KIX18 keeps it: the lists the configuration items and the changes pick from. Read by every account signed in; changed with `catalog:write`. Nothing is deleted from it - a value no longer offered is retired."
+    },
+    {
+      "name": "assets",
+      "description": "The configuration items, as KIX18 keeps its assets: an item of a class, in versions each written under the definition its class had then. Read with `assets:read`, written with `assets:write`; a version is never changed, a change to an item is its next version."
     }
   ],
   "paths": {
@@ -5419,6 +5423,201 @@
           },
           "404": {
             "description": "No such class"
+          }
+        }
+      }
+    },
+    "/cmdb/items": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "List the configuration items",
+        "description": "Needs assets:read. A page of the items by name, narrowed to a class with `class` and to those whose name or number holds `q`; `totalCount` is how many the filter allows.",
+        "parameters": [
+          {
+            "name": "class",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A class, by its id"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Words in the name or the number"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Items a page, 50 unless said, at most 200"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The page, from 1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The items"
+          },
+          "400": {
+            "description": "A page that cannot be"
+          },
+          "403": {
+            "description": "Not permitted"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Make a configuration item",
+        "description": "Needs assets:write. `classId`, a class that is still offered and has a definition, and its first version: `name`, `deploymentStateId` and `incidentStateId` - values of the general catalog's deployment and incident states - and `data`: the values by the keys of the class's definition as it stands now, each key a list of occurrences `{\"value\": \"...\", \"sub\": {...}}` as often as the definition allows, every value written as a string - a date as 2006-01-02, a moment in RFC 3339, and what a list, a reference, a contact or an organisation names by its id.",
+        "responses": {
+          "201": {
+            "description": "The item with its first version"
+          },
+          "400": {
+            "description": "A version the definition does not allow"
+          },
+          "403": {
+            "description": "Not permitted"
+          }
+        }
+      }
+    },
+    "/cmdb/items/{id}": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Read a configuration item",
+        "description": "Needs assets:read. The item with the version it stands at.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The configuration item"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The item"
+          },
+          "403": {
+            "description": "Not permitted"
+          },
+          "404": {
+            "description": "No such item"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Delete a configuration item",
+        "description": "Needs assets:write. The item and every version of it.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The configuration item"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "403": {
+            "description": "Not permitted"
+          },
+          "404": {
+            "description": "No such item"
+          }
+        }
+      }
+    },
+    "/cmdb/items/{id}/versions": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Read the versions of a configuration item",
+        "description": "Needs assets:read. Every version, the newest first, each with the definition it was written under.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The configuration item"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The versions"
+          },
+          "403": {
+            "description": "Not permitted"
+          },
+          "404": {
+            "description": "No such item"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Write a configuration item's next version",
+        "description": "Needs assets:write. Written under the definition the item's class has now: `name`, `deploymentStateId` and `incidentStateId` - values of the general catalog's deployment and incident states - and `data`: the values by the keys of the class's definition as it stands now, each key a list of occurrences `{\"value\": \"...\", \"sub\": {...}}` as often as the definition allows, every value written as a string - a date as 2006-01-02, a moment in RFC 3339, and what a list, a reference, a contact or an organisation names by its id. Refused where it says what the item says now, under the same definition.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The configuration item"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The item with its new version"
+          },
+          "400": {
+            "description": "A version the definition does not allow, or one saying nothing new"
+          },
+          "403": {
+            "description": "Not permitted"
+          },
+          "404": {
+            "description": "No such item"
           }
         }
       }

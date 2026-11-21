@@ -81,6 +81,13 @@ const (
 	// offers one of its values has to say what they are.
 	PermCatalogWrite = "catalog:write"
 
+	// PermAssetRead and PermAssetWrite are the configuration items: reading
+	// every item and every version of it, and writing one - a new item, its next
+	// version, or deleting it. Not narrowed like the tickets: an item is the
+	// organisation's inventory, the same whoever looks it up.
+	PermAssetRead  = "assets:read"
+	PermAssetWrite = "assets:write"
+
 	// PermPortalUse is the customer's side: opening tickets, reading and answering
 	// their own, and the published knowledge base. It belongs to an account linked
 	// to a contact, and reaches that contact's tickets and nobody else's - an
@@ -103,6 +110,7 @@ func AllPermissions() []string {
 		PermFAQRead, PermFAQWrite,
 		PermReportRead,
 		PermCatalogWrite,
+		PermAssetRead, PermAssetWrite,
 		PermPortalUse,
 	}
 }
@@ -130,18 +138,21 @@ func AdminPermissions() []string {
 		PermFAQRead, PermFAQWrite,
 		PermReportRead,
 		PermCatalogWrite,
+		PermAssetRead, PermAssetWrite,
 	}
 }
 
 // AgentPermissions is what somebody who works on tickets holds: the tickets of
-// the queues their role reaches, the customers, the knowledge base and the
-// figures - and nothing that changes how the installation is set up.
+// the queues their role reaches, the customers, the knowledge base, the figures
+// and the configuration items to look up - and nothing that changes how the
+// installation is set up, nor the inventory itself.
 func AgentPermissions() []string {
 	return []string{
 		PermTicketRead, PermTicketCreate, PermTicketWrite,
 		PermCustomerRead, PermCustomerWrite,
 		PermFAQRead, PermFAQWrite,
 		PermReportRead,
+		PermAssetRead,
 	}
 }
 

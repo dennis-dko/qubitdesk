@@ -258,6 +258,7 @@ func writtenWith(value ast.Expr) string {
 		if record, ok := v.X.(*ast.Ident); ok && v.Sel.Name == "Name" {
 			return map[string]string{
 				"state": "statusName", "priority": "priorityName", "kind": "ticketTypeName", "role": "roleTitle",
+				"class": "catalogValueTitle", "entry": "catalogValueTitle",
 			}[record.Name]
 		}
 	}
@@ -274,7 +275,7 @@ func TestTheRefusalScanRecognisesADayAndAState(t *testing.T) {
 
 func f() {
 	_ = apperror.WithCode("c", day.Format(time.DateOnly), ticket.State, model.StateOpen, ticket.Title,
-		state.Name, priority.Name, kind.Name, role.Name, queue.Name, field, name)
+		state.Name, priority.Name, kind.Name, role.Name, class.Name, entry.Name, queue.Name, field, name)
 }`
 
 	file, err := parser.ParseFile(token.NewFileSet(), "p.go", source, 0)
@@ -297,7 +298,7 @@ func f() {
 	})
 
 	want := []string{"fmtDate", "statusName", "statusName", "", "statusName", "priorityName", "ticketTypeName",
-		"roleTitle", "", "fieldName", ""}
+		"roleTitle", "catalogValueTitle", "catalogValueTitle", "", "fieldName", ""}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("the values were read as written by %q, want %q", got, want)
 	}

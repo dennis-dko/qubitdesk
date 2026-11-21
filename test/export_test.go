@@ -72,6 +72,8 @@ var writtenAndKept = map[string]string{
 		"and stays with an id that names nobody once the account is gone",
 	"faq_articles": "what an agent last wrote into the knowledge base is the organisation's record and stays, " +
 		"signed by an id that names nobody once the account is gone; the export says which and when",
+	"config_item_versions": "a version of a configuration item is the organisation's inventory as it stood, " +
+		"signed by an id that names nobody once the account is gone; the export says which and when",
 }
 
 // tablesIn returns every table a pattern's first group names in a source, sorted

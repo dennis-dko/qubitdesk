@@ -47,7 +47,7 @@ func TestEveryAdministrativeChangeIsInTheAdministrationLog(t *testing.T) {
 	var served []string
 
 	for _, match := range regexp.MustCompile(
-		`app\.(POST|PUT|DELETE)\(base\+"(/(?:users|roles|settings|setup|queues|ticket-states|ticket-priorities|ticket-types|calendars|service-levels|unlock-state-types|macros|exec-plans|jobs|notification-definitions|response-templates|general-catalog|cmdb)[^"]*|/contacts/\{id\}/portal-access)"`).
+		`app\.(POST|PUT|DELETE)\(base\+"(/(?:users|roles|settings|setup|queues|ticket-states|ticket-priorities|ticket-types|calendars|service-levels|unlock-state-types|macros|exec-plans|jobs|notification-definitions|response-templates|general-catalog|cmdb/classes)[^"]*|/contacts/\{id\}/portal-access)"`).
 		FindAllStringSubmatch(router, -1) {
 		served = append(served, match[1]+" /api/v1"+match[2])
 	}

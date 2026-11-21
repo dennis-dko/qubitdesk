@@ -54,6 +54,8 @@ var accountExport = []struct {
 		"FROM articles WHERE sender = 'agent' AND author_id = ? ORDER BY id"},
 	{"accounted-time", "SELECT ticket_id, article_id, minutes, created_at " +
 		"FROM time_accounting WHERE created_by = ? ORDER BY id"},
+	{"config-item-versions-written", "SELECT id, item_id, name, created_at " +
+		"FROM config_item_versions WHERE created_by = ? ORDER BY id"},
 }
 
 // ExportUser reads everything held about an account, a part per table, each row

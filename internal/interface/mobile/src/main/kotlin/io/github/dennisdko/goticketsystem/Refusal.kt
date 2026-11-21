@@ -44,6 +44,9 @@ val refusalValues: Map<String, Map<Int, String>> = mapOf(
     "portalAccountAdministers" to mapOf(1 to "roleTitle"),
     "roleHeldByPortalAccounts" to mapOf(0 to "roleTitle"),
     "macroStepInvalid" to mapOf(1 to "fieldName"),
+    "catalogValueRetired" to mapOf(0 to "catalogValueTitle"),
+    "configItemClassRetired" to mapOf(0 to "catalogValueTitle"),
+    "configItemNoDefinition" to mapOf(0 to "catalogValueTitle"),
 )
 
 /**
@@ -97,8 +100,8 @@ private fun Language.inPageWords(error: JSONObject): String? {
 
 /**
  * valuesOf writes the values of a refusal the way the page's REFUSAL_VALUES and
- * fillIn do: a state, a priority, a ticket type, a role, a kind of record and a
- * field in its words, a day the way the reader writes one, a whole number as it
+ * fillIn do: a state, a priority, a ticket type, a role, a kind of record, a
+ * field and a value of the general catalog in its words, a day the way the reader writes one, a whole number as it
  * is and a fraction to two places.
  */
 private fun Language.valuesOf(code: String, values: JSONArray?): Array<String> {
@@ -115,6 +118,7 @@ private fun Language.valuesOf(code: String, values: JSONArray?): Array<String> {
                 "roleTitle" -> pageWord("role.name.", value)
                 "entityName" -> pageWord("entity.", value)
                 "fieldName" -> pageWord("field.", value)
+                "catalogValueTitle" -> pageWord("catalogvalue.", value)
                 "fmtDate" -> runCatching { day(LocalDate.parse(value)) }.getOrDefault(value)
                 else -> value
             }

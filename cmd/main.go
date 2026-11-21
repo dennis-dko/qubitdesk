@@ -584,6 +584,7 @@ func main() {
 	// The general catalog names the classes a definition belongs to, there as on
 	// the Assets screen.
 	generalCatalogRepo := sqldb.NewGeneralCatalogRepository(db, cfg.Dialect)
+	classDefinitionRepo := sqldb.NewClassDefinitionRepository(db, cfg.Dialect)
 	adminLog := appservice.NewAdminLogService(adminEventRepo, userRepo, roleRepo, contactRepo).
 		WithCatalog(generalCatalogRepo)
 	recovery := appservice.NewRecoveryService(userRepo, passkeyRepo, sessionRepo, adminEventRepo)
@@ -1171,7 +1172,12 @@ func main() {
 		GeneralCatalog: rest.NewGeneralCatalogHandler(
 			appservice.NewGeneralCatalogApplicationService(generalCatalogRepo), authorizer),
 		ClassDefinitions: rest.NewClassDefinitionHandler(appservice.NewClassDefinitionApplicationService(
-			generalCatalogRepo, sqldb.NewClassDefinitionRepository(db, cfg.Dialect)), authorizer),
+			generalCatalogRepo, classDefinitionRepo), authorizer),
+		ConfigItems: rest.NewConfigItemHandler(appservice.NewConfigItemApplicationService(
+			sqldb.NewConfigItemRepository(db, cfg.Dialect), appservice.ConfigItemSources{
+				Definitions: classDefinitionRepo, Catalog: generalCatalogRepo, Contacts: contactRepo,
+				Organisations: customerRepos.Organisations,
+			}), authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves

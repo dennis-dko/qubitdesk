@@ -32,7 +32,37 @@ func TestAnAccountIsHandedOverWholeAndWithoutItsSecrets(t *testing.T) {
 		t.Fatal("the token was not shown once")
 	}
 
-	exported := worker.api(http.MethodGet, "/me/export", nil)
+	parts, whole := exportOf(t, worker)
+
+	for _, part := range []string{"account", "api-tokens", "sessions"} {
+		if len(parts[part]) == 0 {
+			t.Errorf("%s holds nothing, though the account has some", part)
+		}
+	}
+
+	for _, part := range []string{"owned-tickets", "tickets-responsible-for", "contact", "watched-tickets",
+		"notifications", "queues-told-about", "passkeys", "push-subscriptions", "openid-links",
+		"written-articles", "config-item-versions-written"} {
+		if rows, there := parts[part]; !there || len(rows) != 0 {
+			t.Errorf("%s reads %v, want an empty list", part, rows)
+		}
+	}
+
+	for _, secret := range []string{*token.Secret,
+		"password_hash", "totp_secret", "token_hash", "key_hash", "public_key", "credential_id"} {
+		if strings.Contains(whole, secret) {
+			t.Errorf("the export holds %q", secret)
+		}
+	}
+}
+
+// exportOf is what the account behind a client is handed when it asks for
+// everything held about it: its rows by the part they are in, and the whole of
+// the archive as text, to look for what must not be in it.
+func exportOf(t *testing.T, c *client) (map[string][]map[string]any, string) {
+	t.Helper()
+
+	exported := c.api(http.MethodGet, "/me/export", nil)
 	if exported.Status != http.StatusOK {
 		t.Fatalf("the export answered %d: %s", exported.Status, exported.Body)
 	}
@@ -67,24 +97,5 @@ func TestAnAccountIsHandedOverWholeAndWithoutItsSecrets(t *testing.T) {
 		parts[strings.TrimSuffix(file.Name, ".json")] = rows
 	}
 
-	for _, part := range []string{"account", "api-tokens", "sessions"} {
-		if len(parts[part]) == 0 {
-			t.Errorf("%s holds nothing, though the account has some", part)
-		}
-	}
-
-	for _, part := range []string{"owned-tickets", "tickets-responsible-for", "contact", "watched-tickets",
-		"notifications", "queues-told-about", "passkeys", "push-subscriptions", "openid-links",
-		"written-articles"} {
-		if rows, there := parts[part]; !there || len(rows) != 0 {
-			t.Errorf("%s reads %v, want an empty list", part, rows)
-		}
-	}
-
-	for _, secret := range []string{*token.Secret,
-		"password_hash", "totp_secret", "token_hash", "key_hash", "public_key", "credential_id"} {
-		if strings.Contains(whole, secret) {
-			t.Errorf("the export holds %q", secret)
-		}
-	}
+	return parts, whole
 }
