@@ -52,7 +52,7 @@ func TestAnInstallationWithNoLogoStillHasAMark(t *testing.T) {
 	}
 
 	// The placeholder is not that drawing. It is a lettered chip, and the letter
-	// is Go-Ticket-System's T - see TestTheLetteredMarkIsGoTicketSystemsT.
+	// is Go-Ticket-System's G - see TestTheLetteredMarkIsGoTicketSystemsG.
 	if strings.Contains(uses, `"initial":""`) {
 		t.Errorf("the logo slot holds no initial: %s", uses)
 	}
@@ -124,15 +124,16 @@ func TestTheSignInScreenShowsGoTicketSystemsMark(t *testing.T) {
 	}
 }
 
-// The lettered mark carries Go-Ticket-System's T, whatever an installation adds to the
-// name.
+// The lettered mark carries Go-Ticket-System's G, whatever an installation adds
+// to the name.
 //
 // It carried the first letter of the configured title, which was the whole name
-// until every installation came to be called Go-Ticket-System and the title became what
-// follows it. An installation that added htp.net then wore an H beside a bar
-// reading Go-Ticket-System | htp.net: a letter of the addition standing in for the whole
-// name. The maintainer asked for the T.
-func TestTheLetteredMarkIsGoTicketSystemsT(t *testing.T) {
+// until every installation came to be called Go-Ticket-System and the title
+// became what follows it. An installation that added htp.net then wore an H
+// beside a bar reading Go-Ticket-System | htp.net: a letter of the addition
+// standing in for the whole name. The name's own initial stands there instead,
+// as the time recording this was cloned from has its own.
+func TestTheLetteredMarkIsGoTicketSystemsG(t *testing.T) {
 	t.Parallel()
 
 	p := open(t)
@@ -165,7 +166,7 @@ func TestTheLetteredMarkIsGoTicketSystemsT(t *testing.T) {
 		t.Fatalf("the bar reads %q, so the addition has not arrived and the letter proves nothing", title)
 	}
 
-	if letter := p.text("#brand-initial"); letter != "T" {
-		t.Errorf("the chip carries %q beside Go-Ticket-System | htp.net, want Go-Ticket-System's T", letter)
+	if letter := p.text("#brand-initial"); letter != "G" {
+		t.Errorf("the chip carries %q beside Go-Ticket-System | htp.net, want Go-Ticket-System's G", letter)
 	}
 }

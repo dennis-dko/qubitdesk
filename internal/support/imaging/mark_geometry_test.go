@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -13,10 +14,11 @@ import (
 // The mark Mark draws is favicon.svg, number for number.
 //
 // The tab shows the SVG itself, while the installed app's icons and the Windows
-// icon are drawn from the figures in mark.go: two copies of one drawing. The
-// hourglass that stood here before showed what becomes of two copies nothing
-// compares - one of them goes on showing the old picture - so every figure, the
-// hub, the tile and its colours are read out of the SVG and held to Mark's.
+// icon are drawn from the figures in mark.go: two copies of one drawing. Two
+// copies nothing compares are how one of them goes on showing an old picture -
+// the tab icon once did - so every figure, how much of the white each is
+// painted with, the tile and its colours are read out of the SVG and held to
+// Mark's.
 func TestTheMarkIsFaviconSVGsGeometry(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "interface", "web", "asset", "favicon.svg"))
 	if err != nil {
@@ -25,14 +27,25 @@ func TestTheMarkIsFaviconSVGsGeometry(t *testing.T) {
 
 	svg := string(raw)
 
-	var figures []string
+	var figures []markFigure
 
-	for _, found := range regexp.MustCompile(`<path d="([^"]+)"`).FindAllStringSubmatch(svg, -1) {
-		figures = append(figures, found[1])
+	for _, found := range regexp.MustCompile(`<path d="([^"]+)"( opacity="([^"]+)")?`).FindAllStringSubmatch(svg, -1) {
+		opacity := 1.0
+
+		if found[3] != "" {
+			read, err := strconv.ParseFloat(found[3], 64)
+			if err != nil {
+				t.Fatalf("a figure's opacity in favicon.svg: %v", err)
+			}
+
+			opacity = read
+		}
+
+		figures = append(figures, markFigure{path: found[1], opacity: opacity})
 	}
 
 	if !slices.Equal(figures, markFigures) {
-		t.Errorf("favicon.svg's figures are not the ones Mark draws:\n svg  %q\n mark %q", figures, markFigures)
+		t.Errorf("favicon.svg's figures are not the ones Mark draws:\n svg  %v\n mark %v", figures, markFigures)
 	}
 
 	for _, want := range []string{
@@ -40,7 +53,6 @@ func TestTheMarkIsFaviconSVGsGeometry(t *testing.T) {
 		fmt.Sprintf(`<rect width="%g" height="%g" rx="%g" fill="url(#ground)"/>`, markBox, markBox, markTileRadius),
 		`<linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">`,
 		fmt.Sprintf(`<g fill="#%02x%02x%02x">`, figureInk.R, figureInk.G, figureInk.B),
-		fmt.Sprintf(`<circle cx="%g" cy="%g" r="%g"/>`, markHub.cx, markHub.cy, markHub.r),
 	} {
 		if !strings.Contains(svg, want) {
 			t.Errorf("favicon.svg has no %s, which is what Mark draws", want)

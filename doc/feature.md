@@ -172,11 +172,13 @@ a selection made against one picture means nothing against another.
 **Until a logo is configured, the bar shows a chip with Go-Ticket-System's G.** That slot
 belongs to whoever runs the installation, and filling it with our mark would make
 an unbranded installation look branded by somebody else, so the chip only stands
-in for a logo. The application's own mark — Go-Ticket-System's T and P, a pulse running
-through them and a clock in the P — has its own places: the browser tab, the
-sign-in card, the installer, the installed app's icons, the `.exe`, the Android
-app, and the button beside the title that leads to the welcome screen. It is
-drawn (`internal/interface/web/asset/favicon.svg`) rather than a font character.
+in for a logo. The application's own mark — an hourglass on a blue tile, its
+lower half dimmer, which the ticket system took with it from the time recording
+and which stands in until it has a mark of its own — has its own places: the
+browser tab, the sign-in card, the installer, the installed app's icons, the
+`.exe`, the Android app, and the button beside the title that leads to the
+welcome screen. It is drawn (`internal/interface/web/asset/favicon.svg`) rather
+than a font character.
 `go run ./build/icon > build/icon.ico` and
 `go run ./build/icon -favicon > internal/interface/web/asset/favicon.ico` redraw
 the two icon files from the same geometry whenever it changes, and tests fail

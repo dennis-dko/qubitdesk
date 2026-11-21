@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The tile of favicon.svg: its blue, lighter at the top and darker at the
-     bottom. A launcher shows the middle 72 of these 108 units, cut to its own
-     shape, so the colours run across those 72 as they run across the tile. -->
+<!-- The tile of favicon.svg, in the accent. A launcher shows the middle 72 of
+     these 108 units, cut to its own shape, so the colours run across those 72
+     as they run across the tile. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -16,9 +16,8 @@
                 android:startY="18"
                 android:endX="0"
                 android:endY="90">
-                <item android:offset="0" android:color="#FF0A69A7" />
-                <item android:offset="0.5" android:color="#FF095795" />
-                <item android:offset="1" android:color="#FF03447A" />
+                <item android:offset="0" android:color="#FF2F6FEB" />
+                <item android:offset="1" android:color="#FF2F6FEB" />
             </gradient>
         </aapt:attr>
     </path>

@@ -85,6 +85,7 @@ var namedOnPurpose = map[string]string{
 	"accountExpires":     "Active Directory's attribute, which a sign-in asks for by name",
 	"userPrincipalName":  "Active Directory's, the name@realm a Kerberos sign-in is also looked up by",
 	"iPad":               "Apple's tablet, whose windows the layout cases measure the interface in",
+	"fillAlpha":          "an Android vector drawable's attribute, how much of its colour a path is painted with",
 
 	// Gone on purpose, and the comment says so where it stood.
 	"defaultAutoCloseAfterDays": "the constant orphan_test.go was written after",
