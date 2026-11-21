@@ -54,7 +54,7 @@ var BackupTables = []string{
 	"attachments",
 	"time_accounting",
 	"ticket_history",
-	"ticket_links",
+	"links",
 	"ticket_watchers",
 	"notification_definitions",
 	"notification_opt_outs",

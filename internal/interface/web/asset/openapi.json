@@ -5638,6 +5638,149 @@
           }
         }
       }
+    },
+    "/links": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "The links of one record",
+        "description": "Every link of the record whose other end the caller can read: a ticket takes tickets:read and its queue, a configuration item assets:read. What the caller may not see is left out.",
+        "parameters": [
+          {
+            "name": "object",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ticket",
+                "configitem"
+              ]
+            },
+            "description": "The kind of record: ticket or configitem"
+          },
+          {
+            "name": "record",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The record, by its id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Link two records",
+        "description": "From a record the caller may change to one they may read, in one of KIX18's types: Normal, ParentChild or DependsOn. Two records are joined once.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "sourceObject",
+                  "sourceId",
+                  "targetObject",
+                  "targetId",
+                  "type"
+                ],
+                "properties": {
+                  "sourceObject": {
+                    "type": "string",
+                    "enum": [
+                      "ticket",
+                      "configitem"
+                    ]
+                  },
+                  "sourceId": {
+                    "type": "integer"
+                  },
+                  "targetObject": {
+                    "type": "string",
+                    "enum": [
+                      "ticket",
+                      "configitem"
+                    ]
+                  },
+                  "targetId": {
+                    "type": "integer"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "Normal",
+                      "ParentChild",
+                      "DependsOn"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/links/{id}": {
+      "delete": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Undo a link",
+        "description": "Through one of its ends, which the caller has to be able to change.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "object",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ticket",
+                "configitem"
+              ]
+            },
+            "description": "The kind of record: ticket or configitem"
+          },
+          {
+            "name": "record",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The record, by its id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Undone"
+          }
+        }
+      }
     }
   },
   "components": {

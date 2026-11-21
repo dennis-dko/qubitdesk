@@ -285,6 +285,10 @@ func (r *ConfigItemRepository) Delete(ctx context.Context, id uint) error {
 			return err
 		}
 
+		if err := deleteLinksOf(ctx, tx, model.LinkConfigItem, id); err != nil {
+			return err
+		}
+
 		if _, err := tx.exec(ctx, "DELETE FROM config_item_versions WHERE item_id = ?", id); err != nil {
 			return apperror.Internal(err)
 		}

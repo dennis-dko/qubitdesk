@@ -42,7 +42,7 @@ func TestAnAccountIsHandedOverWholeAndWithoutItsSecrets(t *testing.T) {
 
 	for _, part := range []string{"owned-tickets", "tickets-responsible-for", "contact", "watched-tickets",
 		"notifications", "queues-told-about", "passkeys", "push-subscriptions", "openid-links",
-		"written-articles", "config-item-versions-written"} {
+		"written-articles", "config-item-versions-written", "links-made"} {
 		if rows, there := parts[part]; !there || len(rows) != 0 {
 			t.Errorf("%s reads %v, want an empty list", part, rows)
 		}

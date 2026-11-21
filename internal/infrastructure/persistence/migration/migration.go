@@ -115,9 +115,9 @@ func All(dialect string) map[int64]migration.Migrate {
 		20261112014500: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_ticket_history_ticket", "ticket_history", "ticket_id")
 		}},
-		20261112014600: {UP: func(d migration.Datasource) error { return createTicketLinks(d, dialect) }},
+		20261112014600: {UP: func(d migration.Datasource) error { return createLinks(d, dialect) }},
 		20261112014700: {UP: func(d migration.Datasource) error {
-			return createIndex(d, "idx_ticket_links_linked", "ticket_links", "linked_id")
+			return createIndex(d, "idx_links_target", "links", "target_object, target_id")
 		}},
 		20261112014800: {UP: func(d migration.Datasource) error { return createTicketWatchers(d, dialect) }},
 		20261112014900: {UP: func(d migration.Datasource) error {
@@ -1217,15 +1217,26 @@ func createTicketHistory(d migration.Datasource, dialect string) error {
 	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
 }
 
-// createTicketLinks keeps which tickets belong together. One row a pair, the
-// lower id first, so a link is found from either end and cannot be made twice.
-func createTicketLinks(d migration.Datasource, dialect string) error {
-	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_links (
-		ticket_id %[1]s NOT NULL REFERENCES tickets(id),
-		linked_id %[1]s NOT NULL REFERENCES tickets(id),
-		kind VARCHAR(16) NOT NULL,
-		PRIMARY KEY (ticket_id, linked_id)
-	)`, foreignKeyID(dialect)))
+// createLinks keeps the links between records, as KIX18's link_relation keeps
+// them: each end by its kind and id, so that a ticket, a configuration item and
+// the kinds still to come are joined through one table and shown by one part of
+// the screen. No key can follow an end named that way, so a record's repository
+// deletes its links in the transaction that deletes the record. A link is found
+// from its source through the unique index and from its target through an
+// index of its own. created_by is an id without a key, read as a name when
+// shown, as an article's author is.
+func createLinks(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE links (
+		%[1]s,
+		source_object VARCHAR(20) NOT NULL,
+		source_id INT NOT NULL,
+		target_object VARCHAR(20) NOT NULL,
+		target_id INT NOT NULL,
+		type VARCHAR(40) NOT NULL,
+		created_at %[2]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0,
+		UNIQUE (source_object, source_id, target_object, target_id)
+	)`, primaryKey(dialect), timestamp(dialect)))
 }
 
 // createTicketWatchers keeps who asked to be told about a ticket that is not

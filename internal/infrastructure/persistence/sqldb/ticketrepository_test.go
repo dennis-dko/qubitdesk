@@ -202,6 +202,20 @@ func TestATicketChangesAndGoesWithEverythingWrittenInIt(t *testing.T) {
 		t.Error("the account does not watch the ticket it asked to watch")
 	}
 
+	// A link names its ends by kind and id, so no key takes it with the ticket:
+	// the delete has to, or a ticket given the same id later would inherit it.
+	links := sqldb.NewLinkRepository(tables.db, sqldb.DialectSQLite)
+	for _, link := range []*model.Link{
+		{SourceObject: model.LinkTicket, SourceID: ticket.ID, TargetObject: model.LinkConfigItem, TargetID: 7},
+		{SourceObject: model.LinkConfigItem, SourceID: 8, TargetObject: model.LinkTicket, TargetID: ticket.ID},
+		{SourceObject: model.LinkConfigItem, SourceID: 7, TargetObject: model.LinkConfigItem, TargetID: 8},
+	} {
+		link.Type, link.CreatedAt = model.LinkNormal, latest
+		if _, err := links.Create(ctx, link); err != nil {
+			t.Fatalf("link the ticket: %v", err)
+		}
+	}
+
 	if err := tables.tickets.Delete(ctx, ticket.ID); err != nil {
 		t.Fatalf("delete the ticket: %v", err)
 	}
@@ -210,6 +224,10 @@ func TestATicketChangesAndGoesWithEverythingWrittenInIt(t *testing.T) {
 		if left := count(t, tables.db, "SELECT COUNT(*) FROM "+table+" WHERE ticket_id = ?", ticket.ID); left != 0 {
 			t.Errorf("%d row(s) of %s still belong to the deleted ticket", left, table)
 		}
+	}
+
+	if left := count(t, tables.db, "SELECT COUNT(*) FROM links WHERE id > ?", 0); left != 1 {
+		t.Errorf("%d link(s) are left after the ticket was deleted, want only the one between the two items", left)
 	}
 
 	if _, err := tables.tickets.GetByID(ctx, ticket.ID); apperror.KindOf(err) != apperror.KindNotFound {

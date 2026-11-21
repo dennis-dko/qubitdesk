@@ -48,6 +48,7 @@ type Handlers struct {
 
 	ClassDefinitions *rest.ClassDefinitionHandler
 	ConfigItems      *rest.ConfigItemHandler
+	Links            *rest.LinkHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -366,6 +367,11 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.POST(base+"/cmdb/items", h.ConfigItems.Create)
 	app.POST(base+"/cmdb/items/{id}/versions", h.ConfigItems.AddVersion)
 	app.DELETE(base+"/cmdb/items/{id}", h.ConfigItems.Delete)
+
+	// The links between records, each asking the rights of the ends it names.
+	app.GET(base+"/links", h.Links.List)
+	app.POST(base+"/links", h.Links.Create)
+	app.DELETE(base+"/links/{id}", h.Links.Delete)
 
 	app.GET(base+"/response-templates", h.Templates.List)
 	app.GET(base+"/response-templates/{id}", h.Templates.Get)

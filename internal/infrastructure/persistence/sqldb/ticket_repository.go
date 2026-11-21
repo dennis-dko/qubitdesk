@@ -441,8 +441,8 @@ func (r *TicketRepository) Delete(ctx context.Context, id uint) error {
 			}
 		}
 
-		if _, err := tx.exec(ctx, "DELETE FROM ticket_links WHERE ticket_id = ? OR linked_id = ?", id, id); err != nil {
-			return apperror.Internal(err)
+		if err := deleteLinksOf(ctx, tx, model.LinkTicket, id); err != nil {
+			return err
 		}
 
 		affected, err := tx.exec(ctx, "DELETE FROM tickets WHERE id = ?", id)
