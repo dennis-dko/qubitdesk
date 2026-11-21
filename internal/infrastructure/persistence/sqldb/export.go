@@ -22,7 +22,9 @@ import (
 //
 // What the account wrote in tickets is handed over as where and when, not as the
 // text: an answer quotes the customer it answers, and the export of one person
-// is not the place for another's words.
+// is not the place for another's words. A line of a ticket's history says what
+// kind of thing the account did and leaves out from what to what, because those
+// values name other people as often as states.
 var accountExport = []struct {
 	file  string
 	query string
@@ -34,6 +36,7 @@ var accountExport = []struct {
 		"FROM tickets t LEFT JOIN ticket_states s ON s.id = t.state_id WHERE t.owner_id = ? ORDER BY t.id"},
 	{"tickets-responsible-for", "SELECT t.id, t.number, t.title, s.name AS state, t.created_at " +
 		"FROM tickets t LEFT JOIN ticket_states s ON s.id = t.state_id WHERE t.responsible_id = ? ORDER BY t.id"},
+	{"tickets-opened", "SELECT id, number, title, created_at FROM tickets WHERE created_by = ? ORDER BY id"},
 	{"contact", "SELECT id, organisation_id, name, email, phone, created_at FROM contacts WHERE user_id = ?"},
 	{"watched-tickets", "SELECT ticket_id FROM ticket_watchers WHERE user_id = ? ORDER BY ticket_id"},
 	{"notifications", "SELECT ticket_id, definition_id, created_at, read_at " +
@@ -54,12 +57,21 @@ var accountExport = []struct {
 		"FROM articles WHERE sender = 'agent' AND author_id = ? ORDER BY id"},
 	{"accounted-time", "SELECT ticket_id, article_id, minutes, created_at " +
 		"FROM time_accounting WHERE created_by = ? ORDER BY id"},
+	{"ticket-history-made", "SELECT ticket_id, at, actor_kind, event " +
+		"FROM ticket_history WHERE actor_id = ? ORDER BY id"},
 	{"config-item-versions-written", "SELECT id, item_id, name, created_at " +
 		"FROM config_item_versions WHERE created_by = ? ORDER BY id"},
+	{"config-items-made", "SELECT id, number, name, created_at FROM config_items WHERE created_by = ? ORDER BY id"},
+	{"config-items-last-changed", "SELECT id, number, name, changed_at " +
+		"FROM config_items WHERE changed_by = ? ORDER BY id"},
+	{"class-definitions-written", "SELECT class_id, version, created_at " +
+		"FROM ci_class_definitions WHERE created_by = ? ORDER BY id"},
 	{"links-made", "SELECT id, source_object, source_id, target_object, target_id, type, created_at " +
 		"FROM links WHERE created_by = ? ORDER BY id"},
 	{"changes-managed", "SELECT id, number, title, created_at FROM changes WHERE manager_id = ? ORDER BY id"},
 	{"changes-built", "SELECT id, number, title, created_at FROM changes WHERE builder_id = ? ORDER BY id"},
+	{"changes-made", "SELECT id, number, title, created_at FROM changes WHERE created_by = ? ORDER BY id"},
+	{"changes-last-changed", "SELECT id, number, title, changed_at FROM changes WHERE changed_by = ? ORDER BY id"},
 }
 
 // ExportUser reads everything held about an account, a part per table, each row
