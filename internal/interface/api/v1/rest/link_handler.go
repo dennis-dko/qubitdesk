@@ -55,6 +55,11 @@ func newLinkedRecordResponse(record *service.LinkedRecord) LinkedRecordResponse 
 }
 
 // rightFor is the right a kind of record takes to read, or to change.
+//
+// Which right a route asks for depends on a kind the request names, so every
+// route here settles who is asking before it reads the request. Asked the
+// other way round, somebody without a credential was told how to spell a kind
+// of record where every other guarded route tells them to sign in.
 func rightFor(object string, change bool) (string, error) {
 	switch model.LinkObject(object) {
 	case model.LinkTicket:
@@ -82,6 +87,10 @@ func rightFor(object string, change bool) (string, error) {
 
 // List handles GET /api/v1/links?object=&record=: the links of one record.
 func (h *LinkHandler) List(c *gofr.Context) (any, error) {
+	if _, err := h.authz.permittedPrincipal(c); err != nil {
+		return nil, err
+	}
+
 	right, err := rightFor(c.Param("object"), false)
 	if err != nil {
 		return nil, toHTTPError(err)
@@ -107,6 +116,10 @@ func (h *LinkHandler) List(c *gofr.Context) (any, error) {
 
 // Create handles POST /api/v1/links.
 func (h *LinkHandler) Create(c *gofr.Context) (any, error) {
+	if _, err := h.authz.permittedPrincipal(c); err != nil {
+		return nil, err
+	}
+
 	var req LinkRequest
 	if err := bind(c, &req); err != nil {
 		return nil, toHTTPError(err)
@@ -145,6 +158,10 @@ func (h *LinkHandler) Create(c *gofr.Context) (any, error) {
 // Delete handles DELETE /api/v1/links/{id}?object=&record=: the link undone
 // through the record named.
 func (h *LinkHandler) Delete(c *gofr.Context) (any, error) {
+	if _, err := h.authz.permittedPrincipal(c); err != nil {
+		return nil, err
+	}
+
 	right, err := rightFor(c.Param("object"), true)
 	if err != nil {
 		return nil, toHTTPError(err)
