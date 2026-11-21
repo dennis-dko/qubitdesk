@@ -19,7 +19,15 @@ const SHELL = 'qubitdesk-shell-v1';
 const ESSENTIALS = ['/', '/app.js', '/app.css', '/theme.js', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(SHELL).then((cache) => cache.addAll(ESSENTIALS)));
+  // The shell is kept for opening offline and for nothing else, so a browser
+  // whose storage refuses to keep it still installs the worker - which is also
+  // what shows a pushed notification. As a condition of the install, a refusal
+  // took every notification with the offline copy: measured in full runs of the
+  // browser suite on Windows, where Cache Storage itself failed to open in a
+  // fresh profile ("Unexpected internal error") while every file of the shell
+  // answered 200, and the page never got a worker at all. The copy is made
+  // again from the fetches below, where storage allows it.
+  event.waitUntil(caches.open(SHELL).then((cache) => cache.addAll(ESSENTIALS)).catch(() => {}));
 
   // The new shell keeper takes over at once rather than at the next visit: what
   // it keeps is only ever a copy, and an older keeper has nothing to finish.
@@ -27,8 +35,11 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  // Storage that refuses to be read has no older shell to tidy, and the pages
+  // are claimed all the same.
   event.waitUntil(caches.keys()
     .then((names) => Promise.all(names.filter((name) => name !== SHELL).map((name) => caches.delete(name))))
+    .catch(() => {})
     .then(() => self.clients.claim()));
 });
 
@@ -126,10 +137,10 @@ self.addEventListener('fetch', (event) => {
       if (response.ok && response.type === 'basic') {
         const copy = response.clone();
 
-        event.waitUntil(caches.open(SHELL).then((cache) => cache.put(key, copy)));
+        event.waitUntil(caches.open(SHELL).then((cache) => cache.put(key, copy)).catch(() => {}));
       }
 
       return response;
     })
-    .catch(() => caches.match(key).then((kept) => kept ?? Response.error())));
+    .catch(() => caches.match(key).then((kept) => kept ?? Response.error(), () => Response.error())));
 });
