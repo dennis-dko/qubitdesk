@@ -73,9 +73,12 @@ func (r *ConfigItemRepository) List(
 	where := []string{"1 = 1"}
 	args := make([]any, 0, 4)
 
-	if filter.ClassID != nil {
-		where = append(where, "class_id = ?")
-		args = append(args, *filter.ClassID)
+	if len(filter.ClassIDs) > 0 {
+		where = append(where, "class_id IN (?"+strings.Repeat(", ?", len(filter.ClassIDs)-1)+")")
+
+		for _, class := range filter.ClassIDs {
+			args = append(args, class)
+		}
 	}
 
 	if search := strings.TrimSpace(filter.Search); search != "" {

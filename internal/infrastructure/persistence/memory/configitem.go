@@ -35,7 +35,7 @@ func (r *ConfigItemRepository) List(
 	search := strings.ToLower(strings.TrimSpace(filter.Search))
 
 	items := slices.DeleteFunc(r.items.all(), func(item *model.ConfigItem) bool {
-		if filter.ClassID != nil && item.ClassID != *filter.ClassID {
+		if len(filter.ClassIDs) > 0 && !slices.Contains(filter.ClassIDs, item.ClassID) {
 			return true
 		}
 

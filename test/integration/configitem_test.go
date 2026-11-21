@@ -228,14 +228,31 @@ func TestConfigItemsAreKeptInVersionsOverHTTP(t *testing.T) {
 
 	var versions struct {
 		Items []struct {
-			Name string `json:"name"`
+			Name          string `json:"name"`
+			CreatedByName string `json:"createdByName"`
 		} `json:"items"`
 	}
 
 	agent.must(agent.api(http.MethodGet, route+"/versions", nil), http.StatusOK).Data(t, &versions)
 
-	if len(versions.Items) != 3 || versions.Items[2].Name != "The first computer" {
-		t.Errorf("the computer's versions read %+v; want three, the newest first", versions.Items)
+	if len(versions.Items) != 3 || versions.Items[2].Name != "The first computer" ||
+		versions.Items[0].CreatedByName == "" {
+		t.Errorf("the computer's versions read %+v; want three, the newest first, each saying who wrote it",
+			versions.Items)
+	}
+
+	// A reference may point at items of several classes, so a listing takes them
+	// at once.
+	var two struct {
+		TotalCount uint `json:"totalCount"`
+	}
+
+	agent.must(agent.api(http.MethodGet, "/cmdb/items?class="+
+		strconv.FormatUint(uint64(computer.ClassID), 10)+","+strconv.FormatUint(uint64(made["location"].ClassID), 10),
+		nil), http.StatusOK).Data(t, &two)
+
+	if two.TotalCount != 2 {
+		t.Errorf("the computers and the locations together are %d items, want the one of each", two.TotalCount)
 	}
 
 	var found struct {

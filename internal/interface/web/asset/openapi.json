@@ -5439,9 +5439,9 @@
             "name": "class",
             "in": "query",
             "schema": {
-              "type": "integer"
+              "type": "string"
             },
-            "description": "A class, by its id"
+            "description": "One class or several, by their ids, comma-separated"
           },
           {
             "name": "q",

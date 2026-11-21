@@ -7862,6 +7862,694 @@ function wireClassDefinitions() {
   form.addEventListener('submit', (e) => { e.preventDefault(); saveClassDefinition(e.target); });
 }
 
+// ------------------------------------------------------- configuration items
+
+/**
+ * What the items' screen reads besides the items: the classes, the states an
+ * item can be in, the lists a definition picks from, and each class's
+ * definitions by version. Kept between loads, so that a form drawn from a
+ * definition does not ask for it again with every keystroke.
+ */
+const assetLists = {
+  classes: [],
+  deployment: [],
+  incident: [],
+  catalogs: new Map(),
+  definitions: new Map(),
+};
+
+/** Where the page of items stands. */
+const itemPaging = { page: 1, limit: 50, total: 0 };
+
+/**
+ * The item open below the list and its versions, or null. version is the one on
+ * screen, which is the newest unless an older one was chosen to be read.
+ */
+let itemShown = null;
+
+/** The kinds of record an attribute names by id, searched rather than listed. */
+const REFERENCE_KINDS = {
+  Contact: SEARCHED_KINDS.contact,
+  Organisation: SEARCHED_KINDS.organisation,
+  CIClassReference: {
+    path: '/cmdb/items',
+    describe: (item) => `${item.number} ${item.name}`,
+  },
+};
+
+/** The classes as choices, by their names in the reader's words. */
+function classChoices(classes) {
+  return classes
+    .map((entry) => ({ value: String(entry.id), label: catalogValueTitle(entry.name) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Fills the items' screen for whoever may read them: the classes to narrow the
+ * list by, the page of items, and the open one, read again - unless somebody is
+ * writing in it, whose words a reload must not take.
+ */
+async function loadConfigItems() {
+  if (!can('assets:read')) return;
+
+  const [classes, deployment, incident] = await Promise.all([
+    api('/cmdb/classes'),
+    api('/general-catalog?class=ITSM::ConfigItem::DeploymentState'),
+    api('/general-catalog?class=ITSM::Core::IncidentState'),
+  ]);
+
+  assetLists.classes = classes?.items ?? [];
+  assetLists.deployment = deployment?.items ?? [];
+  assetLists.incident = incident?.items ?? [];
+  assetLists.catalogs.clear();
+  assetLists.definitions.clear();
+
+  fillSelect($('#form-configitem-filter').elements.class, classChoices(assetLists.classes),
+    { placeholder: t('configitem.everyClass', 'every class'), labelKey: 'label', valueKey: 'value' });
+
+  await loadConfigItemPage();
+
+  if (itemShown && !beingEdited($('#form-configitem'))) await openConfigItem(itemShown.item.id);
+}
+
+/** Reads the page of items the filter asks for, and draws it. */
+async function loadConfigItemPage() {
+  const filter = $('#form-configitem-filter');
+  const query = new URLSearchParams({ limit: String(itemPaging.limit), page: String(itemPaging.page) });
+
+  if (filter.elements.class.value) query.set('class', filter.elements.class.value);
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+
+  const page = await api(`/cmdb/items?${query}`);
+  itemPaging.total = page?.totalCount ?? 0;
+
+  fillTable($('#table-configitem tbody'), (page?.items ?? []).map(configItemRow), 7,
+    t('configitem.empty', 'No items.'));
+
+  const { total, limit } = itemPaging;
+  const from = total === 0 ? 0 : (itemPaging.page - 1) * limit + 1;
+  const to = Math.min(itemPaging.page * limit, total);
+
+  $('#configitems-range').textContent = fillIn(t('ticket.range', '{0}–{1} of {2}'), [from, to, total]);
+  $('#configitems-previous').disabled = itemPaging.page <= 1;
+  $('#configitems-next').disabled = to >= total;
+}
+
+/** A catalog value by its id among those read, in the reader's words. */
+function catalogEntryTitle(entries, id) {
+  const entry = entries.find((candidate) => candidate.id === id);
+
+  return entry ? catalogValueTitle(entry.name) : `#${id}`;
+}
+
+/** One item as a row of the list. */
+function configItemRow(item) {
+  const changed = item.changedByName
+    ? fillIn(t('configitem.changedBy', '{0}, by {1}'), [fmtMoment(item.changedAt), item.changedByName])
+    : fmtMoment(item.changedAt);
+
+  return el('tr', {},
+    el('td', { class: 'text' },
+      el('button', { class: 'link', text: item.number, onclick: () => openConfigItem(item.id) })),
+    el('td', { class: 'text', text: item.name }),
+    el('td', { class: 'text', text: catalogEntryTitle(assetLists.classes, item.classId) }),
+    el('td', { class: 'text', text: catalogEntryTitle(assetLists.deployment, item.deploymentStateId) }),
+    el('td', { class: 'text', text: catalogEntryTitle(assetLists.incident, item.incidentStateId) }),
+    el('td', { class: 'num', text: String(item.versionCount) }),
+    el('td', { text: changed }),
+  );
+}
+
+/** A class's definitions, the newest first, read once a load. */
+async function classDefinitions(classId) {
+  if (!assetLists.definitions.has(classId)) {
+    assetLists.definitions.set(classId, (await api(`/cmdb/classes/${classId}/definitions`))?.items ?? []);
+  }
+
+  return assetLists.definitions.get(classId);
+}
+
+/** The values of a list of the general catalog, read once a load. */
+async function catalogList(catalogClass) {
+  if (!assetLists.catalogs.has(catalogClass)) {
+    const values = (await api(`/general-catalog?class=${encodeURIComponent(catalogClass)}`))?.items ?? [];
+    assetLists.catalogs.set(catalogClass, values);
+  }
+
+  return assetLists.catalogs.get(catalogClass);
+}
+
+/**
+ * The lists a definition picks from, read before its form is drawn, so that
+ * drawing it waits on nothing.
+ */
+async function readListsOf(attributes) {
+  const wanted = new Set();
+  const walk = (list) => {
+    for (const attribute of list) {
+      if (attribute.type === 'GeneralCatalog' && attribute.catalog) wanted.add(attribute.catalog);
+      walk(attribute.sub ?? []);
+    }
+  };
+
+  walk(attributes);
+  await Promise.all([...wanted].map(catalogList));
+}
+
+/**
+ * What the records a version names by id are called, for the choices that keep
+ * them: a contact, an organisation or another item is searched for, never
+ * listed whole, so the one already chosen has to be read on its own.
+ */
+async function referenceLabels(attributes, data) {
+  const asked = [];
+  const walk = (list, values) => {
+    for (const attribute of list) {
+      for (const occurrence of values?.[attribute.key] ?? []) {
+        const kind = REFERENCE_KINDS[attribute.type];
+        if (kind && occurrence.value) asked.push({ kind, id: occurrence.value });
+        walk(attribute.sub ?? [], occurrence.sub);
+      }
+    }
+  };
+
+  walk(attributes, data);
+
+  const labels = new Map();
+
+  await Promise.all(asked.slice(0, 50).map(async ({ kind, id }) => {
+    try {
+      labels.set(`${kind.path}/${id}`, kind.describe(await api(`${kind.path}/${id}`)));
+    } catch {
+      labels.set(`${kind.path}/${id}`, fillIn(t('configitem.gone', '#{0}, no longer there'), [id]));
+    }
+  }));
+
+  return labels;
+}
+
+/** Opens the form for a new item, of the first class still offered. */
+async function startConfigItem() {
+  const form = $('#form-configitem');
+
+  resetConfigItemForm();
+  $('#configitem-detail').hidden = false;
+
+  const offered = assetLists.classes.filter((entry) => entry.valid && entry.version > 0);
+  fillSelect(form.elements.classId, classChoices(offered), { labelKey: 'label', valueKey: 'value' });
+  form.elements.classId.disabled = false;
+
+  await drawNewItemFields();
+  $('#configitem-detail').scrollIntoView({ block: 'start' });
+  form.elements.name.focus();
+}
+
+/** Draws the fields of a new item of the class chosen, from its definition as it stands. */
+async function drawNewItemFields() {
+  const form = $('#form-configitem');
+  const classId = Number(form.elements.classId.value);
+  const definition = classId ? (await classDefinitions(classId))[0] : null;
+
+  fillStateChoices(form, null);
+  await drawItemAttributes(definition?.attributes ?? [], {}, false);
+}
+
+/** Fills the two states, offering what is still offered and keeping what a version names. */
+function fillStateChoices(form, version) {
+  const choices = (entries, kept) => entries
+    .filter((entry) => entry.valid || entry.id === kept)
+    .map((entry) => ({ value: String(entry.id), label: catalogValueTitle(entry.name) }));
+
+  fillSelect(form.elements.deploymentStateId, choices(assetLists.deployment, version?.deploymentStateId),
+    { placeholder: t('configitem.choose', 'choose…'), labelKey: 'label', valueKey: 'value' });
+  fillSelect(form.elements.incidentStateId, choices(assetLists.incident, version?.incidentStateId),
+    { placeholder: t('configitem.choose', 'choose…'), labelKey: 'label', valueKey: 'value' });
+
+  form.elements.deploymentStateId.value = version ? String(version.deploymentStateId) : '';
+  form.elements.incidentStateId.value = version ? String(version.incidentStateId) : '';
+}
+
+/**
+ * Opens an item: the form holding what its newest version says, under its
+ * class's definition as it stands now - which is what the next version is
+ * written under - and its versions below. Read only for whoever may not write
+ * items.
+ */
+async function openConfigItem(id) {
+  let item;
+  let versions;
+
+  try {
+    [item, versions] = await Promise.all([api(`/cmdb/items/${id}`), api(`/cmdb/items/${id}/versions`)]);
+  } catch (err) {
+    toastFailure(err);
+    closeConfigItem();
+    await loadConfigItemPage();
+
+    return;
+  }
+
+  itemShown = { item, versions: versions?.items ?? [], version: null };
+
+  const form = $('#form-configitem');
+  const definition = (await classDefinitions(item.classId))[0];
+
+  resetConfigItemForm({ keepShown: true });
+  $('#configitem-detail').hidden = false;
+
+  form.elements.id.value = String(item.id);
+  fillSelect(form.elements.classId, classChoices(assetLists.classes), { labelKey: 'label', valueKey: 'value' });
+  form.elements.classId.value = String(item.classId);
+  form.elements.classId.disabled = true;
+  form.elements.name.value = item.version.name;
+  fillStateChoices(form, item.version);
+
+  // Drawn rather than declared with a key, because it carries the item's
+  // number; see editRole for why the key has to come off.
+  const heading = $('#configitem-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('configItemFormTitle', () => {
+    heading.textContent = fillIn(t('configitem.edit', 'Item {0}'), [item.number]);
+  });
+
+  swapTheLabel($('#configitem-submit'), 'configitem.saveVersion', 'Keep as a new version');
+  $('#configitem-delete').hidden = !can('assets:write');
+
+  await drawItemAttributes(definition?.attributes ?? [], item.version.data, !can('assets:write'));
+  drawItemVersions();
+}
+
+/**
+ * Shows an older version as it was written - under the definition it was
+ * written with, and read only, because a version is never changed. The newest
+ * is the form again.
+ */
+async function showItemVersion(version) {
+  if (!itemShown) return;
+
+  if (version.id === itemShown.versions[0]?.id) {
+    await openConfigItem(itemShown.item.id);
+
+    return;
+  }
+
+  const definitions = await classDefinitions(itemShown.item.classId);
+  const definition = definitions.find((candidate) => candidate.id === version.definitionId);
+  const form = $('#form-configitem');
+
+  itemShown.version = version;
+  form.elements.name.value = version.name;
+  fillStateChoices(form, version);
+  $('#configitem-fields').disabled = true;
+  $('#configitem-submit').hidden = true;
+
+  const place = itemShown.versions.length - itemShown.versions.indexOf(version);
+  const note = $('#configitem-version-shown');
+
+  note.replaceChildren(
+    el('span', { text: fillIn(t('configitem.olderShown', 'Version {0} as it was written; a version is never changed.'),
+      [place]) }),
+    ' ',
+    el('button', {
+      type: 'button',
+      class: 'link',
+      text: t('configitem.backToNewest', 'back to the newest'),
+      onclick: () => openConfigItem(itemShown.item.id),
+    }),
+  );
+  note.hidden = false;
+
+  await drawItemAttributes(definition?.attributes ?? [], version.data, true);
+  drawItemVersions();
+}
+
+/** Draws the open item's versions, the newest first, the one on screen marked. */
+function drawItemVersions() {
+  const shown = itemShown.version ?? itemShown.versions[0];
+  const count = itemShown.versions.length;
+
+  fillTable($('#table-configitem-versions tbody'), itemShown.versions.map((version, i) => el('tr',
+    { 'aria-current': version === shown ? 'true' : null },
+    el('td', { class: 'num', text: String(count - i) }),
+    el('td', { text: fmtMoment(version.createdAt) }),
+    el('td', { class: 'text', text: version.createdByName || (version.createdBy ? `#${version.createdBy}` : '–') }),
+    el('td', { class: 'text', text: version.name }),
+    el('td', { class: 'actions' }, version === shown ? null : el('button', {
+      type: 'button',
+      class: 'link',
+      text: t('configitem.read', 'read'),
+      onclick: () => showItemVersion(version),
+    })),
+  )), 5);
+}
+
+/**
+ * Draws a definition's attributes into the form, holding what data says: each
+ * as often as it occurs there, or as often as the definition starts it with,
+ * and never fewer times than it has to occur.
+ */
+async function drawItemAttributes(attributes, data, readOnly) {
+  await readListsOf(attributes);
+  const labels = await referenceLabels(attributes, data);
+
+  const box = $('#configitem-attributes');
+  box.replaceChildren(...attributes.map((attribute) => attributeBlock(attribute, data?.[attribute.key], readOnly,
+    labels)));
+  enhanceDateFields(box);
+
+  for (const native of $$('input[type="date"][data-value]', box)) setDateField(native, native.dataset.value);
+
+  $('#configitem-fields').disabled = readOnly;
+  $('#configitem-submit').hidden = readOnly;
+}
+
+/** One attribute: its occurrences, and the way to add one while it may occur again. */
+function attributeBlock(attribute, occurrences, readOnly, labels) {
+  const section = attribute.type === 'Section';
+  const block = el(section ? 'fieldset' : 'div', {
+    class: section ? 'ci-section' : 'ci-attribute',
+    'data-key': attribute.key,
+  });
+
+  block.append(el(section ? 'legend' : 'span', { class: section ? '' : 'ci-name', text: attribute.name }));
+
+  const list = el('div', { class: 'ci-occurrences' });
+  const given = occurrences ?? Array.from({ length: Math.max(attribute.countDefault, attribute.countMin) },
+    () => ({}));
+
+  for (const occurrence of given) list.append(occurrenceRow(attribute, occurrence, readOnly, labels));
+  block.append(list);
+
+  if (!readOnly && attribute.countMax > 1) {
+    const add = el('button', {
+      type: 'button',
+      class: 'link',
+      'data-ci': 'add',
+      text: fillIn(t('configitem.addAnother', 'add another: {0}'), [attribute.name]),
+      onclick: () => {
+        list.append(occurrenceRow(attribute, {}, false, labels));
+        enhanceDateFields(list);
+        countOccurrences(block, attribute);
+      },
+    });
+
+    block.append(add);
+  }
+
+  countOccurrences(block, attribute);
+
+  return block;
+}
+
+/** Offers adding and removing an occurrence only while the definition allows it. */
+function countOccurrences(block, attribute) {
+  const rows = $$(':scope > .ci-occurrences > .ci-occurrence', block);
+  const add = block.querySelector(':scope > [data-ci="add"]');
+
+  if (add) add.hidden = rows.length >= attribute.countMax;
+
+  for (const row of rows) {
+    const remove = row.querySelector(':scope > [data-ci="remove"]');
+    if (remove) remove.hidden = rows.length <= attribute.countMin;
+  }
+}
+
+/** One occurrence of an attribute: its value, and the attributes beneath it. */
+function occurrenceRow(attribute, occurrence, readOnly, labels) {
+  const row = el('div', { class: 'ci-occurrence' });
+
+  if (attribute.type !== 'Section') row.append(valueField(attribute, occurrence.value ?? '', labels));
+
+  if (!readOnly && attribute.countMax > attribute.countMin) {
+    row.append(el('button', {
+      type: 'button',
+      class: 'link',
+      'data-ci': 'remove',
+      text: t('configitem.remove', 'remove'),
+      onclick: () => {
+        const block = row.closest('[data-key]');
+        row.remove();
+        countOccurrences(block, attribute);
+      },
+    }));
+  }
+
+  if (attribute.sub?.length) {
+    const sub = el('div', { class: 'ci-sub' });
+    sub.append(...attribute.sub.map((child) => attributeBlock(child, occurrence.sub?.[child.key], readOnly, labels)));
+    row.append(sub);
+  }
+
+  return row;
+}
+
+/** The control a value of an attribute's type is written in, named by the attribute. */
+function valueField(attribute, value, labels) {
+  const named = { 'aria-label': attribute.name, class: 'ci-value' };
+  const required = attribute.required ? { required: true } : {};
+
+  switch (attribute.type) {
+    case 'TextArea':
+      return el('textarea', { ...named, ...required, rows: '3', maxlength: '50000', text: value });
+    case 'Date':
+      return el('input', { ...named, ...required, type: 'date', 'data-value': value });
+    case 'DateTime': {
+      const at = value ? dayAndTimeIn(value, readerZone()) : null;
+
+      return el('input', { ...named, ...required, type: 'datetime-local', value: at ? `${at.day}T${at.time}` : '' });
+    }
+    case 'GeneralCatalog': {
+      const select = el('select', { ...named, ...required });
+      const entries = (assetLists.catalogs.get(attribute.catalog) ?? [])
+        .filter((entry) => entry.valid || String(entry.id) === value);
+
+      select.append(el('option', { value: '', text: '–' }),
+        ...entries.map((entry) => el('option', { value: String(entry.id), text: catalogValueTitle(entry.name) })));
+      select.value = value;
+
+      return select;
+    }
+    case 'Contact':
+    case 'Organisation':
+    case 'CIClassReference':
+      return referenceField(attribute, value, labels);
+    default:
+      return el('input', {
+        ...named, ...required, type: 'text', maxlength: String(attribute.maxLength || 50000), value,
+      });
+  }
+}
+
+/**
+ * A value naming a contact, an organisation or another item: a search and the
+ * choice it fills, which always keeps the record already named. A reference to
+ * an item is searched among the classes the attribute names.
+ */
+function referenceField(attribute, value, labels) {
+  const kind = REFERENCE_KINDS[attribute.type];
+  const select = el('select', { 'aria-label': attribute.name, class: 'ci-value' });
+  const search = el('input', {
+    type: 'search',
+    'aria-label': fillIn(t('configitem.searchFor', 'search for {0}'), [attribute.name]),
+    placeholder: t('configitem.findHint', 'name or number'),
+    maxlength: '255',
+  });
+
+  const offer = (found) => {
+    const kept = select.value;
+    const options = [el('option', { value: '', text: '–' })];
+
+    if (kept && !found.some((record) => String(record.id) === kept)) {
+      options.push(el('option', { value: kept, text: select.selectedOptions[0]?.textContent ?? `#${kept}` }));
+    }
+
+    options.push(...found.map((record) => el('option', { value: String(record.id), text: kind.describe(record) })));
+    select.replaceChildren(...options);
+    select.value = kept;
+  };
+
+  select.append(el('option', { value: '', text: '–' }));
+
+  if (value) {
+    select.append(el('option', { value, text: labels.get(`${kind.path}/${value}`) ?? `#${value}` }));
+    select.value = value;
+  }
+
+  let pending;
+
+  search.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(async () => {
+      const query = new URLSearchParams({ q: search.value.trim(), limit: String(SEARCH_OFFERS) });
+
+      if (attribute.type === 'CIClassReference') {
+        const classes = assetLists.classes.filter((entry) => (attribute.classes ?? []).includes(entry.name));
+        query.set('class', classes.map((entry) => entry.id).join(',') || '0');
+      }
+
+      try {
+        offer((await api(`${kind.path}?${query}`))?.items ?? []);
+      } catch (err) {
+        toastFailure(err);
+      }
+    }, 250);
+  });
+
+  return el('span', { class: 'ci-choice' }, search, select);
+}
+
+/** What the form's attributes hold, as the API takes a version's values. */
+function attributeData(box) {
+  const data = {};
+
+  for (const block of $$(':scope > [data-key]', box)) {
+    const occurrences = $$(':scope > .ci-occurrences > .ci-occurrence', block).map((row) => {
+      const occurrence = {};
+      // A date's named box sits inside the wrapper enhanceDateFields puts around it.
+      const field = row.querySelector(':scope > .ci-value, :scope > .ci-choice > .ci-value, '
+        + ':scope > .date-wrap > .ci-value');
+      const value = field ? fieldValue(field) : '';
+
+      if (value) occurrence.value = value;
+
+      const sub = row.querySelector(':scope > .ci-sub');
+      if (sub) {
+        const below = attributeData(sub);
+        if (Object.keys(below).length) occurrence.sub = below;
+      }
+
+      return occurrence;
+    });
+
+    if (occurrences.length) data[block.dataset.key] = occurrences;
+  }
+
+  return data;
+}
+
+/** A value as the API takes it: a moment in the reader's zone as the moment it names. */
+function fieldValue(field) {
+  if (field.type === 'datetime-local') {
+    const [day, time] = field.value.split('T');
+
+    return day ? momentIn(day, time, readerZone()) : '';
+  }
+
+  return field.value;
+}
+
+/** Writes the item: a new one with its first version, or the open one's next version. */
+async function saveConfigItem(form) {
+  const id = form.elements.id.value;
+  const body = {
+    name: form.elements.name.value,
+    deploymentStateId: Number(form.elements.deploymentStateId.value) || 0,
+    incidentStateId: Number(form.elements.incidentStateId.value) || 0,
+    data: attributeData($('#configitem-attributes')),
+  };
+
+  if (!id) body.classId = Number(form.elements.classId.value) || 0;
+
+  await mutate(() => api(id ? `/cmdb/items/${id}/versions` : '/cmdb/items',
+    { method: 'POST', body: JSON.stringify(body) }),
+    id ? t('msg.versionKept', 'Kept as a new version') : t('msg.itemAdded', 'Item added'),
+    async (item) => {
+      delete form.dataset.editing;
+      await loadConfigItemPage();
+      await openConfigItem(item.id);
+    });
+}
+
+/** Deletes the open item with every version of it, once asked. */
+async function deleteConfigItem() {
+  if (!itemShown) return;
+
+  const { item } = itemShown;
+  const sure = await confirmDialog({
+    title: t('configitem.deleteTitle', 'Delete the item?'),
+    text: fillIn(t('configitem.deleteText', '{0} {1} goes with every version of it.'), [item.number, item.name]),
+    confirmLabel: t('configitem.deleteConfirm', 'Delete it'),
+  });
+
+  if (!sure) return;
+
+  await mutate(() => api(`/cmdb/items/${item.id}`, { method: 'DELETE' }), t('msg.itemDeleted', 'Item deleted'),
+    async () => {
+      closeConfigItem();
+      await loadConfigItemPage();
+    });
+}
+
+/**
+ * Puts the item form back to adding one, empty. keepShown leaves which item is
+ * open alone, for opening another in its place.
+ */
+function resetConfigItemForm({ keepShown = false } = {}) {
+  const form = $('#form-configitem');
+
+  form.reset();
+  form.elements.id.value = '';
+  delete form.dataset.editing;
+  form.elements.classId.disabled = false;
+  $('#configitem-fields').disabled = false;
+  $('#configitem-attributes').replaceChildren();
+  $('#configitem-version-shown').hidden = true;
+  stopRedrawing('configItemFormTitle');
+  swapTheLabel($('#configitem-form-title'), 'configitem.create', 'Add an item');
+  swapTheLabel($('#configitem-submit'), 'configitem.add', 'Add the item');
+  $('#configitem-submit').hidden = false;
+  $('#configitem-delete').hidden = true;
+  $('#table-configitem-versions tbody').replaceChildren();
+
+  if (!keepShown) itemShown = null;
+}
+
+/** Closes the item below the list. */
+function closeConfigItem() {
+  resetConfigItemForm();
+  $('#configitem-detail').hidden = true;
+}
+
+function wireConfigItems() {
+  const filter = $('#form-configitem-filter');
+  let pending;
+
+  filter.addEventListener('submit', (e) => e.preventDefault());
+  filter.elements.class.addEventListener('change', () => {
+    itemPaging.page = 1;
+    loadConfigItemPage().catch((err) => toastFailure(err));
+  });
+  filter.elements.q.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => {
+      itemPaging.page = 1;
+      loadConfigItemPage().catch((err) => toastFailure(err));
+    }, 250);
+  });
+
+  $('#configitems-previous').addEventListener('click', () => {
+    itemPaging.page = Math.max(1, itemPaging.page - 1);
+    loadConfigItemPage().catch((err) => toastFailure(err));
+  });
+  $('#configitems-next').addEventListener('click', () => {
+    itemPaging.page += 1;
+    loadConfigItemPage().catch((err) => toastFailure(err));
+  });
+
+  $('#configitem-new').addEventListener('click', () => startConfigItem().catch((err) => toastFailure(err)));
+
+  const form = $('#form-configitem');
+
+  form.elements.classId.addEventListener('change', () => {
+    if (!form.elements.id.value) drawNewItemFields().catch((err) => toastFailure(err));
+  });
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveConfigItem(e.target); });
+  $('#configitem-cancel').addEventListener('click', closeConfigItem);
+  $('#configitem-delete').addEventListener('click', () => deleteConfigItem());
+}
+
 // ------------------------------------------------------------------ portal
 
 /** The ticket open on the portal's screen, or null. */
@@ -12114,6 +12802,14 @@ function forgetTheLastAccount() {
   ciClasses = [];
   $('#form-classdef').reset();
   $('#table-classdef-versions tbody').replaceChildren();
+  assetLists.classes = [];
+  assetLists.deployment = [];
+  assetLists.incident = [];
+  assetLists.catalogs.clear();
+  assetLists.definitions.clear();
+  closeConfigItem();
+  $('#form-configitem-filter').reset();
+  itemPaging.page = 1;
   closePublishedFAQ('portal');
   $('#form-portal-faq').reset();
   $('#portal-faq-list').replaceChildren();
@@ -12976,6 +13672,16 @@ const TOUR_STEPS = [
     text: () => t('tour.templates.text',
       'An answer template is offered to whoever writes in a ticket of its queue, or of every queue, with the '
       + 'ticket\'s placeholders filled in their words. It starts an article; it does not send one.'),
+  },
+  {
+    target: '#configitem-card',
+    view: 'assets',
+    permission: 'assets:read',
+    title: () => t('tour.configitem.title', 'The inventory'),
+    text: () => t('tour.configitem.text',
+      'The configuration items, a page of them by class and words, each opened below the list in a form drawn '
+      + 'from its class\'s definition. A change is kept as the item\'s next version, and every version stays '
+      + 'readable as it was written.'),
   },
   {
     target: '#catalog-card',
@@ -17538,6 +18244,7 @@ async function refreshAll() {
   await loadCustomers();
   await loadGeneralCatalog();
   await loadClassDefinitions();
+  await loadConfigItems();
   await loadPortal();
   await loadFAQ();
   await loadTickets();
@@ -17614,6 +18321,7 @@ function wireForms() {
   wirePublishedFAQ();
   wireGeneralCatalog();
   wireClassDefinitions();
+  wireConfigItems();
   wireSysConfig();
   wireCalendars();
   wireSla();

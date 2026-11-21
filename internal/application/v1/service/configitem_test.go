@@ -87,7 +87,7 @@ func newItemWorld(t *testing.T) itemWorld {
 
 	world.items = service.NewConfigItemApplicationService(memory.NewConfigItemRepository(), service.ConfigItemSources{
 		Definitions: definitions, Catalog: catalog, Contacts: contacts,
-		Organisations: memory.NewOrganisationRepository(),
+		Organisations: memory.NewOrganisationRepository(), Users: memory.NewUserRepository(),
 	})
 
 	return world
@@ -148,7 +148,7 @@ func TestAConfigItemIsKeptInVersions(t *testing.T) {
 		t.Errorf("the versions read %+v, %v; want both, the newest first", versions, err)
 	}
 
-	listed, total, err := w.items.List(ctx, service.ConfigItemListFilter{ClassID: w.computer, Search: "erika"})
+	listed, total, err := w.items.List(ctx, service.ConfigItemListFilter{ClassIDs: []uint{w.computer}, Search: "erika"})
 	if err != nil || total != 1 || listed[0].ID != made.Item.ID {
 		t.Errorf("a search for the laptop found %+v (%d, %v)", listed, total, err)
 	}

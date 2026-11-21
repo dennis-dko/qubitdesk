@@ -230,7 +230,7 @@
       <button class="tab" data-view="users" data-perm="users:read" data-i18n="nav.users">Users<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-users"/></svg></button>
       <button class="tab" data-view="roles" data-perm="roles:read" data-i18n="nav.roles">Roles<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-roles"/></svg></button>
       <button class="tab" data-view="ticketsetup" data-perm="queues:write" data-i18n="nav.ticketSetup">Ticket setup<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-ticketsetup"/></svg></button>
-      <button class="tab" data-view="assets" data-perm="catalog:write" data-i18n="nav.assets">Assets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-assets"/></svg></button>
+      <button class="tab" data-view="assets" data-perm="assets:read,catalog:write" data-i18n="nav.assets">Assets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-assets"/></svg></button>
       <button class="tab" data-view="automation" data-perm="automation:write" data-i18n="nav.automation">Automation<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-automation"/></svg></button>
       <button class="tab" data-view="settings" data-i18n="nav.settings">My account<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-account"/></svg></button>
       <button class="tab" data-view="admin" id="tab-admin" hidden data-perm="settings:manage" data-i18n="nav.admin">Settings<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-admin"/></svg></button>
@@ -1443,6 +1443,79 @@
          general catalog - the lists the configuration items pick from - and
          what an item of each class holds. -->
     <section id="view-assets" class="view" hidden>
+      <!-- The configuration items, for whoever may read them: a page of them by
+           class and words, and the one opened below it, in a form drawn from its
+           class's definition. -->
+      <div class="card" id="configitem-card" data-perm="assets:read">
+        <h2 data-i18n="configitem.title">Configuration items</h2>
+        <p class="muted" data-i18n="configitem.hint">The organisation's inventory: every item of a class holds what the class's definition says it holds. A change is kept as the item's next version, so what it said before stays readable.</p>
+        <form method="post" id="form-configitem-filter" class="form">
+          <div class="grid">
+            <label data-i18n="configitem.class">Class<select name="class" data-not-an-edit></select></label>
+            <label data-i18n="configitem.search">Search<input type="search" name="q" maxlength="255" data-not-an-edit data-i18n-placeholder="configitem.searchHint" placeholder="name or number"></label>
+          </div>
+        </form>
+        <div class="row" data-perm="assets:write">
+          <button type="button" id="configitem-new" data-i18n="configitem.new">Add an item</button>
+        </div>
+        <div class="table-wrap">
+          <table id="table-configitem">
+            <thead>
+              <tr>
+                <th data-i18n="configitem.number">Number</th>
+                <th data-i18n="field.name">Name</th>
+                <th data-i18n="configitem.class">Class</th>
+                <th data-i18n="field.deploymentStateId">Deployment state</th>
+                <th data-i18n="field.incidentStateId">Incident state</th>
+                <th class="num" data-i18n="configitem.versions">Versions</th>
+                <th data-i18n="configitem.changed">Changed</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="row">
+          <button type="button" class="secondary" id="configitems-previous" data-i18n="ticket.previous">Previous</button>
+          <span class="muted" id="configitems-range"></span>
+          <button type="button" class="secondary" id="configitems-next" data-i18n="ticket.next">Next</button>
+        </div>
+      </div>
+      <div class="card" id="configitem-detail" data-perm="assets:read" hidden>
+        <h2 id="configitem-form-title" data-i18n="configitem.create">Add an item</h2>
+        <form method="post" id="form-configitem" class="form">
+          <input type="hidden" name="id">
+          <fieldset id="configitem-fields" class="ci-fields">
+            <div class="grid">
+              <label data-i18n="configitem.class">Class<select name="classId" required></select></label>
+              <label data-i18n="field.name">Name<input type="text" name="name" maxlength="255" required></label>
+              <label data-i18n="field.deploymentStateId">Deployment state<select name="deploymentStateId" required></select></label>
+              <label data-i18n="field.incidentStateId">Incident state<select name="incidentStateId" required></select></label>
+            </div>
+            <div id="configitem-attributes"></div>
+          </fieldset>
+          <p class="muted" id="configitem-version-shown" hidden></p>
+          <div class="row">
+            <button type="submit" id="configitem-submit" data-perm="assets:write" data-i18n="configitem.add">Add the item</button>
+            <button type="button" class="secondary" id="configitem-cancel" data-i18n="configitem.close">Close</button>
+            <button type="button" class="danger" id="configitem-delete" data-perm="assets:write" hidden data-i18n="configitem.delete">Delete the item</button>
+          </div>
+        </form>
+        <h3 data-i18n="configitem.versions">Versions</h3>
+        <div class="table-wrap">
+          <table id="table-configitem-versions">
+            <thead>
+              <tr>
+                <th class="num" data-i18n="classdef.version">Version</th>
+                <th data-i18n="classdef.written">Written</th>
+                <th data-i18n="configitem.by">By</th>
+                <th data-i18n="field.name">Name</th>
+                <th class="actions" data-i18n="field.action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
       <div class="card" id="catalog-card" data-perm="catalog:write">
         <h2 data-i18n="gencatalog.title">General catalog</h2>
         <p class="muted" data-i18n="gencatalog.hint">The lists configuration items pick from, each value under a class naming its list. A value nobody should pick any more is retired; nothing is deleted.</p>

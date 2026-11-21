@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"strings"
 	"time"
 
 	"gofr.dev/pkg/gofr"
@@ -36,6 +37,7 @@ type ConfigItemResponse struct {
 	ChangedAt         time.Time `json:"changedAt"`
 	CreatedBy         uint      `json:"createdBy"`
 	ChangedBy         uint      `json:"changedBy"`
+	ChangedByName     string    `json:"changedByName"`
 }
 
 // ConfigItemVersionResponse is one version of an item. Its values travel by
@@ -50,6 +52,7 @@ type ConfigItemVersionResponse struct {
 	Data              model.AttributeData `json:"data"`
 	CreatedAt         time.Time           `json:"createdAt"`
 	CreatedBy         uint                `json:"createdBy"`
+	CreatedByName     string              `json:"createdByName"`
 }
 
 // ConfigItemDetailResponse is an item with the version it stands at.
@@ -75,16 +78,16 @@ func (r ConfigItemRequest) command() service.ConfigItemVersionCommand {
 	}
 }
 
-func newConfigItemResponse(item *model.ConfigItem) ConfigItemResponse {
+func newConfigItemResponse(item *model.ConfigItem, names map[uint]string) ConfigItemResponse {
 	return ConfigItemResponse{
 		ID: item.ID, Number: item.Number, ClassID: item.ClassID, Name: item.Name,
 		DeploymentStateID: item.DeploymentStateID, IncidentStateID: item.IncidentStateID,
 		VersionCount: item.VersionCount, CreatedAt: item.CreatedAt, ChangedAt: item.ChangedAt,
-		CreatedBy: item.CreatedBy, ChangedBy: item.ChangedBy,
+		CreatedBy: item.CreatedBy, ChangedBy: item.ChangedBy, ChangedByName: names[item.ChangedBy],
 	}
 }
 
-func newConfigItemVersionResponse(version *model.ConfigItemVersion) ConfigItemVersionResponse {
+func newConfigItemVersionResponse(version *model.ConfigItemVersion, names map[uint]string) ConfigItemVersionResponse {
 	data := version.Data
 	if data == nil {
 		data = model.AttributeData{}
@@ -93,27 +96,48 @@ func newConfigItemVersionResponse(version *model.ConfigItemVersion) ConfigItemVe
 	return ConfigItemVersionResponse{
 		ID: version.ID, DefinitionID: version.DefinitionID, Name: version.Name,
 		DeploymentStateID: version.DeploymentStateID, IncidentStateID: version.IncidentStateID, Data: data,
-		CreatedAt: version.CreatedAt, CreatedBy: version.CreatedBy,
+		CreatedAt: version.CreatedAt, CreatedBy: version.CreatedBy, CreatedByName: names[version.CreatedBy],
 	}
 }
 
-func newConfigItemDetailResponse(item *service.ConfigItemWithVersion) ConfigItemDetailResponse {
+func newConfigItemDetailResponse(item *service.ConfigItemWithVersion, names map[uint]string) ConfigItemDetailResponse {
 	return ConfigItemDetailResponse{
-		ConfigItemResponse: newConfigItemResponse(item.Item),
-		Version:            newConfigItemVersionResponse(item.Version),
+		ConfigItemResponse: newConfigItemResponse(item.Item, names),
+		Version:            newConfigItemVersionResponse(item.Version, names),
 	}
+}
+
+// detail is an item with the version it stands at, the names of who wrote it
+// filled in.
+func (h *ConfigItemHandler) detail(c *gofr.Context, item *service.ConfigItemWithVersion) (any, error) {
+	names, err := h.items.Names(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return newConfigItemDetailResponse(item, names), nil
 }
 
 // List handles GET /api/v1/cmdb/items: a page of the items, narrowed by
-// ?class= and ?q=, by name.
+// ?class= - one class or several, comma-separated - and ?q=, by name.
 func (h *ConfigItemHandler) List(c *gofr.Context) (any, error) {
 	if _, err := h.authz.Require(c, model.PermAssetRead); err != nil {
 		return nil, err
 	}
 
-	class, err := queryUint(c, "class")
-	if err != nil {
-		return nil, toHTTPError(err)
+	var classes []uint
+
+	for _, raw := range strings.Split(c.Param("class"), ",") {
+		if raw = strings.TrimSpace(raw); raw == "" {
+			continue
+		}
+
+		class, err := parseUint(raw, "class")
+		if err != nil {
+			return nil, toHTTPError(err)
+		}
+
+		classes = append(classes, class)
 	}
 
 	limit, err := strictInt(c.Param("limit"), "limit")
@@ -127,13 +151,20 @@ func (h *ConfigItemHandler) List(c *gofr.Context) (any, error) {
 	}
 
 	items, total, err := h.items.List(c, service.ConfigItemListFilter{
-		ClassID: class, Search: c.Param("q"), Limit: limit, Page: page,
+		ClassIDs: classes, Search: c.Param("q"), Limit: limit, Page: page,
 	})
 	if err != nil {
 		return nil, toHTTPError(err)
 	}
 
-	listed := listOf(items, newConfigItemResponse)
+	names, err := h.items.Names(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	listed := listOf(items, func(item *model.ConfigItem) ConfigItemResponse {
+		return newConfigItemResponse(item, names)
+	})
 	listed.TotalCount = total
 
 	return listed, nil
@@ -155,7 +186,7 @@ func (h *ConfigItemHandler) Get(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	return newConfigItemDetailResponse(item), nil
+	return h.detail(c, item)
 }
 
 // Versions handles GET /api/v1/cmdb/items/{id}/versions, the newest first.
@@ -174,7 +205,14 @@ func (h *ConfigItemHandler) Versions(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	return listOf(versions, newConfigItemVersionResponse), nil
+	names, err := h.items.Names(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return listOf(versions, func(version *model.ConfigItemVersion) ConfigItemVersionResponse {
+		return newConfigItemVersionResponse(version, names)
+	}), nil
 }
 
 // Create handles POST /api/v1/cmdb/items: an item of the class named, its first
@@ -195,7 +233,7 @@ func (h *ConfigItemHandler) Create(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	return newConfigItemDetailResponse(item), nil
+	return h.detail(c, item)
 }
 
 // AddVersion handles POST /api/v1/cmdb/items/{id}/versions: the item's next
@@ -221,7 +259,7 @@ func (h *ConfigItemHandler) AddVersion(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	return newConfigItemDetailResponse(item), nil
+	return h.detail(c, item)
 }
 
 // Delete handles DELETE /api/v1/cmdb/items/{id}: the item and every version of it.

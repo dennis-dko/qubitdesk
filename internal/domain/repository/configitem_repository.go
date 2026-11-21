@@ -8,8 +8,9 @@ import (
 
 // ConfigItemFilter narrows a listing of configuration items.
 type ConfigItemFilter struct {
-	// ClassID narrows it to the items of one class, when given.
-	ClassID *uint
+	// ClassIDs narrows it to the items of these classes, when given: a reference
+	// to another item may point at items of several.
+	ClassIDs []uint
 
 	// Search narrows it to items whose name or number holds the words.
 	Search string

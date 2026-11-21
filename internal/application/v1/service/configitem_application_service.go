@@ -32,15 +32,18 @@ type ConfigItemApplicationService struct {
 	catalog       repository.GeneralCatalogRepository
 	contacts      repository.ContactRepository
 	organisations repository.OrganisationRepository
+	users         repository.UserRepository
 	now           func() time.Time
 }
 
-// ConfigItemSources are what an item's values may name besides other items.
+// ConfigItemSources are what an item's values may name besides other items,
+// and the accounts whose names say who wrote a version.
 type ConfigItemSources struct {
 	Definitions   repository.ClassDefinitionRepository
 	Catalog       repository.GeneralCatalogRepository
 	Contacts      repository.ContactRepository
 	Organisations repository.OrganisationRepository
+	Users         repository.UserRepository
 }
 
 // NewConfigItemApplicationService keeps the items and checks what they hold.
@@ -50,16 +53,16 @@ func NewConfigItemApplicationService(
 ) *ConfigItemApplicationService {
 	return &ConfigItemApplicationService{
 		items: items, definitions: sources.Definitions, catalog: sources.Catalog, contacts: sources.Contacts,
-		organisations: sources.Organisations, now: time.Now,
+		organisations: sources.Organisations, users: sources.Users, now: time.Now,
 	}
 }
 
 // ConfigItemListFilter is what a listing of items asks for.
 type ConfigItemListFilter struct {
-	ClassID uint
-	Search  string
-	Limit   int
-	Page    int
+	ClassIDs []uint
+	Search   string
+	Limit    int
+	Page     int
 }
 
 // ConfigItemVersionCommand is one version of an item as somebody writes it.
@@ -94,13 +97,26 @@ func (s *ConfigItemApplicationService) List(
 		return nil, 0, apperror.InvalidFields("page")
 	}
 
-	page := repository.ConfigItemFilter{Search: filter.Search, Limit: filter.Limit, Page: filter.Page}
-	if filter.ClassID != 0 {
-		class := filter.ClassID
-		page.ClassID = &class
+	return s.items.List(ctx, repository.ConfigItemFilter{
+		ClassIDs: filter.ClassIDs, Search: filter.Search, Limit: filter.Limit, Page: filter.Page,
+	})
+}
+
+// Names are the accounts' names by id, for saying who wrote a version and who
+// changed an item last. An account erased since is in none of them, and is
+// shown by its number: what it wrote stays, as an article does.
+func (s *ConfigItemApplicationService) Names(ctx context.Context) (map[uint]string, error) {
+	users, err := s.users.GetAll(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	return s.items.List(ctx, page)
+	names := make(map[uint]string, len(users))
+	for _, user := range users {
+		names[user.ID] = user.Name
+	}
+
+	return names, nil
 }
 
 // Get is an item and the version it stands at.

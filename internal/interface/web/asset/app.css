@@ -1424,6 +1424,22 @@ button.secondary:active { background: var(--quiet-press); }
 .perms { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; padding: 12px 14px; }
 .perms legend { color: var(--muted); font-size: 12px; padding: 0 6px; text-transform: uppercase; }
 
+/* A configuration item's attributes, laid out as its class's definition orders
+   them: a section is a bordered group named by its legend, nested as deep as
+   the definition nests it, and an attribute that may occur more than once keeps
+   its occurrences together with the way to add and remove one. */
+.ci-fields { border: 0; margin: 0; min-width: 0; padding: 0; }
+.ci-section { border: 1px solid var(--border); border-radius: var(--radius); margin: 0 0 12px; min-width: 0; padding: 10px 12px; }
+.ci-section > legend { color: var(--muted); font-size: 12px; padding: 0 6px; text-transform: uppercase; }
+.ci-attribute { display: grid; gap: 6px; margin-bottom: 10px; }
+.ci-name { color: var(--muted); font-size: 13px; }
+.ci-occurrences { display: grid; gap: 6px; }
+.ci-occurrence { align-items: start; display: flex; flex-wrap: wrap; gap: 6px; }
+.ci-occurrence > .ci-value, .ci-occurrence > .ci-choice, .ci-occurrence > .date-wrap { flex: 1 1 240px; min-width: 0; }
+.ci-choice { display: flex; flex-wrap: wrap; gap: 6px; }
+.ci-choice > * { flex: 1 1 160px; min-width: 0; }
+.ci-sub { flex: 1 1 100%; padding-left: 12px; }
+
 .perm-grid { display: grid; gap: 6px 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 
 /* The role editor's rights from 300 pixels, where a right's name and identifier

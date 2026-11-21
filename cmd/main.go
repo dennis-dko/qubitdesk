@@ -1212,7 +1212,7 @@ func main() {
 		ConfigItems: rest.NewConfigItemHandler(appservice.NewConfigItemApplicationService(
 			sqldb.NewConfigItemRepository(db, cfg.Dialect), appservice.ConfigItemSources{
 				Definitions: classDefinitionRepo, Catalog: generalCatalogRepo, Contacts: contactRepo,
-				Organisations: customerRepos.Organisations,
+				Organisations: customerRepos.Organisations, Users: userRepo,
 			}), authorizer),
 	})
 

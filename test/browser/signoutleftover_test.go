@@ -152,6 +152,17 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		await send('/notification-definitions', { name: 'Opened', events: ['TicketCreate'],
 			recipients: ['AgentOwner'], messages: [{ language: 'en', subject: 'New', body: 'Opened.' }] });
 		await send('/exec-plans', { name: 'Mornings', type: 'TimeBased', weekdays: [1], times: ['08:00'] });
+		const place = (await api('/cmdb/classes')).items.find((entry) => entry.name === 'location');
+		const definition = (await api('/cmdb/classes/' + place.id + '/definitions')).items[0];
+		const least = (attributes) => Object.fromEntries(attributes.filter((a) => a.countMin > 0).map((a) => [a.key,
+			Array.from({ length: a.countMin }, () => ({
+				...(a.required ? { value: a.type === 'Date' ? '2026-11-21' : 'kept' } : {}),
+				...(a.sub && a.sub.length ? { sub: least(a.sub) } : {}),
+			}))]));
+		const offered = async (list) => (await api('/general-catalog?class=' + list)).items.find((v) => v.valid).id;
+		await send('/cmdb/items', { classId: place.id, name: 'Head office',
+			deploymentStateId: await offered('ITSM::ConfigItem::DeploymentState'),
+			incidentStateId: await offered('ITSM::Core::IncidentState'), data: least(definition.attributes) });
 		await refreshAll();
 		return true;
 	})()`, &made)
@@ -181,6 +192,7 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		"form-faq-category": `#table-faq-category tbody td.actions button.link:not(.danger)`,
 		"form-faq-article":  `#table-faq tbody td.actions button.link:not(.danger)`,
 		"form-catalog":      `#table-catalog tbody td.actions button.link`,
+		"form-configitem":   `#table-configitem tbody button.link`,
 	}
 
 	for form, opener := range openers {
