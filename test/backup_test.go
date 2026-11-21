@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
@@ -111,4 +112,77 @@ func tablesAndParents(chain string) (map[string]bool, map[string]map[string]bool
 	}
 
 	return tables, parents
+}
+
+// Every column that points at its own table is written by a restore once the
+// table is in, and nothing is named there that does not.
+//
+// A restore inserts a table's rows in the order the backup holds them, so a row
+// pointing at a later one of its own table names an id not there yet, and a
+// database enforcing its keys refuses the restore - found on 2026-11-21, when
+// backups came over from the time recording, whose schema had no such column
+// and whose restore had no answer for one. sqldb.SelfReferences is the answer,
+// and it is a list somebody has to remember, so this reads the chain for both
+// shapes - a column in a CREATE TABLE, and one an ALTER TABLE adds.
+func TestEveryColumnPointingAtItsOwnTableIsWrittenOnceTheTableIsIn(t *testing.T) {
+	chain := read(t, filepath.Join("..", "internal", "infrastructure", "persistence", "migration", "migration.go"))
+
+	found := selfReferences(chain)
+	if len(found) == 0 {
+		t.Fatal("found no column pointing at its own table, so the scan has stopped reading")
+	}
+
+	for table, columns := range found {
+		if len(columns) != 1 {
+			t.Errorf("%s points at itself from %v; sqldb.SelfReferences holds one column a table", table, columns)
+
+			continue
+		}
+
+		if sqldb.SelfReferences[table] != columns[0] {
+			t.Errorf("%s.%s points at its own table, and sqldb.SelfReferences does not name it, so a restore "+
+				"refuses a row pointing at a later one", table, columns[0])
+		}
+	}
+
+	for table, column := range sqldb.SelfReferences {
+		if !slices.Contains(found[table], column) {
+			t.Errorf("sqldb.SelfReferences names %s.%s, which the chain does not make point at its own table",
+				table, column)
+		}
+	}
+}
+
+// selfReferences reads the columns that point at their own table, by table.
+func selfReferences(chain string) map[string][]string {
+	created := regexp.MustCompile(`CREATE TABLE (?:IF NOT EXISTS )?([a-z_]+)`)
+	inline := regexp.MustCompile(`(?m)^\s*([a-z_]+) [^\n]*REFERENCES ([a-z_]+)\(`)
+	added := regexp.MustCompile("ALTER TABLE ([a-z_]+) ADD COLUMN ([a-z_]+)[^\"`]*REFERENCES ([a-z_]+)\\(")
+
+	found := map[string][]string{}
+
+	for _, at := range inline.FindAllStringSubmatchIndex(chain, -1) {
+		line := chain[at[0]:at[1]]
+		if strings.Contains(line, "ALTER TABLE") {
+			continue
+		}
+
+		above := created.FindAllStringSubmatch(chain[:at[0]], -1)
+		if len(above) == 0 {
+			continue
+		}
+
+		table, column, target := above[len(above)-1][1], chain[at[2]:at[3]], chain[at[4]:at[5]]
+		if table == target {
+			found[table] = append(found[table], column)
+		}
+	}
+
+	for _, m := range added.FindAllStringSubmatch(chain, -1) {
+		if m[1] == m[3] {
+			found[m[1]] = append(found[m[1]], m[2])
+		}
+	}
+
+	return found
 }

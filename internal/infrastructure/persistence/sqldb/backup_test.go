@@ -339,3 +339,65 @@ func TestABackupIsDescribedOnOneLine(t *testing.T) {
 		t.Errorf("a backup is described as %q, without its release or its moment", said)
 	}
 }
+
+// A row pointing at a later row of its own table comes back pointing at it.
+//
+// A restore inserts each table after every table it points at, and its rows in
+// the order the backup holds them. Three tables point at themselves - a queue
+// and a category at the one they are filed under, a waiting state at the state
+// it moves a ticket on to - and each can point at a row made after it: a queue
+// or a category moved under a newer one, a closing state added later and named
+// as where a waiting state goes. Inserted as it stood, such a row names an id not there yet, which a
+// database enforcing its keys refuses - PostgreSQL always, SQLite on a
+// connection that asks, as this one does - and the whole restore with it.
+func TestARowPointingAtALaterOneOfItsOwnTableIsRestored(t *testing.T) {
+	original, _ := filled(t)
+
+	for _, statement := range []string{
+		"INSERT INTO queues (name, signature, auto_reply, follow_up) VALUES ('Printer desk', '', '', 'reopen')",
+		"INSERT INTO queues (name, signature, auto_reply, follow_up) VALUES ('Hardware desk', '', '', 'reopen')",
+		"UPDATE queues SET parent_id = (SELECT id FROM queues WHERE name = 'Hardware desk') " +
+			"WHERE name = 'Printer desk'",
+		"INSERT INTO faq_categories (name) VALUES ('Printers')",
+		"INSERT INTO faq_categories (name) VALUES ('Hardware')",
+		"UPDATE faq_categories SET parent_id = (SELECT id FROM faq_categories WHERE name = 'Hardware') " +
+			"WHERE name = 'Printers'",
+		"INSERT INTO ticket_states (name, state_type) VALUES ('closed by the night', 'closed')",
+		"UPDATE ticket_states SET next_state_id = (SELECT id FROM ticket_states WHERE name = 'closed by the night') " +
+			"WHERE state_type = 'pending-auto'",
+	} {
+		if _, err := original.Exec(statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+
+	backup := dumped(t, original)
+
+	restored := newTestDBWithKeys(t)
+	ctx := context.Background()
+
+	if _, err := sqldb.Restore(ctx, restored, sqldb.DialectSQLite, newestMigration(), backup, nil); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	var desk string
+
+	if err := restored.QueryRow("SELECT p.name FROM queues q JOIN queues p ON p.id = q.parent_id " +
+		"WHERE q.name = 'Printer desk'").Scan(&desk); err != nil || desk != "Hardware desk" {
+		t.Errorf("the Printer desk came back under %q (%v), want the Hardware desk", desk, err)
+	}
+
+	var parent string
+
+	if err := restored.QueryRow("SELECT p.name FROM faq_categories c JOIN faq_categories p ON p.id = c.parent_id " +
+		"WHERE c.name = 'Printers'").Scan(&parent); err != nil || parent != "Hardware" {
+		t.Errorf("Printers came back under %q (%v), want Hardware", parent, err)
+	}
+
+	var next string
+
+	if err := restored.QueryRow("SELECT n.name FROM ticket_states s JOIN ticket_states n ON n.id = s.next_state_id " +
+		"WHERE s.state_type = 'pending-auto'").Scan(&next); err != nil || next != "closed by the night" {
+		t.Errorf("the waiting state came back moving tickets on to %q (%v), want the later state", next, err)
+	}
+}

@@ -23,9 +23,25 @@ import (
 func newTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
+	return migratedTestDB(t, "")
+}
+
+// newTestDBWithKeys is newTestDB on connections that enforce foreign keys,
+// which SQLite does only where it is asked to and PostgreSQL always does.
+func newTestDBWithKeys(t *testing.T) *sql.DB {
+	t.Helper()
+
+	return migratedTestDB(t, "?_pragma=foreign_keys(1)")
+}
+
+// migratedTestDB opens a throwaway SQLite database with the options given and
+// applies the real migrations to it.
+func migratedTestDB(t *testing.T, options string) *sql.DB {
+	t.Helper()
+
 	path := filepath.Join(t.TempDir(), "purge-test.db")
 
-	db, err := sql.Open("sqlite", "file:"+path)
+	db, err := sql.Open("sqlite", "file:"+path+options)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

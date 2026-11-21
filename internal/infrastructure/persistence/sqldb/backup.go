@@ -69,6 +69,20 @@ var BackupTables = []string{
 	"faq_articles",
 }
 
+// SelfReferences are the columns that point at a row of their own table, by
+// table: a queue and a knowledge-base category at the one they are filed under,
+// a waiting state at the state it moves a ticket on to. Each can point at a row
+// made after it - a queue moved under a newer one, a closing state added later
+// and named as where a waiting state goes - so a restore
+// writes them only once every row of the table is in; inserted as they stood,
+// such a row would name an id not there yet, which a database enforcing its
+// keys refuses. test/backup_test.go holds this list against the migration chain.
+var SelfReferences = map[string]string{
+	"faq_categories": "parent_id",
+	"queues":         "parent_id",
+	"ticket_states":  "next_state_id",
+}
+
 // LeftOutOfBackups are the tables the chain creates that a backup does not
 // carry, each with the reason.
 var LeftOutOfBackups = map[string]string{

@@ -43,6 +43,8 @@ func TestEveryValueFormattedIntoSQLIsNamed(t *testing.T) {
 		"internal/infrastructure/persistence/sqldb/restore.go:columnKinds": "a table from sqldb.BackupTables",
 		"internal/infrastructure/persistence/sqldb/restore.go:resetSequences": "a table from sqldb.BackupTables, " +
 			"twice, in PostgreSQL's setval",
+		"internal/infrastructure/persistence/sqldb/restore.go:restoreSelfReferences": "a table and its column " +
+			"from sqldb.SelfReferences, a fixed map of the chain's own names",
 	}
 
 	found := map[string][]int{}

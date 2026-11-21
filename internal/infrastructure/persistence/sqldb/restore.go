@@ -171,6 +171,8 @@ func Restore(
 	}
 
 	err = base{db: db, dialect: dialect}.withTx(ctx, func(tx base) error {
+		var links []selfLink
+
 		for _, table := range slices.Backward(BackupTables) {
 			if _, err := tx.db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s", table)); err != nil {
 				return fmt.Errorf("empty %s: %w", table, err)
@@ -180,7 +182,7 @@ func Restore(
 		err := walkBackup(decoder, func(section backupSection) (func(row []any) error, error) {
 			summary.Tables++
 
-			write, err := tableWriter(ctx, tx, section)
+			write, err := tableWriter(ctx, tx, section, &links)
 			if err != nil {
 				return nil, err
 			}
@@ -195,6 +197,10 @@ func Restore(
 			}, nil
 		})
 		if err != nil {
+			return err
+		}
+
+		if err := restoreSelfReferences(ctx, tx, links); err != nil {
 			return err
 		}
 
@@ -280,11 +286,36 @@ func nextLine(decoder *json.Decoder) (json.RawMessage, error) {
 	return line, nil
 }
 
+// selfLink is a row's pointer into its own table, held back until the whole
+// table is in: the row, by id, and the row it points at.
+type selfLink struct {
+	table, column string
+	id, target    any
+}
+
+// restoreSelfReferences writes the pointers tableWriter held back, now that
+// every row they can name is there.
+func restoreSelfReferences(ctx context.Context, tx base, links []selfLink) error {
+	for _, link := range links {
+		update := tx.rebind(fmt.Sprintf("UPDATE %s SET %s = ? WHERE id = ?", link.table, link.column))
+
+		if _, err := tx.db.ExecContext(ctx, update, link.target, link.id); err != nil {
+			return fmt.Errorf("%s.%s: %w", link.table, link.column, err)
+		}
+	}
+
+	return nil
+}
+
 // tableWriter prepares the rows of one table of a backup to be written into the
 // same table here, and answers for each row whether it was written: a setting a
 // restore leaves as the new installation has it is not, and still counts towards
-// the number the backup's last line names.
-func tableWriter(ctx context.Context, tx base, section backupSection) (func(row []any) (bool, error), error) {
+// the number the backup's last line names. A column in SelfReferences is written
+// empty and its value added to links, for restoreSelfReferences to write once
+// the table is whole.
+func tableWriter(
+	ctx context.Context, tx base, section backupSection, links *[]selfLink,
+) (func(row []any) (bool, error), error) {
 	target, err := columnKinds(ctx, tx, section.Table)
 	if err != nil {
 		return nil, err
@@ -319,6 +350,15 @@ func tableWriter(ctx context.Context, tx base, section backupSection) (func(row 
 
 	keyColumn := slices.Index(section.Columns, "key_name")
 
+	self, idColumn := -1, slices.Index(names, "id")
+	if column, ok := SelfReferences[section.Table]; ok {
+		self = slices.Index(names, column)
+	}
+
+	if self >= 0 && idColumn < 0 {
+		return nil, fmt.Errorf("%s points at itself and the backup names no id for its rows", section.Table)
+	}
+
 	return func(row []any) (bool, error) {
 		if section.Table == "settings" && keyColumn >= 0 && keyColumn < len(row) {
 			if key, _ := row[keyColumn].(string); slices.Contains(skippedOnRestore, key) {
@@ -339,6 +379,12 @@ func tableWriter(ctx context.Context, tx base, section backupSection) (func(row 
 			}
 
 			args[j] = value
+		}
+
+		if self >= 0 && args[self] != nil {
+			*links = append(*links, selfLink{table: section.Table, column: names[self], id: args[idColumn],
+				target: args[self]})
+			args[self] = nil
 		}
 
 		if _, err := tx.db.ExecContext(ctx, insert, args...); err != nil {
