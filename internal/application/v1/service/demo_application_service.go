@@ -71,12 +71,13 @@ func NewDemoService(
 }
 
 // WithInventory attaches what the demo's configuration items are written
-// through. Optional: without it the demo adds none.
+// through and linked with. Optional: without it the demo adds none.
 func (s *DemoService) WithInventory(
 	items *ConfigItemApplicationService,
 	catalog repository.GeneralCatalogRepository,
+	links *LinkApplicationService,
 ) *DemoService {
-	s.inventory = &demoInventory{items: items, catalog: catalog}
+	s.inventory = &demoInventory{items: items, catalog: catalog, links: links}
 
 	return s
 }
@@ -148,7 +149,8 @@ func (s *DemoService) Seed(ctx context.Context, language string) (DemoSummary, e
 		return summary, err
 	}
 
-	if err := s.seedInventory(ctx, caller, t, contacts, organisations, &summary); err != nil {
+	items, err := s.seedInventory(ctx, caller, t, contacts, organisations, &summary)
+	if err != nil {
 		return summary, err
 	}
 
@@ -160,7 +162,7 @@ func (s *DemoService) Seed(ctx context.Context, language string) (DemoSummary, e
 		return summary, err
 	}
 
-	return summary, s.seedTickets(ctx, caller, t, desk, contacts, &summary)
+	return summary, s.seedTickets(ctx, caller, t, desk, contacts, items, &summary)
 }
 
 // desk is the queue the migration ships, which every demo ticket is opened in.
@@ -280,6 +282,7 @@ func (s *DemoService) seedTickets(
 	t i18n.Translator,
 	desk *model.Queue,
 	contacts map[string]*model.Contact,
+	items map[string]uint,
 	summary *DemoSummary,
 ) error {
 	now := s.now()
@@ -330,6 +333,10 @@ func (s *DemoService) seedTickets(
 			if err := s.takeStep(ctx, back, caller, t, opened.ID, step, now, summary); err != nil {
 				return fmt.Errorf("writing what happened to the ticket %s: %w", ticket.title.key, err)
 			}
+		}
+
+		if err := s.linkAbout(ctx, caller, opened.ID, items[ticket.about]); err != nil {
+			return fmt.Errorf("linking the ticket %s to what it is about: %w", ticket.title.key, err)
 		}
 
 		if ticket.watched {

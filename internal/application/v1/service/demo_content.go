@@ -133,6 +133,9 @@ type demoTicket struct {
 	minutes        int
 	owned, watched bool
 	steps          []demoStep
+
+	// about is the key of the demo item the ticket concerns, linked to it.
+	about string
 }
 
 var demoTickets = []demoTicket{
@@ -222,7 +225,7 @@ var demoTickets = []demoTicket{
 		opening: demoText{"demo.ticket.certificate.opening", "Tom Fischer reports that Harbourline's customer " +
 			"portal shows a warning about an expired certificate since this morning, and customers are calling."},
 		kind: "incident", priority: "very-high", state: model.StateOpen, contact: "Tom Fischer",
-		opened: 6 * time.Hour, minutes: 5, owned: true, watched: true},
+		opened: 6 * time.Hour, minutes: 5, owned: true, watched: true, about: "server"},
 	{title: demoText{"demo.ticket.toner.title", "Toner for the meeting room printer"},
 		opening: demoText{"demo.ticket.toner.opening", "Anna Becker asks for two black toner cartridges for the " +
 			"printer in the meeting room."},

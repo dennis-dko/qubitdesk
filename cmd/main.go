@@ -795,7 +795,7 @@ func main() {
 		})
 	links := appservice.NewLinkApplicationService(sqldb.NewLinkRepository(db, cfg.Dialect), tickets, configItems)
 	demo := appservice.NewDemoService(userRepo, auth, tickets, catalogRepos, queues, levels, customers, faq,
-		templates).WithInventory(configItems, generalCatalogRepo)
+		templates).WithInventory(configItems, generalCatalogRepo, links)
 
 	// The built-in administrator is created after the migrations have run, so
 	// there is always a way in even on a brand new database.

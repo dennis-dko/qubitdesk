@@ -1440,6 +1440,10 @@ button.secondary:active { background: var(--quiet-press); }
 .ci-choice > * { flex: 1 1 160px; min-width: 0; }
 .ci-sub { flex: 1 1 100%; padding-left: 12px; }
 
+/* A record's links, one a line: how the link reads, the record it reaches, and
+   the way to undo it. */
+.link-list { display: grid; gap: 4px; list-style: none; margin: 0 0 10px; padding: 0; }
+
 .perm-grid { display: grid; gap: 6px 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 
 /* The role editor's rights from 300 pixels, where a right's name and identifier

@@ -36,8 +36,15 @@ func TestTheInstallerCanFillTheNewDatabaseWithDemoData(t *testing.T) {
 	admin.must(admin.api(http.MethodGet, "/tickets", nil), http.StatusOK).Data(t, &tickets)
 
 	titles := map[string]bool{}
+
+	var certificate uint
+
 	for _, ticket := range tickets.Items {
 		titles[ticket.Title] = true
+
+		if ticket.Title == "Das Kundenportal warnt vor einem abgelaufenen Zertifikat" {
+			certificate = ticket.ID
+		}
 	}
 
 	if tickets.TotalCount != 8 || !titles["Der Drucker im zweiten Stock druckt leere Seiten"] {
@@ -56,6 +63,16 @@ func TestTheInstallerCanFillTheNewDatabaseWithDemoData(t *testing.T) {
 
 	if items.TotalCount != 3 || !named["Laptop von Anna Becker"] {
 		t.Errorf("the administrator finds the items %v, want the demo's three in German\n%s", named, c.app.Log())
+	}
+
+	var linked listOf[linkedRecord]
+
+	admin.must(admin.api(http.MethodGet, "/links?object=ticket&record="+path(certificate), nil),
+		http.StatusOK).Data(t, &linked)
+
+	if len(linked.Items) != 1 || linked.Items[0].Object != "configitem" ||
+		linked.Items[0].Label != "00000003 Webserver von Harbourline" {
+		t.Errorf("the certificate's ticket is linked to %+v, want Harbourline's web server", linked.Items)
 	}
 
 	var published listOf[faqArticleResponse]

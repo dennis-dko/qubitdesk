@@ -8143,6 +8143,15 @@ async function openConfigItem(id) {
 
   await drawItemAttributes(definition?.attributes ?? [], item.version.data, !can('assets:write'));
   drawItemVersions();
+
+  // A ticket is offered to link only to whoever may read tickets, the right
+  // searching for one takes.
+  const linked = $('#configitem-links');
+  const ticketKind = $('#form-configitem-link [name="object"] [value="ticket"]');
+  ticketKind.hidden = !can('tickets:read');
+  if (ticketKind.hidden) $('#form-configitem-link').elements.object.value = 'configitem';
+  linked.hidden = false;
+  await drawLinks(linked, 'configitem', item.id, can('assets:write'));
 }
 
 /**
@@ -8506,6 +8515,8 @@ function resetConfigItemForm({ keepShown = false } = {}) {
   $('#configitem-submit').hidden = false;
   $('#configitem-delete').hidden = true;
   $('#table-configitem-versions tbody').replaceChildren();
+  $('#configitem-links').hidden = true;
+  forgetLinks($('#configitem-links'));
 
   if (!keepShown) itemShown = null;
 }
@@ -8552,6 +8563,144 @@ function wireConfigItems() {
   form.addEventListener('submit', (e) => { e.preventDefault(); saveConfigItem(e.target); });
   $('#configitem-cancel').addEventListener('click', closeConfigItem);
   $('#configitem-delete').addEventListener('click', () => deleteConfigItem());
+
+  wireLinkForm($('#configitem-links'));
+  wireLinkForm($('#ticket-links'));
+}
+
+// --------------------------------------------------------------------- links
+
+/**
+ * How a link reads, by its type: from the record that is its source and from
+ * the one that is its target. Normal reads the same both ways.
+ */
+const LINK_WORDS = {
+  Normal: { out: () => t('link.normal', 'relevant to'), in: () => t('link.normal', 'relevant to') },
+  ParentChild: { out: () => t('link.parentOf', 'parent of'), in: () => t('link.childOf', 'child of') },
+  DependsOn: { out: () => t('link.dependsOn', 'depends on'), in: () => t('link.requiredFor', 'required for') },
+};
+
+/** The kinds of record a link reaches: how one is searched for, written and opened. */
+const LINK_KINDS = {
+  ticket: {
+    path: '/tickets',
+    describe: (ticket) => `${ticket.number} ${ticket.title}`,
+    name: () => t('link.aTicket', 'a ticket'),
+    open: (id) => { switchView('tickets'); return openTicket(id); },
+  },
+  configitem: {
+    path: '/cmdb/items',
+    describe: (item) => `${item.number} ${item.name}`,
+    name: () => t('link.anItem', 'a configuration item'),
+    open: (id) => { switchView('assets'); return openConfigItem(id); },
+  },
+};
+
+/**
+ * Draws a record's links into its section: how each reads from here, the record
+ * at its other end, which opens it, and - where the reader may change this
+ * record - the way to undo it and to link another.
+ */
+async function drawLinks(section, object, id, canChange) {
+  const links = (await api(`/links?object=${object}&record=${id}`))?.items ?? [];
+  const list = section.querySelector('.link-list');
+
+  section.dataset.object = object;
+  section.dataset.record = String(id);
+
+  list.replaceChildren(...links.map((link) => el('li', {},
+    el('span', { class: 'muted', text: LINK_WORDS[link.type]?.[link.outward ? 'out' : 'in']() ?? link.type }),
+    ' ',
+    el('button', {
+      type: 'button',
+      class: 'link',
+      text: link.label,
+      onclick: () => LINK_KINDS[link.object]?.open(link.objectId)?.catch((err) => toastFailure(err)),
+    }),
+    canChange ? ' ' : null,
+    canChange ? el('button', {
+      type: 'button',
+      class: 'link',
+      text: t('link.undo', 'undo'),
+      onclick: () => mutate(() => api(`/links/${link.id}?object=${object}&record=${id}`, { method: 'DELETE' }),
+        t('msg.unlinked', 'Link undone'), () => drawLinks(section, object, id, canChange)),
+    }) : null)));
+
+  if (!links.length) list.append(el('li', { class: 'muted', text: t('link.none', 'Nothing linked yet.') }));
+
+  const form = section.querySelector('form');
+  if (form) {
+    form.hidden = !canChange;
+    form.dataset.canChange = canChange ? 'yes' : '';
+  }
+}
+
+/** Empties a record's links, for a record closed or a reader gone. */
+function forgetLinks(section) {
+  section.querySelector('.link-list').replaceChildren();
+  delete section.dataset.object;
+  delete section.dataset.record;
+
+  const form = section.querySelector('form');
+  if (form) {
+    form.reset();
+    form.elements.record.replaceChildren(el('option', { value: '', text: '–' }));
+  }
+}
+
+/**
+ * Wires a section's form: the types in the words they read with from here, a
+ * search for the record to link, which fills the choice, and the link made from
+ * the record the section shows.
+ */
+function wireLinkForm(section) {
+  const form = section.querySelector('form');
+  if (!form) return;
+
+  const kind = () => form.elements.object.value;
+  let pending;
+
+  const offer = async () => {
+    const query = new URLSearchParams({ q: form.elements.find.value.trim(), limit: String(SEARCH_OFFERS) });
+    const found = (await api(`${LINK_KINDS[kind()].path}?${query}`))?.items ?? [];
+
+    form.elements.record.replaceChildren(el('option', { value: '', text: '–' }),
+      ...found
+        .filter((record) => !(kind() === section.dataset.object && String(record.id) === section.dataset.record))
+        .map((record) => el('option', { value: String(record.id), text: LINK_KINDS[kind()].describe(record) })));
+  };
+
+  const types = () => fillSelect(form.elements.type, Object.keys(LINK_WORDS)
+    .map((type) => ({ value: type, label: LINK_WORDS[type].out() })), { labelKey: 'label', valueKey: 'value' });
+
+  types();
+  redrawable(`linkTypes:${section.getAttribute('id')}`, types);
+
+  form.elements.record.replaceChildren(el('option', { value: '', text: '–' }));
+  form.elements.find.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => offer().catch((err) => toastFailure(err)), 250);
+  });
+  form.elements.object.addEventListener('change', () => offer().catch((err) => toastFailure(err)));
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const object = section.dataset.object;
+    const id = Number(section.dataset.record);
+    const body = {
+      sourceObject: object, sourceId: id, targetObject: kind(),
+      targetId: Number(form.elements.record.value) || 0, type: form.elements.type.value,
+    };
+
+    mutate(() => api('/links', { method: 'POST', body: JSON.stringify(body) }), t('msg.linked', 'Linked'),
+      async () => {
+        form.reset();
+        types();
+        form.elements.record.replaceChildren(el('option', { value: '', text: '–' }));
+        await drawLinks(section, object, id, form.dataset.canChange === 'yes');
+      });
+  });
 }
 
 // ------------------------------------------------------------------ portal
@@ -9160,6 +9309,12 @@ async function openTicket(id, { keepPlace = false } = {}) {
   drawTicketDetail(ticket, articles?.items ?? [], history?.items ?? []);
   offerTemplates(templates?.items ?? []);
 
+  // The items a ticket concerns, for whoever may read items; a link is made
+  // where the reader works the ticket, as any change to it is.
+  const linked = $('#ticket-links');
+  linked.hidden = !can('assets:read');
+  if (!linked.hidden) await drawLinks(linked, 'ticket', ticket.id, worksIn(ticket.queueId) && can('tickets:write'));
+
   // Corrected only where the reader's role works in its queue: the server
   // answers any change to a ticket of a queue only read as not found, and a form
   // that offers what the server refuses teaches somebody the screen is broken.
@@ -9213,6 +9368,8 @@ function forgetTheOpenTicket() {
   for (const part of ['#ticket-heading', '#ticket-facts', '#ticket-delete-slot', '#ticket-articles', '#ticket-history-list']) {
     $(part)?.replaceChildren();
   }
+
+  forgetLinks($('#ticket-links'));
 }
 
 /** What a ticket is, what was written in it and what happened to it. */

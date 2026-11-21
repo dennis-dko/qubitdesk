@@ -770,6 +770,22 @@
           <summary data-i18n="ticket.history">What happened</summary>
           <ol id="ticket-history-list"></ol>
         </details>
+        <!-- What the ticket is linked with: the items it concerns, each opening
+             where it is kept, and the way to link another where the reader
+             works the ticket. -->
+        <section class="links" id="ticket-links" hidden>
+          <h3 data-i18n="link.title">Linked</h3>
+          <ul class="link-list"></ul>
+          <form method="post" class="form" id="form-ticket-link" hidden>
+            <input type="hidden" name="object" value="configitem">
+            <div class="grid">
+              <label data-i18n="link.type">Link<select name="type"></select></label>
+              <label data-i18n="link.find">Find<input type="search" name="find" maxlength="255" data-not-an-edit data-i18n-placeholder="configitem.findHint" placeholder="name or number"></label>
+              <label data-i18n="link.record">Record<select name="record" required></select></label>
+            </div>
+            <div class="row"><button type="submit" data-i18n="link.add">Link</button></div>
+          </form>
+        </section>
       </div>
 
       <form method="post" id="form-ticket" class="card form" data-perm="tickets:create,tickets:write">
@@ -1515,6 +1531,19 @@
             <tbody></tbody>
           </table>
         </div>
+        <section class="links" id="configitem-links" hidden>
+          <h3 data-i18n="link.title">Linked</h3>
+          <ul class="link-list"></ul>
+          <form method="post" class="form" id="form-configitem-link" hidden>
+            <div class="grid">
+              <label data-i18n="link.type">Link<select name="type"></select></label>
+              <label data-i18n="link.kind">To<select name="object"><option value="ticket" data-i18n="link.aTicket">a ticket</option><option value="configitem" data-i18n="link.anItem">a configuration item</option></select></label>
+              <label data-i18n="link.find">Find<input type="search" name="find" maxlength="255" data-not-an-edit data-i18n-placeholder="configitem.findHint" placeholder="name or number"></label>
+              <label data-i18n="link.record">Record<select name="record" required></select></label>
+            </div>
+            <div class="row"><button type="submit" data-i18n="link.add">Link</button></div>
+          </form>
+        </section>
       </div>
       <div class="card" id="catalog-card" data-perm="catalog:write">
         <h2 data-i18n="gencatalog.title">General catalog</h2>

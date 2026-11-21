@@ -12,15 +12,17 @@ import (
 	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
-// demoInventory is what the demo's configuration items are written through, and
-// the catalog their classes, states and lists are found in by name.
+// demoInventory is what the demo's configuration items are written through, the
+// catalog their classes, states and lists are found in by name, and what links a
+// ticket to the item it is about.
 type demoInventory struct {
 	items   *ConfigItemApplicationService
 	catalog repository.GeneralCatalogRepository
+	links   *LinkApplicationService
 }
 
 // seedInventory adds the configuration items, each under its class's definition
-// as it stands, in production and operational.
+// as it stands, in production and operational, and answers them by their keys.
 func (s *DemoService) seedInventory(
 	ctx context.Context,
 	caller *Principal,
@@ -28,9 +30,9 @@ func (s *DemoService) seedInventory(
 	contacts map[string]*model.Contact,
 	organisations map[string]uint,
 	summary *DemoSummary,
-) error {
+) (map[string]uint, error) {
 	if s.inventory == nil {
-		return nil
+		return map[string]uint{}, nil
 	}
 
 	find := func(class, name string) (uint, error) {
@@ -50,12 +52,12 @@ func (s *DemoService) seedInventory(
 
 	deployment, err := find(model.CatalogDeploymentState, "production")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	incident, err := find(model.CatalogIncidentState, "operational")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	marks := demoMarks{find: find, contacts: contacts, organisations: organisations, items: map[string]uint{},
@@ -64,31 +66,46 @@ func (s *DemoService) seedInventory(
 	for _, item := range demoItems {
 		class, err := find(model.CatalogCIClass, item.class)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		definition, err := s.inventory.items.Definition(ctx, class)
 		if err != nil {
-			return fmt.Errorf("reading the definition of %s: %w", item.class, err)
+			return nil, fmt.Errorf("reading the definition of %s: %w", item.class, err)
 		}
 
 		data, err := marks.data(definition.Attributes, item.values, "")
 		if err != nil {
-			return fmt.Errorf("writing the values of %s: %w", item.key, err)
+			return nil, fmt.Errorf("writing the values of %s: %w", item.key, err)
 		}
 
 		made, err := s.inventory.items.Create(ctx, caller.User.ID, class, ConfigItemVersionCommand{
 			Name: item.name.in(t), DeploymentStateID: deployment, IncidentStateID: incident, Data: data,
 		})
 		if err != nil {
-			return fmt.Errorf("adding the item %s: %w", item.key, err)
+			return nil, fmt.Errorf("adding the item %s: %w", item.key, err)
 		}
 
 		marks.items[item.key] = made.Item.ID
 		summary.ConfigItems++
 	}
 
-	return nil
+	return marks.items, nil
+}
+
+// linkAbout links a demo ticket to the item it is about, where the demo has
+// that item.
+func (s *DemoService) linkAbout(ctx context.Context, caller *Principal, ticketID uint, item uint) error {
+	if s.inventory == nil || item == 0 {
+		return nil
+	}
+
+	_, err := s.inventory.links.Create(ctx, caller, LinkCommand{
+		SourceObject: model.LinkTicket, SourceID: ticketID, TargetObject: model.LinkConfigItem, TargetID: item,
+		Type: model.LinkNormal,
+	})
+
+	return err
 }
 
 // demoMarks reads the marks an item's values name records by.
