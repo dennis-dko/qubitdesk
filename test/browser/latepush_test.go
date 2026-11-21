@@ -102,14 +102,24 @@ func (p *page) serviceWorkerRegistration() serviceworker.RegistrationID {
 
 	// Bounded, and with what the browser says about the registration where it is
 	// not ready: unbounded, a worker that never activated hung the case for the
-	// whole of its time and said nothing about why.
+	// whole of its time and said nothing about why. Where there is no
+	// registration at all, the page's own attempt failed in silence - it means
+	// to, an installation reached over plain HTTP simply goes without - so the
+	// case registers again and says how that went, which is the browser's reason.
 	var ready string
 
 	p.awaitJSON(`Promise.race([
 		navigator.serviceWorker.ready.then(() => 'ready'),
 		new Promise((settle) => setTimeout(settle, 30000)).then(async () => {
 			const registration = await navigator.serviceWorker.getRegistration();
-			if (!registration) return 'no registration for ' + location.href;
+			if (!registration) {
+				const again = await navigator.serviceWorker.register('/sw.js').then(
+					(made) => new Promise((settle) => setTimeout(settle, 5000)).then(() => 'registering again made '
+						+ (made.active ? made.active.state : made.installing ? 'one still installing'
+							: made.waiting ? 'one waiting' : 'nothing that lived')),
+					(error) => 'registering again was refused: ' + error);
+				return 'no registration for ' + location.href + '; ' + again;
+			}
 			const state = (worker) => (worker ? worker.state : '-');
 			return 'not ready after 30s: installing ' + state(registration.installing) + ', waiting '
 				+ state(registration.waiting) + ', active ' + state(registration.active)
