@@ -100,7 +100,26 @@ func (s pusher) until(what, tag, title, at, about string) {
 func (p *page) serviceWorkerRegistration() serviceworker.RegistrationID {
 	p.t.Helper()
 
-	p.awaitJSON(`navigator.serviceWorker.ready.then(() => true)`, nil)
+	// Bounded, and with what the browser says about the registration where it is
+	// not ready: unbounded, a worker that never activated hung the case for the
+	// whole of its time and said nothing about why.
+	var ready string
+
+	p.awaitJSON(`Promise.race([
+		navigator.serviceWorker.ready.then(() => 'ready'),
+		new Promise((settle) => setTimeout(settle, 30000)).then(async () => {
+			const registration = await navigator.serviceWorker.getRegistration();
+			if (!registration) return 'no registration for ' + location.href;
+			const state = (worker) => (worker ? worker.state : '-');
+			return 'not ready after 30s: installing ' + state(registration.installing) + ', waiting '
+				+ state(registration.waiting) + ', active ' + state(registration.active)
+				+ ', controller ' + Boolean(navigator.serviceWorker.controller);
+		}),
+	])`, &ready)
+
+	if ready != "ready" {
+		p.t.Fatalf("the page's service worker is %s", ready)
+	}
 
 	scope := strings.TrimSuffix(p.app.BaseURL(), "/") + "/"
 
