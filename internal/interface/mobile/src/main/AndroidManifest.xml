@@ -10,6 +10,13 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
+    <!-- The app offers the newer app of its installation's release at every
+         start and installs it when somebody presses to. Android asks once whether
+         the app may install apps, under "Install unknown apps", and asks to
+         confirm every installation; it installs one only signed with the key this
+         app was. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!-- Nothing of the app's is backed up or carried to another phone.
          allowBackup="false" is what says so up to Android 11, so the rules file
          lint asks for there would only repeat it; data_extraction_rule says it
@@ -18,7 +25,7 @@
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rule"
         android:icon="@mipmap/ic_launcher"
-        android:label="Ticket System"
+        android:label="Go-Ticket-System"
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         tools:ignore="DataExtractionRules">
@@ -47,5 +54,10 @@
                 <data android:host="connect" android:scheme="go-ticket-system" />
             </intent-filter>
         </activity>
+
+        <!-- Told by Android how an installation the app handed it went, and by
+             nothing else: it starts the screen the answer names, so no other app
+             may send it one. -->
+        <receiver android:name=".UpdateReceiver" android:exported="false" />
     </application>
 </manifest>

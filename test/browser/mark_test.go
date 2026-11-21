@@ -51,8 +51,8 @@ func TestAnInstallationWithNoLogoStillHasAMark(t *testing.T) {
 		t.Errorf("the mark is defined more or less than once: %s", uses)
 	}
 
-	// The placeholder is not that drawing. It is the installation's initial, and
-	// it is the letter that makes it this installation's rather than anyone's.
+	// The placeholder is not that drawing. It is a lettered chip, and the letter
+	// is Go-Ticket-System's T - see TestTheLetteredMarkIsGoTicketSystemsT.
 	if strings.Contains(uses, `"initial":""`) {
 		t.Errorf("the logo slot holds no initial: %s", uses)
 	}
@@ -62,6 +62,7 @@ func TestAnInstallationWithNoLogoStillHasAMark(t *testing.T) {
 	const dot = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 
 	p.run("open Settings", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="general"]`),
 		chromedp.WaitVisible("#form-branding", chromedp.ByID))
 	p.settled()
 
@@ -97,39 +98,74 @@ func TestAnInstallationWithNoLogoStillHasAMark(t *testing.T) {
 	}
 }
 
-// The sign-in screen stands in for a logo the same way the header does.
+// The sign-in screen shows Go-Ticket-System's mark, drawn from the figures the tab's is.
 //
-// An installation that has uploaded no logo showed nothing at all above the
-// heading, which reads as a page that has not finished loading rather than as an
-// installation without a logo. The header has carried a lettered chip for this
-// all along; the sign-in card is the one screen everybody sees first, and it had
-// none.
-func TestTheSignInScreenShowsTheLetteredMarkWhenThereIsNoLogo(t *testing.T) {
+// It showed the installation's logo where one had been uploaded, and a lettered
+// chip where none had. The maintainer decided the sign-in card is the
+// application's, like the tab: what an installation uploads stands at the left of
+// the bar once somebody has signed in.
+func TestTheSignInScreenShowsGoTicketSystemsMark(t *testing.T) {
 	t.Parallel()
 
 	p := open(t)
 
 	// Before signing in: this is the screen the mark belongs on.
 	if !p.visible("#login-mark") {
-		t.Fatal("the sign-in screen shows no mark where a logo would be")
+		t.Fatal("the sign-in screen shows no mark above its heading")
 	}
 
-	// The letter is the initial of the configured title, so it says something
-	// about this installation rather than being a decoration.
-	letter := strings.TrimSpace(p.text("#login-initial"))
-	if letter == "" {
-		t.Error("the mark on the sign-in screen carries no letter")
-	}
+	var drawing string
 
-	if len([]rune(letter)) != 1 {
-		t.Errorf("the mark should carry one letter, it carries %q", letter)
-	}
+	p.evalJSON(`JSON.stringify(document.querySelector('#login-mark use')?.getAttribute('href') ?? '')`,
+		&drawing)
 
-	// And it is the same letter the header uses, rather than a second answer to
-	// the same question.
+	if drawing != "#icon-mark" {
+		t.Errorf("the sign-in card draws %q rather than the mark the tab and the title share", drawing)
+	}
+}
+
+// The lettered mark carries Go-Ticket-System's T, whatever an installation adds to the
+// name.
+//
+// It carried the first letter of the configured title, which was the whole name
+// until every installation came to be called Go-Ticket-System and the title became what
+// follows it. An installation that added htp.net then wore an H beside a bar
+// reading Go-Ticket-System | htp.net: a letter of the addition standing in for the whole
+// name. The maintainer asked for the T.
+func TestTheLetteredMarkIsGoTicketSystemsT(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
 	p.readyAdmin()
 
-	if inHeader := strings.TrimSpace(p.text("#brand-initial")); inHeader != letter {
-		t.Errorf("the sign-in screen says %q and the header says %q", letter, inHeader)
+	var saved string
+
+	p.run("add to the name", chromedp.Evaluate(`
+		(async () => {
+			const csrf = document.cookie.split(';').map((c) => c.trim())
+				.find((c) => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+
+			const res = await fetch('/api/v1/settings/branding', {
+				method: 'PUT',
+				credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+				body: JSON.stringify({ title: 'htp.net' }),
+			});
+
+			await loadBranding();
+
+			return String(res.status);
+		})()`, &saved, awaitPromise))
+
+	if saved != "200" {
+		t.Fatalf("the addition was not accepted (%s), so this case is about to prove nothing", saved)
+	}
+
+	if title := p.text("#app-title-text"); title != "Go-Ticket-System | htp.net" {
+		t.Fatalf("the bar reads %q, so the addition has not arrived and the letter proves nothing", title)
+	}
+
+	if letter := p.text("#brand-initial"); letter != "T" {
+		t.Errorf("the chip carries %q beside Go-Ticket-System | htp.net, want Go-Ticket-System's T", letter)
 	}
 }

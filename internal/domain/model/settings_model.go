@@ -14,24 +14,20 @@ const (
 	SettingBannerText  = "branding.banner"
 	SettingLogoDataURI = "branding.logo"
 
-	// The logo at the size each place shows it, derived when it is saved.
+	// The logo at the sizes it is sent in, derived when it is saved.
 	//
 	// Kept beside the original rather than instead of it: the original is what a
 	// later version re-derives from when a size changes, and it is the only copy
 	// that has lost nothing. What is sent to a browser is these.
 	SettingLogoHeader = "branding.logo.header"
 	SettingLogoBanner = "branding.logo.banner"
-	SettingLogoIcon   = "branding.logo.icon"
 
-	// Which part of the logo each place uses, as fractions of the whole.
+	// Which part of the logo each copy is made from, as fractions of the whole.
 	//
-	// A wordmark that reads as a banner is a smear in a tab, and the part worth
-	// keeping there is usually the mark at one end rather than the middle. Nobody
-	// can guess which, so it is chosen - and remembered per place, because the
-	// answer differs between a wide header and a square tab.
+	// A wordmark with a symbol at one end can read better as the symbol alone,
+	// and nobody can guess which part is worth showing, so it is chosen.
 	SettingLogoHeaderCrop = "branding.logo.header.crop"
 	SettingLogoBannerCrop = "branding.logo.banner.crop"
-	SettingLogoIconCrop   = "branding.logo.icon.crop"
 	SettingFooterText     = "branding.footer"
 	SettingCompanyName    = "branding.company"
 	SettingCompanyURL     = "branding.companyUrl"
@@ -91,24 +87,29 @@ const (
 	// browser subscribed before push was switched off is reached again once it is
 	// back on.
 	SettingWebPushKey = "instance.push.key"
+
+	// SettingBackupPlan is when backups are made on their own and how many are
+	// kept, as a BackupPlan. Nothing stored is no schedule, which is how it ships.
+	SettingBackupPlan = "instance.backup"
 )
 
 // Branding is the instance's own labelling, editable by the administrator.
 type Branding struct {
-	// Title names the header, and the browser tab where TabTitle is empty.
+	// Title is what the installation adds to Go-Ticket-System in the header, and
+	// in the browser tab where TabTitle is empty. See Named.
 	Title string
 
-	// TabTitle names the browser tab on its own, where an installation wants it
-	// to say something different.
+	// TabTitle is what the browser tab adds to Go-Ticket-System instead, where an
+	// installation wants the tab to say something shorter.
 	//
-	// The two were one field, which is the right answer until the header's name
-	// is too long to be a tab: a tab is a couple of dozen characters wide before
-	// the browser cuts it off, and several of an installation's tabs are usually
-	// open at once. "Ticketsystem der Beispiel GmbH & Co. KG" belongs across the
-	// top of the screen; the tab wants "Ticketsystem".
+	// The two were one field, which is the right answer until the header's
+	// addition is too long for a tab: a tab is a couple of dozen characters wide
+	// before the browser cuts it off, and several of an installation's tabs are
+	// usually open at once. "Beispiel GmbH & Co. KG" belongs across the top of the
+	// screen; the tab wants "Beispiel".
 	//
-	// Empty means the title, so an installation that has never thought about this
-	// keeps what it had.
+	// Empty means the title's, so an installation that has never thought about
+	// this keeps what it had.
 	TabTitle string
 
 	// Banner is an announcement shown above the application. Empty hides it.
@@ -117,25 +118,26 @@ type Branding struct {
 	// LogoDataURI holds the logo inline, so it needs no upload directory and
 	// travels with the database rather than the filesystem.
 	//
-	// The original, exactly as uploaded. Nothing displays it: each place is shown
-	// one of the three below, derived from this when it was saved. It is kept so
-	// that changing a size later is a re-derivation rather than asking every
-	// installation to upload their logo again.
+	// The original, exactly as uploaded. Nothing displays it while one of the
+	// copies below exists. It is kept so that changing a size later is a
+	// re-derivation rather than asking every installation to upload their logo
+	// again.
+	//
+	// The logo is drawn at the left of the bar and nowhere else: the sign-in
+	// screen, the browser tab and the installed app show Go-Ticket-System's mark.
 	LogoDataURI string
 
-	// LogoHeader, LogoBanner and LogoIcon are the logo at the size the header,
-	// the sign-in card and a browser tab draw it. Empty on an installation whose
-	// logo was saved before these existed, which is why every reader falls back
-	// to LogoDataURI.
+	// LogoBanner is the copy the bar draws. LogoHeader is the smaller one it drew
+	// before it took the banner's, still made because the API has always sent it.
+	// Both are empty on an installation whose logo was saved before they existed,
+	// which is why every reader falls back to LogoDataURI.
 	LogoHeader string
 	LogoBanner string
-	LogoIcon   string
 
 	// The part of the logo each of those is made from. The zero value is the
 	// whole image, which is what a logo starts as.
 	HeaderCrop LogoCrop
 	BannerCrop LogoCrop
-	IconCrop   LogoCrop
 
 	FooterText  string
 	CompanyName string
@@ -155,37 +157,56 @@ type Branding struct {
 	Translations map[string]BrandingText
 }
 
-// TitleIn is what this installation calls itself in one language.
+// NameIn is what this installation calls itself in one language:
+// Go-Ticket-System, and the addition written for that language or else the
+// untranslated one.
 //
-// The footer of an exported document is the one place the server writes a word
-// of its own into something otherwise composed entirely on the screen, so it is
-// the one place that has to be told which language is reading - a German
-// evaluation used to be signed off in English.
-//
-// Falls back to the untranslated title, and then to nothing, so an installation
-// that has named itself in one language only is still named.
-func (b Branding) TitleIn(language string) string {
+// What the server writes itself asks this - the prompt a passkey device shows,
+// an authenticator's entry - and it takes a language because an installation
+// that has named itself in German and is read in German is named so there too.
+func (b Branding) NameIn(language string) string {
 	if text, ok := b.Translations[language]; ok {
 		if title := strings.TrimSpace(text.Title); title != "" {
-			return title
+			return Named(title)
 		}
 	}
 
-	return strings.TrimSpace(b.Title)
+	return Named(b.Title)
 }
 
-// TabName is what the browser tab is called.
+// TabName is what the browser tab is called: Go-Ticket-System, and the tab's
+// own addition or else the title's.
 //
 // The one place that asks this question rather than reading either field, so
-// nothing has to remember which of the two wins. The tab title where there is
-// one, and the ordinary title otherwise - which is every installation that has
-// never opened this setting.
+// nothing has to remember which of the two wins. The tab's own is empty on
+// every installation that has never opened this setting.
 func (b Branding) TabName() string {
 	if tab := strings.TrimSpace(b.TabTitle); tab != "" {
-		return tab
+		return Named(tab)
 	}
 
-	return b.Title
+	return Named(b.Title)
+}
+
+// Brand is the name of every installation. What an administrator writes under
+// Settings is added to it after a bar - "Go-Ticket-System | htp.net" - and
+// never takes its place, as in the time recording this was cloned from since
+// 2026-11-18.
+const Brand = "Go-Ticket-System"
+
+// Named is what an installation is called with addition written beside the
+// brand.
+//
+// An addition that only repeats the brand adds nothing. It was the obvious
+// answer to "name this installation" while the name could still be replaced,
+// so it is stored on installations that never meant to add anything.
+func Named(addition string) string {
+	addition = strings.TrimSpace(addition)
+	if addition == "" || strings.EqualFold(addition, Brand) {
+		return Brand
+	}
+
+	return Brand + " | " + addition
 }
 
 // BrandingText is what an installation says about itself, in one language.
@@ -222,24 +243,6 @@ type BrandingTextKeys struct {
 
 // BrandingKeysFor is brandingTextKeys, exported for the settings service.
 func BrandingKeysFor(language string) BrandingTextKeys { return brandingTextKeys(language) }
-
-// FallbackAppTitle is the name an instance carries when nothing else has been
-// configured - neither a title under Settings nor APP_NAME in the environment.
-const FallbackAppTitle = "Ticket System"
-
-// DefaultBranding is what a fresh instance shows.
-//
-// The title comes from APP_NAME when the deployment set one, so an operator who
-// names their instance in the environment sees that name, rather than having to
-// discover that the variable only fed the two-factor issuer and set it a second
-// time under Settings.
-func DefaultBranding(appName string) Branding {
-	if appName == "" {
-		appName = FallbackAppTitle
-	}
-
-	return Branding{Title: appName}
-}
 
 // LDAPConfig describes how to authenticate against a directory.
 type LDAPConfig struct {

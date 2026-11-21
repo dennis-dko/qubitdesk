@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.InetSocketAddress
 
@@ -45,6 +46,43 @@ class InstallationTest {
             val opening = assertThrows(Refused::class.java) { runBlocking { Installation(address, english).handOver("gts_kept") } }
 
             assertFalse("a failing installation is taken for a token taken back", opening is TokenRefused)
+        }
+    }
+
+    /** openingWith answers every request with a session opened under the cookie [name], or with none where it is null. */
+    private fun <T> openingWith(name: String?, block: (String) -> T): T {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+
+        server.createContext("/") { exchange ->
+            val body = """{"data":{}}""".toByteArray()
+
+            if (name != null) exchange.responseHeaders.add("Set-Cookie", "$name=the-session; Path=/; HttpOnly")
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(201, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+
+        server.start()
+
+        try {
+            return block("http://127.0.0.1:${server.address.port}")
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    // A token's session comes back under the name Go-Ticket-System gives it, and an
+    // answer without it is not this application's.
+    @Test
+    fun aSessionIsTakenUnderItsName() {
+        openingWith("gts_session") { address ->
+            val cookies = runBlocking { Installation(address, english).handOver("gts_abc123") }
+
+            assertTrue("the session was not taken", cookies.any { it.startsWith("gts_session=") })
+        }
+
+        openingWith(null) { address ->
+            assertThrows(Refused::class.java) { runBlocking { Installation(address, english).handOver("gts_abc123") } }
         }
     }
 }

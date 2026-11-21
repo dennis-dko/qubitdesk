@@ -63,13 +63,20 @@ type Config struct {
 	// has the machine, because they have this too.
 	SecretKey string
 
+	// BackupPassphrase seals every backup the application makes. Without one of
+	// at least twelve characters no backup is made: the maintainer chose
+	// encrypted backups, and an unencrypted one is not the fallback. It is not
+	// stored anywhere a backup could carry it, and a backup restored elsewhere
+	// needs it - and SECRET_KEY - typed in again.
+	BackupPassphrase string
+
+	// BackupDir is the folder backups are kept in, relative to the working
+	// directory unless absolute. In the image it belongs on a volume.
+	BackupDir string
+
 	// UIEnabled serves the embedded web interface. Turn it off to run the
 	// binary as a headless API.
 	UIEnabled bool
-
-	// AppName labels the instance, and is what authenticator apps show next to
-	// a two-factor account.
-	AppName string
 
 	// AuthRequired turns on sign-in and role enforcement. With it off every
 	// request is treated as fully privileged, which suits a local trial only.
@@ -257,6 +264,10 @@ const (
 	defaultDialect         = "sqlite"
 	defaultSessionLifetime = 12 * time.Hour
 
+	// defaultBackupDir sits beside configs/ in the directory the binary starts
+	// from, which is where everything else this process writes already is.
+	defaultBackupDir = "backups"
+
 	defaultTLSCacheDir      = "configs/certs"
 	defaultTLSPort          = 443
 	defaultHTTPRedirectPort = 80
@@ -312,12 +323,15 @@ func Load(p Provider) Config {
 
 	cfg := Config{
 		Dialect:     strings.ToLower(p.GetOrDefault("DB_DIALECT", defaultDialect)),
-		AppName:     p.GetOrDefault("APP_NAME", "Ticket System"),
 		UIEnabled:   v.boolean("UI_ENABLED", true),
 		UpdateCheck: v.boolean("UPDATE_CHECK", true),
 		UpdateFeed:  p.Get("UPDATE_FEED"),
 		UpdateToken: p.Get("UPDATE_TOKEN"),
 		SecretKey:   p.Get("SECRET_KEY"),
+
+		BackupPassphrase: p.Get("BACKUP_PASSPHRASE"),
+		BackupDir:        p.GetOrDefault("BACKUP_DIR", defaultBackupDir),
+
 		// Defaults to on: an instance that quietly serves everyone full
 		// administrative rights should be a deliberate choice, not an oversight.
 		AuthRequired:    v.boolean("AUTH_ENABLED", true),

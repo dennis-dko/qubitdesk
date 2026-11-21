@@ -30,8 +30,10 @@ func NewSecretsService(
 	return &SecretsService{settings: settings, secrets: secrets}
 }
 
-// theKeyIsRight is what the check value decrypts to. Its content does not matter;
-// that it decrypts at all is the whole test.
+// theKeyIsRight is what the check value is sealed from. What it says is not
+// compared when the check is read back: the cipher authenticates what it opens,
+// so a check that opens was written with this key, and one written by an earlier
+// version goes on saying what that version wrote.
 const theKeyIsRight = "go-ticket-system"
 
 // Verify reports whether the configured key is the one this installation's data
@@ -67,20 +69,40 @@ func (s *SecretsService) Verify(ctx context.Context) error {
 		return s.settings.Set(ctx, model.SettingSecretKeyCheck, sealed)
 	}
 
-	opened, err := s.secrets.Open(stored)
-	if err != nil {
-		if errors.Is(err, security.ErrNoKey) {
-			return errors.New("this installation's secrets were encrypted and SECRET_KEY " +
-				"is not set: put the key back, or clear the second factors and the " +
-				"directory password and let them be entered again")
-		}
+	return CheckSecretKey(s.secrets, stored)
+}
 
-		return fmt.Errorf("SECRET_KEY is not the key this installation's secrets were "+
-			"written with: %w", err)
+var (
+	// ErrSecretKeyMissing says an installation's secrets were sealed and no
+	// SECRET_KEY is configured to open them.
+	ErrSecretKeyMissing = errors.New("this installation's secrets were encrypted and SECRET_KEY " +
+		"is not set: put the key back, or clear the second factors and the " +
+		"directory password and let them be entered again")
+
+	// ErrSecretKeyDiffers says SECRET_KEY is a key, and not the one an
+	// installation's secrets were sealed with.
+	ErrSecretKeyDiffers = errors.New("SECRET_KEY is not the key this installation's secrets were written with")
+)
+
+// CheckSecretKey asks whether secrets opens stored, the key check an
+// installation kept - the question Verify asks at every start. The installer
+// asks it of the key check inside a backup before taking the backup, because
+// the start that follows a restore would ask it anyway, and by then the only
+// answer left is to end the process.
+func CheckSecretKey(secrets *security.Sealer, stored string) error {
+	// Sealed, or it proves nothing: Open hands a value without the marker back as
+	// it is, and a check that never was sealed would pass whatever the key.
+	if !security.IsSealed(stored) {
+		return errors.New("this installation's key check is not sealed, so SECRET_KEY " +
+			"cannot be checked against it")
 	}
 
-	if opened != theKeyIsRight {
-		return errors.New("SECRET_KEY does not match this installation's secrets")
+	if _, err := secrets.Open(stored); err != nil {
+		if errors.Is(err, security.ErrNoKey) {
+			return ErrSecretKeyMissing
+		}
+
+		return fmt.Errorf("%w: %w", ErrSecretKeyDiffers, err)
 	}
 
 	return nil

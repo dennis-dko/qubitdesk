@@ -20,8 +20,8 @@ func TestTheSignInCardWelcomesByTheInstallationsName(t *testing.T) {
 	p := open(t)
 	p.readyAdmin()
 
-	// Titled "Ticketsystem", with no logo, so the lettered mark stands in the
-	// band beside the words.
+	// Titled "Ticketsystem". Go-Ticket-System's mark stands in the band beside
+	// the words whatever the logo is, so none is needed here.
 	p.storeBranding(t, "")
 
 	p.run("sign out", chromedp.Click("#logout", chromedp.ByID),
@@ -31,7 +31,7 @@ func TestTheSignInCardWelcomesByTheInstallationsName(t *testing.T) {
 
 	p.waitEvaluates("the heading of the sign-in card",
 		`document.querySelector('#login-screen h2')?.textContent.trim() ?? ''`,
-		"Welcome to Ticketsystem")
+		"Welcome to Go-Ticket-System | Ticketsystem")
 
 	// The mark stands before the words, in the same band.
 	var placed struct {

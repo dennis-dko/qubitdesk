@@ -153,10 +153,9 @@ func New(api, token string) *Source {
 //
 // The same shape the release workflow builds, and windows is the one that
 // differs - it carries the extension the operating system needs to run it at
-// all. Versions from before the web binary was called -web ask for
-// go-ticket-system_..., which releases no longer carry - decided on
-// 2026-10-29 - so those are replaced by hand once and update themselves again
-// from then on.
+// all. Versions up to v0.4.11 ask for the binary under a name from before the
+// project was called Go-Ticket-System, which releases no longer carry, so those are
+// replaced by hand once and update themselves again from then on.
 func assetName(version string) string {
 	name := fmt.Sprintf("go-ticket-system-web_%s_%s_%s", version, runtime.GOOS, runtime.GOARCH)
 

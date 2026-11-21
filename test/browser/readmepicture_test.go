@@ -23,10 +23,6 @@ import (
 // readmePictures names the directory the README's pictures are written to.
 const readmePictures = "GTS_README_PICTURES"
 
-// defaultName is what cmd/configs/.env calls an installation, in place of the
-// name the harness gives each instance to tell it from the others.
-const defaultName = "APP_NAME=Ticket System"
-
 // The README's pictures are taken from the application rather than drawn.
 //
 // A screenshot in a README is a claim about what the application looks like, and
@@ -53,9 +49,8 @@ func TestTheReadmePicturesAreTakenFromTheApplication(t *testing.T) {
 	zone := afternoon(time.Now())
 	provider := oidctest.Start(t)
 
-	// INFO, so the live log has the request lines an administrator would see, and
-	// the name an installation is given when nobody chooses one.
-	p := openWith(t, "LOG_LEVEL=INFO", defaultName)
+	// INFO, so the live log has the request lines an administrator would see.
+	p := openWith(t, "LOG_LEVEL=INFO")
 	p.run("a desktop in the afternoon", chromedp.EmulateViewport(1280, 800),
 		emulation.SetTimezoneOverride(zone))
 
@@ -66,6 +61,7 @@ func TestTheReadmePicturesAreTakenFromTheApplication(t *testing.T) {
 	p.settled()
 
 	p.showView("admin")
+	p.showTabOf("#log-card")
 	p.shootCard(into, "log", "#log-card")
 
 	p.run("sign out", chromedp.Click("#logout", chromedp.ByID),
@@ -84,7 +80,12 @@ func TestTheReadmePicturesAreTakenFromTheApplication(t *testing.T) {
 
 	p.showView("calendar")
 	p.shoot(into, "calendar")
+	p.showTabOf("#workday-card")
 	p.shootCard(into, "workday", "#workday-card")
+
+	// Back to the month: a screen comes back on the tab it was left on, and the
+	// calendar's pictures further down are of the month.
+	p.showTabOf("#month-card")
 
 	p.showView("week")
 	p.shootCard(into, "week", "#week-card")
@@ -113,6 +114,7 @@ func TestTheReadmePicturesAreTakenFromTheApplication(t *testing.T) {
 	p.waitShown("#report-result")
 	p.run("as a pie", p.click(`#report-chart-switch [data-chart="pie"]`))
 	p.shootCard(into, "report", "#report-result")
+	p.showTabOf("#form-statement")
 	p.run("work out the month's statement", p.click(`#form-statement button[type="submit"]`))
 	p.waitShown("#statement-result")
 	p.shootCard(into, "statement", "#statement-result")
@@ -178,6 +180,27 @@ func (p *page) showView(view string) {
 	p.settled()
 }
 
+// showTabOf presses the tab of the screen an element is on, as somebody looking
+// for it would. The tab is read off the page rather than named here, so a card
+// moved to another tab takes this with it.
+func (p *page) showTabOf(selector string) {
+	p.t.Helper()
+
+	var tab string
+
+	p.run("find the tab of "+selector, chromedp.Evaluate(fmt.Sprintf(`
+		(() => {
+			const panel = document.querySelector(%q)?.closest('[role="tabpanel"]');
+			return panel ? '#' + panel.getAttribute('aria-labelledby') : '';
+		})()`, selector), &tab))
+
+	if tab == "" {
+		p.t.Fatalf("%s is on no tab of a screen", selector)
+	}
+
+	p.run("open the tab of "+selector, p.click(tab))
+}
+
 // still waits for the screen to stop changing - nothing loading, no toast, no
 // pointer over a control and no control focused - and puts it at the top, where
 // the bar does not cover anything below it.
@@ -234,9 +257,9 @@ func (p *page) shootCard(into, name, card string, hide ...string) {
 func photographTheInstaller(t *testing.T, into string) {
 	t.Helper()
 
-	app := harness.StartUnconfigured(t, defaultName)
+	app := harness.StartUnconfigured(t)
 
-	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), launch("en-US")...)
+	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), launch(t, "en-US")...)
 	defer cancelAlloc()
 
 	ctx, cancel := chromedp.NewContext(alloc)

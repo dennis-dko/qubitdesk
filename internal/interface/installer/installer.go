@@ -17,9 +17,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
 	appconfig "github.com/dennis-dko/go-ticket-system/internal/infrastructure/config"
 	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
 	"github.com/dennis-dko/go-ticket-system/internal/support/i18n"
+	"github.com/dennis-dko/go-ticket-system/internal/support/security"
 )
 
 //go:embed asset/install.html
@@ -37,9 +39,6 @@ type Config struct {
 	// Addr is where to listen, in the form ":8000".
 	Addr string
 
-	// AppName labels the page.
-	AppName string
-
 	// Version is shown in the page footer, so it is possible to tell which
 	// build somebody is looking at before it has an interface.
 	Version string
@@ -55,6 +54,23 @@ type Config struct {
 	// an operator who configured half of it in a compose file does not retype
 	// it. The password is never sent back.
 	Prefill appconfig.Datasource
+
+	// Schema is the newest migration this binary carries. A backup from a newer
+	// one is refused when it is uploaded, on this screen, rather than by the
+	// restore, which runs after the installer has handed over and can then only
+	// end the process. Zero sets no limit.
+	Schema int64
+
+	// Secrets is the sealer built from this process's SECRET_KEY, which the
+	// installation it sets up will run with. A backup whose secrets it cannot open
+	// is refused when it is uploaded, for the same reason as a newer schema: the
+	// start after the restore would refuse it, and then only by ending the
+	// process. Nil is no key.
+	Secrets *security.Sealer
+
+	// Favicon is the application's tab icon, served at /favicon.svg so the
+	// installer's tab carries the mark the application's does. Empty serves none.
+	Favicon []byte
 
 	// Logf reports progress. Required: this screen is the only thing the
 	// process is doing, and a silent one would look hung.
@@ -77,6 +93,36 @@ type Result struct {
 	// documented initial password. See the setup handler's claim, which is where
 	// the conditions on that live.
 	Token string
+
+	// Restore is a backup to put into the new database once it is migrated, and
+	// RestorePassphrase the passphrase it opens with. The installer has opened it
+	// once already, so a wrong passphrase was said on the screen rather than at
+	// the start.
+	Restore           []byte
+	RestorePassphrase string
+
+	// RestoreSecretKey is the SECRET_KEY the backup's installation had, given
+	// where this process's key cannot open the backup's secrets, so the restore
+	// seals them again under this one's. RestoreWithoutSecrets asks it to leave
+	// them behind instead, for a backup whose key is lost. Neither is set where
+	// the backup's secrets open under this process's key, or it has none.
+	RestoreSecretKey      string
+	RestoreWithoutSecrets bool
+}
+
+// answer is the body the page sends: the connection, and with a save, whether
+// the backup uploaded before is to be put into the new database.
+type answer struct {
+	appconfig.Datasource
+
+	Restore bool `json:"restore"`
+}
+
+// handover is what a save hands the application: the connection as it was
+// written, and what was asked of the new database.
+type handover struct {
+	datasource appconfig.Datasource
+	restore    *pendingRestore
 }
 
 // Serve blocks until a working database connection has been saved, and returns
@@ -100,12 +146,14 @@ func Serve(ctx context.Context, cfg Config) (Result, error) {
 		cfg.Token = token
 	}
 
-	s := &server{cfg: cfg, done: make(chan appconfig.Datasource, 1)}
+	s := &server{cfg: cfg, done: make(chan handover, 1)}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/install/state", s.state)
 	mux.HandleFunc("/install/test", s.test)
 	mux.HandleFunc("/install/save", s.save)
+	mux.HandleFunc("/install/backup", s.backup)
+	mux.HandleFunc("/favicon.svg", s.favicon)
 	// Everything else is the page, so a bookmarked deep link into the
 	// application still lands somewhere that explains itself.
 	mux.HandleFunc("/", s.page)
@@ -119,7 +167,9 @@ func Serve(ctx context.Context, cfg Config) (Result, error) {
 	// answered in 150 seconds, and with these bounds it is refused after 30. One
 	// request and then silence, or a body that never arrives, held a connection
 	// until the process ended, as often as a visitor liked. Nothing legitimate
-	// here is slow: the page is small and the largest body read is eight kilobytes.
+	// here is slow: the page is small and every body read is eight kilobytes but
+	// one - a backup, which takes the time it takes and is given it, by its own
+	// handler, only once the token has been checked.
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           mux,
@@ -142,7 +192,7 @@ func Serve(ctx context.Context, cfg Config) (Result, error) {
 	s.announce(listener.Addr(), generated)
 
 	var (
-		accepted appconfig.Datasource
+		accepted handover
 		waitErr  error
 	)
 
@@ -161,12 +211,22 @@ func Serve(ctx context.Context, cfg Config) (Result, error) {
 
 	_ = httpServer.Shutdown(shutdownCtx)
 
-	return Result{Datasource: accepted, Token: cfg.Token}, waitErr
+	result := Result{
+		Datasource: accepted.datasource,
+		Token:      cfg.Token,
+	}
+
+	if restore := accepted.restore; restore != nil {
+		result.Restore, result.RestorePassphrase = restore.file, restore.passphrase
+		result.RestoreSecretKey, result.RestoreWithoutSecrets = restore.secretKey, restore.withoutSecrets
+	}
+
+	return result, waitErr
 }
 
 type server struct {
 	cfg  Config
-	done chan appconfig.Datasource
+	done chan handover
 
 	// mu and saved decide the handover before the file is written, not after:
 	// two browser tabs submitting at the same moment must not both be told they
@@ -177,12 +237,16 @@ type server struct {
 	// corrected and sent again.
 	mu    sync.Mutex
 	saved bool
+
+	// restore is the backup uploaded to start the new database from, held until
+	// the answer that chooses the database asks for it. Guarded by mu.
+	restore *pendingRestore
 }
 
 func (s *server) announce(addr net.Addr, generated bool) {
 	where := "http://localhost" + portOf(addr)
 
-	s.cfg.Logf("no database is configured, so %s is serving its installer instead", s.cfg.AppName)
+	s.cfg.Logf("no database is configured, so %s is serving its installer instead", model.Brand)
 	s.cfg.Logf("open %s to choose one - the application will not start until you do", where)
 
 	if generated {
@@ -226,6 +290,22 @@ func (s *server) page(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, _ = w.Write(bytes.Replace(page, []byte(dictionariesMarkup), []byte(pageDictionaries()), 1))
+}
+
+// favicon serves the application's tab icon at the path the application serves
+// it from, so a browser keeps the one icon across the handover. Not stored: the
+// application answers the same path once it runs, with caching of its own.
+func (s *server) favicon(w http.ResponseWriter, r *http.Request) {
+	if len(s.cfg.Favicon) == 0 {
+		http.NotFound(w, r)
+
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write(s.cfg.Favicon)
 }
 
 // dictionariesMarkup is the empty block in the page that pageDictionaries fills.
@@ -294,7 +374,7 @@ type prefillFields struct {
 // application will have, before there is an account to sign in with.
 func (s *server) state(w http.ResponseWriter, r *http.Request) {
 	response := stateResponse{
-		AppName: s.cfg.AppName,
+		AppName: model.Brand,
 		Version: s.cfg.Version,
 	}
 
@@ -313,12 +393,12 @@ func (s *server) state(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) test(w http.ResponseWriter, r *http.Request) {
-	ds, ok := s.accept(w, r)
+	given, ok := s.accept(w, r)
 	if !ok {
 		return
 	}
 
-	if err := appconfig.TestDatasource(r.Context(), ds); err != nil {
+	if err := appconfig.TestDatasource(r.Context(), given.Datasource); err != nil {
 		writeError(w, http.StatusBadRequest, probeFailure(err))
 
 		return
@@ -345,20 +425,27 @@ func probeFailure(err error) error {
 }
 
 func (s *server) save(w http.ResponseWriter, r *http.Request) {
-	ds, ok := s.accept(w, r)
+	given, ok := s.accept(w, r)
 	if !ok {
 		return
 	}
 
 	// As it will be written, from here on: the application goes on with what is
 	// handed over, the next start with the file, and the two must be one value.
-	ds = ds.AsStored()
+	ds := given.AsStored()
 
 	// Probed before it is written, not after. A saved connection that does not
 	// work would leave the process unable to start and unable to serve the
 	// screen that could fix it - the one state this design must not reach.
 	if err := appconfig.TestDatasource(r.Context(), ds); err != nil {
 		writeError(w, http.StatusBadRequest, probeFailure(err))
+
+		return
+	}
+
+	restore, refused := s.restoreAsked(r, given, ds)
+	if refused != nil {
+		writeError(w, http.StatusBadRequest, refused)
 
 		return
 	}
@@ -400,7 +487,7 @@ func (s *server) save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Cannot block: saved lets exactly one request this far, and done holds one.
-	s.done <- ds
+	s.done <- handover{datasource: ds, restore: restore}
 }
 
 // holdsTheToken reports whether a request carries the setup token.
@@ -415,12 +502,12 @@ func (s *server) holdsTheToken(r *http.Request) bool {
 }
 
 // accept checks the method and the token and decodes the body.
-func (s *server) accept(w http.ResponseWriter, r *http.Request) (appconfig.Datasource, bool) {
+func (s *server) accept(w http.ResponseWriter, r *http.Request) (answer, bool) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
 
-		return appconfig.Datasource{}, false
+		return answer{}, false
 	}
 
 	if !s.holdsTheToken(r) {
@@ -430,28 +517,28 @@ func (s *server) accept(w http.ResponseWriter, r *http.Request) (appconfig.Datas
 			apperror.Invalidf("the setup token is wrong - it is printed in this "+
 				"process's log").WithCode("wrongSetupToken"))
 
-		return appconfig.Datasource{}, false
+		return answer{}, false
 	}
 
-	var ds appconfig.Datasource
+	var given answer
 
 	// Bounded: this endpoint is unauthenticated until the token is checked, and
 	// the check has already happened, but a connection description is a few
 	// hundred bytes and there is no reason to read more.
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*1024)).Decode(&ds); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*1024)).Decode(&given); err != nil {
 		writeError(w, http.StatusBadRequest,
 			errors.New("the request is not a connection description"))
 
-		return appconfig.Datasource{}, false
+		return answer{}, false
 	}
 
-	if err := ds.Validate(); err != nil {
+	if err := given.Validate(); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 
-		return appconfig.Datasource{}, false
+		return answer{}, false
 	}
 
-	return ds, true
+	return given, true
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

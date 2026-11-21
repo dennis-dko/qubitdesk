@@ -24,6 +24,7 @@ type Handlers struct {
 	Logs     *rest.LogHandler
 	Restart  *rest.RestartHandler
 	Update   *rest.UpdateHandler
+	Backups  *rest.BackupHandler
 	Holidays *rest.HolidayHandler
 	OpenID   *rest.OpenIDHandler
 	Sheets   *rest.SheetHandler
@@ -148,6 +149,11 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.GET(base+"/settings/update", h.Update.State)
 	app.POST(base+"/settings/update", h.Update.Apply)
 	app.POST(base+"/settings/update/check", h.Update.Check)
+	app.GET(base+"/settings/backups", h.Backups.State)
+	app.POST(base+"/settings/backups", h.Backups.Make)
+	app.PUT(base+"/settings/backups/plan", h.Backups.SavePlan)
+	app.GET(base+"/settings/backups/{name}", h.Backups.Download)
+	app.DELETE(base+"/settings/backups/{name}", h.Backups.Delete)
 
 	// The process log. Under /admin rather than /settings because it changes
 	// nothing - and behind whoever administers the installation, because it
@@ -208,6 +214,7 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.DELETE(base+"/users/{id}", h.Users.Delete)
 	app.PUT(base+"/users/{id}/role", h.Users.AssignRole)
 	app.PUT(base+"/users/{id}/password", h.Users.SetPassword)
+	app.DELETE(base+"/users/{id}/second-factor", h.Users.RemoveSecondFactor)
 
 	// Ahead of the {id} routes, for the same reason the others are: "export" is
 	// not an id.

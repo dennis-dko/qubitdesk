@@ -2,6 +2,7 @@ package io.github.dennisdko.goticketsystem
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
@@ -9,8 +10,9 @@ import java.net.URL
 
 /**
  * Installation is what the app asks the installation itself, around the web
- * interface it shows: a session for the token it was connected with, and whether
- * the session the web interface holds is still one.
+ * interface it shows: a session for the token it was connected with, whether
+ * the session the web interface holds is still one, and which release's app it
+ * offers.
  *
  * Everything else is the web interface's own business. The app shows the
  * installation's pages rather than a copy of them, decided by the maintainer on
@@ -98,6 +100,34 @@ class Installation(private val address: String, private val words: Language, pri
             } finally {
                 connection.disconnect()
             }
+        }
+    }
+
+    /**
+     * android is where the app of the installation's release is downloaded, and
+     * which release that is, as the installation answers the owner of [token] -
+     * what [offerFor] reads a newer app out of.
+     */
+    suspend fun android(token: String): JSONObject? = withContext(Dispatchers.IO) { read("/api/v1/me/android", token) }
+
+    /** read is what [path] answers the owner of [token], unwrapped from its data; null where it is refused or not found. */
+    private fun read(path: String, token: String): JSONObject? {
+        val connection = open(path)
+
+        try {
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.setRequestProperty("Accept", "application/json")
+
+            if (connection.responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) throw tokenUnknown()
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) return null
+
+            val body = connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+
+            return runCatching { JSONObject(body).optJSONObject("data") }.getOrNull()
+        } catch (e: IOException) {
+            throw unreachable(e)
+        } finally {
+            connection.disconnect()
         }
     }
 

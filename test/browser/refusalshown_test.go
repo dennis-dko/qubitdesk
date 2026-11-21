@@ -90,6 +90,7 @@ func TestARejectedFieldIsNamedNotIdentified(t *testing.T) {
 	// A negative idle time, which is refused by field rather than by sentence.
 	p.run("save an impossible idle time",
 		chromedp.Click(`.tab[data-view="admin"]`, chromedp.ByQuery),
+		p.click(`#admin-tabs [data-card-tab="operation"]`),
 		chromedp.WaitVisible(`#form-operational input[name="sessionIdleMinutes"]`, chromedp.ByQuery),
 		chromedp.Evaluate(`(() => {
 			const field = document.querySelector('#form-operational input[name="sessionIdleMinutes"]');

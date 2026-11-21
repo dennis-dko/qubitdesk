@@ -165,9 +165,6 @@ type Installer struct {
 	// answers where the operator already looked.
 	HTTPPort string
 
-	// AppName labels the page.
-	AppName string
-
 	// SetupToken is SETUP_TOKEN, empty when one should be generated.
 	SetupToken string
 
@@ -187,7 +184,6 @@ func InstallerSettings() Installer {
 
 	return Installer{
 		HTTPPort:   valueOr(cfg, "HTTP_PORT", "8000"),
-		AppName:    valueOr(cfg, "APP_NAME", "Ticket System"),
 		SetupToken: strings.TrimSpace(cfg.Get("SETUP_TOKEN")),
 		Prefill: Datasource{
 			Dialect: strings.TrimSpace(cfg.Get("DB_DIALECT")),
@@ -382,6 +378,41 @@ func ProbeDatasource(ctx context.Context, ds Datasource) error {
 
 // testTimeout keeps an unreachable host from holding the request open.
 const testTimeout = 8 * time.Second
+
+// OpenDatasource opens the connection the application would, for a command that
+// works on its database beside a running server rather than as one - GoFr
+// cannot be started for that, because its start refuses a port the server
+// already holds. It pings before handing the connection over, so an unreachable
+// database is said at once rather than at the first statement.
+func OpenDatasource(ctx context.Context, ds Datasource) (*sql.DB, error) {
+	driver, dsn, err := driverDSN(ds)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := sql.Open(driver, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("cannot open the connection: %w", err)
+	}
+
+	pingCtx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+
+	if err := db.PingContext(pingCtx); err != nil {
+		_ = db.Close()
+
+		return nil, fmt.Errorf("cannot reach the database: %w", err)
+	}
+
+	return db, nil
+}
+
+// SecretKeyFromEnvironment is SECRET_KEY where the application reads it - the
+// environment, or the configuration files GoFr would load - for a command that
+// starts no application and still has to read what the key sealed.
+func SecretKeyFromEnvironment() string {
+	return gofrConfig().Get("SECRET_KEY")
+}
 
 // driverDSN builds the driver name and connection string for a probe.
 //

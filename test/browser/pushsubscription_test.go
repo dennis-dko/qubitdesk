@@ -71,6 +71,7 @@ func TestTheNotificationCardSubscribesThisBrowserAndSigningOutTakesItBack(t *tes
 	p.run("load the page with the push service stood in for", standInForThePushService, chromedp.Reload())
 	p.settled()
 	p.showView("settings")
+	p.showTabOf("#push-subscribe")
 	p.waitShown("#push-subscribe")
 
 	mine := func() []string {

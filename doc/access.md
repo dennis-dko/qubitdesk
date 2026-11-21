@@ -33,7 +33,8 @@ the permissions that are actually enforced.
 One of them is the whole administration: `settings:manage` opens the *Settings*
 screen and everything on it — the setup wizard, the branding, the operational
 limits, the instance timezone, the database connection, the directory and its
-synchronisation, the telemetry, the maintenance notice, the log and the restart.
+synchronisation, the telemetry, the maintenance notice, the backups, the log and
+the restart.
 Two others amount to the same in the end, and that is said rather than hidden:
 whoever holds `roles:write` can tick `settings:manage` on a role, and whoever
 holds `users:write` can hand that role out. None of the three is given to an
@@ -50,9 +51,12 @@ kept from, and whoever sets up queues has to be able to open a ticket to see tha
 what they set up works. It does not hold `portal:use`, which means something only
 for an account linked to a contact.
 
-Backups are not a thing this application does: there is no permission for them, no
-endpoint and no screen. They are external, and
-[`deploy/OPERATION.md`](../deploy/OPERATION.md) says what to copy for each dialect.
+Backups are made by the application: the *Backups* card under *Settings* makes one
+sealed file of the whole installation, now or on a schedule, for whoever holds
+`settings:manage`. A download is a copy of every account and every ticket leaving
+the server, so making, downloading and deleting one are in the
+[administration log](#the-administration-log).
+[`deploy/OPERATION.md`](../deploy/OPERATION.md#backup) says how one is restored.
 
 **The three roles the application ships with are shown, not edited** — not their
 name, not their description, not their rights — and none of them can be deleted.
@@ -265,16 +269,20 @@ What holds the round trip together:
 
 Under **Settings**, *Changes to the installation* lists who changed how the
 installation is run, newest first: an account created, corrected, given another
-role, given a new password or deleted; a role created, changed or deleted; a
+role, given a new password, stripped of a lost second factor or deleted; a role created, changed or deleted; a
 queue, ticket state, priority, type, calendar or service level created, changed or deleted; accounts or roles
 imported; each settings card saved; an option of the system configuration
 changed or put back to its default, by name; maintenance mode
-switched on or off; the directory synchronised; the application restarted, updated or set up. Everybody holding `settings:manage` can read it, and nobody else.
+switched on or off; the directory synchronised; a backup made, downloaded or deleted, and the plan for
+them changed; the application restarted, updated or set up; and the built-in
+administrator let back in by the recover command, which has no account to name
+and is shown as made on the server. Everybody holding `settings:manage` can read it, and nobody else.
 
 A change is recorded once it has gone through - a refused request changed
 nothing and is not there, and neither is *Check the file* before an import,
-which is the import's own request told not to write - by a middleware working from one table of routes, so
-no screen and no API client can change accounts, roles or settings past it.
+which is the import's own request told not to write - by a middleware working
+from one table of routes, so no screen and no API client can change accounts,
+roles or settings past it.
 
 It keeps ids and reads the names when it is shown. An account renamed since
 appears under its new name; an account erased since appears by its number alone,

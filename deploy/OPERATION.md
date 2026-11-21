@@ -156,7 +156,7 @@ A systemd unit that gets that right:
 
 ```ini
 [Unit]
-Description=Ticket System
+Description=Go-Ticket-System
 After=network-online.target
 Wants=network-online.target
 
@@ -316,7 +316,7 @@ So the shipped `configs/.env` sets only what no screen can administer:
 | `DB_DIALECT`, `DB_NAME` | this is what decides whether there is a database to store a setting in |
 | `UI_ENABLED`, `AUTH_ENABLED` | either one switched off removes the screen that would switch it back |
 | `SHUTDOWN_GRACE_PERIOD` | read at start by the framework, which waits that long for the requests under way when it stops |
-| `APP_NAME` | see below — it is not the instance title |
+| `APP_NAME` | read by the framework, see below; it names nothing on screen |
 
 Six values used to sit there **as well as** in Settings — the log level, the
 session lifetime, the daily cap, the two rate-limit figures and the directory
@@ -325,14 +325,15 @@ because every built-in fallback was already identical to the line that was
 removed; what changed is that there is now one place per value instead of two,
 and the file's copy was always the losing one.
 
-**`APP_NAME` is not the instance title.** The title under *Settings → Appearance*
-renames the header, and the browser tab where nothing separate is written for it
-(*Browser tab* beside it, for an installation whose name is too long to be a tab).
-`APP_NAME` is the issuer an authenticator
-app shows beside an enrolled two-factor account — read once at start, administered
-by no screen — and it also seeds the initial title, so naming the instance in the
-environment saves naming it again. Changing it invalidates no enrolled codes, but
-phones already enrolled keep showing the old name.
+**`APP_NAME` names nothing on screen.** Every installation is called Go-Ticket-System.
+What is written under *Settings → Appearance* is added to that name after a bar,
+as in *Go-Ticket-System | htp.net*. That full name appears in the header, the browser tab,
+an authenticator app, a passkey prompt, the foot of an exported document and a
+subscribed calendar. The browser tab can be given a shorter addition of its own.
+`APP_NAME` belongs to the framework: traces are recorded under it, and
+`/.well-known/health` answers with it. An authenticator app keeps the name an
+account was enrolled under, so an older entry goes on showing the name it was
+enrolled with.
 
 ### The two example files here
 
@@ -674,6 +675,10 @@ installer requires a token. It is generated and printed in the process log at
 start, with the URL to open. For an unattended install set `SETUP_TOKEN`
 yourself; then nothing is printed and a provisioning script can drive the page.
 
+**A backup**, if you choose it on the installer, where a new database starts
+empty or from a backup - one of the two. *Restoring a backup* below says what
+it asks for and what it refuses.
+
 Two things about an exposed installer. `GET /install/state` needs no token and
 says the instance name and the build version; whatever database prefill the
 environment supplied — dialect, name, host, port, user, SSL mode — it adds only for a
@@ -693,6 +698,45 @@ included: a ticket is the organisation's record rather than one person's, and
 whoever sets up queues has to be able to open one to see that it works. It does
 not reach the customer portal, which means something only for an account linked
 to a contact.
+
+## When nobody can sign in
+
+**Somebody lost the phone their second factor is on.** An administrator opens
+*Accounts* and presses *remove second factor* in that person's row. The code from
+the authenticator app goes, every passkey of the account goes with it - most
+likely on the same phone - and every session it has open ends, because that
+phone may still be signed in. The person signs in with their password and sets a
+second factor up again. The administration log records who did it. The button is
+only on an account that has a second factor, and never on your own, which is
+turned off under *My account* with a code from it.
+
+**Nobody can sign in as `admin@local`** - its password is lost, or its second
+factor with a phone, and no other account administers accounts. Run the recover
+command on the server, where the application runs:
+
+```bash
+# A · B
+docker compose exec app /app/go-ticket-system-web recover
+
+# C - from the directory the service starts in, as the user it runs as
+cd /opt/gts && sudo -u go-ticket-system ./go-ticket-system-web recover
+
+# D
+docker exec <container> /app/go-ticket-system-web recover
+```
+
+It prints a new password for `admin@local`, once. Signing in with it asks for a
+password of your own before anything else. The command also removes the
+account's second factor and ends every session it had, and the administration
+log shows the recovery as made by *the command line on the server*.
+
+It opens the database the server uses - `configs/datasource.json`, otherwise the
+`DB_*` variables from the environment and `configs/.env` - beside the running
+application, so nothing has to be stopped; run from anywhere else it finds no
+configuration and says so. It needs `SECRET_KEY` where the server has it, or the
+second factors sealed with it cannot be read. Whoever can run a command on the
+server can read the database anyway, so this opens nothing that was closed -
+which is also why there is no way to do it from outside the server.
 
 ## Settings that need a restart
 
@@ -751,30 +795,19 @@ equivalent would leave a window with no application running. The card says so.
 
 ## If the tab icon does not appear
 
-The configured logo is served at `/favicon`, from an address carrying a
-fingerprint of its contents, and written into the page by the server. Firefox,
-Chrome and Edge all take it: the Firefox suite checks that by reading what
-Firefox recorded in its own icon store, for an SVG that states its size, one with
-only a viewBox, one with neither, and a raster wordmark 2000px across.
+The tab shows Go-Ticket-System's mark whatever logo is configured: the page declares
+`/favicon.svg`, with `/favicon.ico` beside it for whatever asks for that by name.
+A configured logo is drawn at the left of the bar after signing in, and nowhere
+else.
 
-So if a tab is empty, it is one of these three, in this order:
+So if a tab is empty, or still shows a logo, **the browser is showing what it
+remembered.** Firefox keeps an icon against a page in `favicons.sqlite` and
+reuses it, including the memory of a page that had none or another.
+`Ctrl`+`Shift`+`R` reloads past it; *Forget About This Site* clears it
+outright.
 
-**The build is older than the fix.** The icon used to be patched in by the page
-after loading, which Chrome honours and Firefox ignores - the exact shape of
-"works in Chrome, empty in Firefox". Check the footer: it names the version.
-
-**Firefox is showing what it remembered.** It keeps an icon against a page in
-`favicons.sqlite` and reuses it, including the memory of a page that had none.
-`Ctrl`+`Shift`+`R` reloads past it; *Forget About This Site* clears it outright.
-
-**The logo cannot be seen at that size.** A tab gives it sixteen pixels. A wide
-wordmark in near-black is a smudge on a dark tab strip - present, adopted,
-invisible. The appearance screen shows the logo at exactly that size beside the
-other two previews, which is the quickest way to tell this apart from the two
-above.
-
-To take the browser out of it entirely, open `/favicon` directly. What comes back
-is what any tab is given.
+To take the browser out of it entirely, open `/favicon.svg` directly. What comes
+back is what any tab is given.
 
 ## Monitoring
 
@@ -1133,7 +1166,7 @@ that difference is the whole of it.
 | | What the card offers |
 | --- | --- |
 | **C** Single binary | A button. It downloads the release's binary for this platform, checks it against the `SHA256SUMS` published beside it, and puts it where the running file is. |
-| **A/B/D** Container | No button. The card says a newer version exists, which command updates the image - `docker compose pull && docker compose up -d` - and that adding `compose.update.yaml` lets it do that from here. |
+| **A/B/D** Container | No button. The card says a newer version exists, which command updates the image - `docker compose pull && docker compose up -d` - and that adding `compose.update.yaml` lets it do that from here. Under it, it names what that command does not take as it stands: overlays given with `-f`, as in B, which both commands need again unless `COMPOSE_FILE` in `.env` lists them; a version pinned in `GTS_VERSION`, which has to be raised first; and a container started with `docker run`, as in D, which is pulled, removed and started again with the same options. |
 | **A/B/D** Container **with `compose.update.yaml`** | A button that pulls a new image, recreates the container from it, and removes the image it replaced. Nothing is left behind. |
 
 **Why a container without the overlay gets no button.** A binary swapped inside
@@ -1209,8 +1242,8 @@ recreate failed. Either way the restart announcement is taken back on every scre
 and the card says which it was - for a failure, in the updater's own words.
 
 **Nothing newer is what a pinned version finds.** The updater pulls the tag the
-compose file names. Where `GTS_VERSION` names a version that tag does not move, so
-every press finds the image already running: change `GTS_VERSION` and recreate by
+compose file names. Where `GTS_VERSION` names a version that tag does not move,
+so every press finds the image already running: change `GTS_VERSION` and recreate by
 hand instead, or leave it unset to follow `latest`.
 
 **Nothing is written into place unverified.** The download is hashed while it is
@@ -1367,8 +1400,99 @@ installation*.
 
 ## Backup
 
-There is **no backup feature in the application**. No button, no endpoint, no
-permission. It is external, and what to copy depends on the dialect.
+The application makes its own backups, on the **Backups** card under *Settings*,
+on the operation tab: one now, downloaded as soon as it is made, or on a schedule
+saved on the card and kept on the server, the oldest going once there are more
+than the number set there.
+
+**Every backup is sealed with `BACKUP_PASSPHRASE`.** Without one of at least
+twelve characters none is made - the card says so instead - because a backup is
+downloaded, and a download ends up on a laptop: an unsealed one is not offered.
+The file is compressed and encrypted with AES-256-GCM under a key scrypt derives
+from the passphrase; without the passphrase it is unreadable, and with any byte
+changed it is refused whole.
+
+```bash
+openssl rand -base64 24    # a passphrase, for .env
+```
+
+**What a backup holds.** Every table: accounts, roles and permissions, tokens
+and passkeys, the queues and what tickets are sorted by, the calendars and
+service levels, the organisations and contacts, the tickets with their
+articles, files, noted time and history, the notifications, the automation, the
+knowledge base, the administration log, and the whole settings table -
+branding and the logo, the timezone, the system configuration, the directory
+configuration including its bind password. Not the sessions: after a restore everybody signs in again.
+Second factors, the directory password, a sign-in provider's client secret and
+the push key are sealed with `SECRET_KEY` where one is set, and stay sealed
+inside the backup, so a restore needs that `SECRET_KEY` too - or leaves those
+four behind, as *Restoring a backup* below says. Keep the passphrase and the key
+together, and somewhere other than the server whose backups they open.
+
+**Where they are kept.** `BACKUP_DIR`: `backups` beside `configs/` for a binary,
+`/data/backups` on the `app-data` volume under Compose. Each file is named for
+the moment it was made, in UTC - `gts-20261119-030000.gtsbak`. That folder
+is on the server the backups are of, so copy it off the server, or download the
+files: a backup that burns with the disk it describes is not one.
+
+**The schedule** is a five-field cron expression - `0 3 * * *` is three every
+morning - read in the installation's timezone set under *Settings*, not the
+server's clock. Empty makes no backup on its own. After every backup, made on
+schedule or by hand, the oldest go until the number on the card is left.
+
+Making, downloading and deleting a backup, and changing the plan, are in the
+administration log; a download is a copy of the whole installation leaving the
+server.
+
+### Restoring a backup
+
+A backup is restored through the **installer**, into an **empty** database of
+any dialect - one made on SQLite restores into PostgreSQL, and the other way
+round:
+
+1. Start Go-Ticket-System so that it serves its installer, with the `SECRET_KEY` this
+   installation is to keep - the one the backup's installation had, another, or
+   none. A binary or a bare container serves the installer when no database is
+   configured (see *First start*). Compose configures one itself, so run the
+   application once without it, against a database volume that is new and empty:
+
+   ```bash
+   docker compose run --rm --service-ports -e DB_DIALECT= app
+   ```
+
+   The installer fills in the rest of the connection from `.env`, and prints its
+   setup token in that terminal.
+2. Choose the database, choose *Restore a backup into it*, choose the file and type
+   its `BACKUP_PASSPHRASE`. The installer reads it whole there and then, so a
+   wrong passphrase, a file that is not a backup, one cut short on its way and
+   one made by a newer version of Go-Ticket-System are said on that page - the restore
+   itself runs after the installer has handed over, where a refusal can only end
+   the process.
+
+   Where the backup's installation had a `SECRET_KEY` other than step 1's, its
+   second factors, directory password, sign-in provider's client secret and
+   push key are sealed with that key, and the installer asks for it, the way it
+   asks for the passphrase. Given, it is used once: the restore seals those
+   secrets again under this installation's own key, or keeps them in the clear
+   if this one has none, and the old key is kept nowhere. Where that key is
+   lost, choose *Without its secrets* instead: everything else comes back, the
+   second factors are switched off and set up again, the directory password and
+   the client secret are entered again, and browsers subscribe to
+   notifications anew.
+3. *Save and start*. The application migrates the database and puts the backup
+   into it before anything else, and everybody signs in with the passwords they
+   had. Under Compose, stop that run once it has started - Ctrl+C - and bring the
+   stack up as usual with `docker compose up -d`.
+
+A restore refuses a database that already holds an account. It is one
+transaction, so a backup that fails part of the way leaves the database as the
+migrations made it - and the connection the installer saved is removed again, so
+the next start serves the installer and it can be tried once more.
+
+### Backing up from outside
+
+A server-side dump of the database is a backup too, and the one to use where
+something outside the application already takes them.
 
 **PostgreSQL or MySQL** — everything is in that server: accounts, roles and their
 permissions, tickets, contacts, sessions, API tokens, passkeys, and the whole
@@ -1399,14 +1523,14 @@ sqlite3 /data/go-ticket-system.db ".backup '/backup/gts-$(date +%F).db'"
 
 Add `configs/.env` and any `APP_ENV` overlay if the deployment uses one.
 
-**Dump before an upgrade.** Migrations run at start-up, and they run forward
-only.
+**Back up before an upgrade** - on the card, or with a dump. Migrations run at
+start-up, and they run forward only.
 
 ## Upgrading
 
 ```bash
 # A · B
-GTS_VERSION=v1.3.0 docker compose up -d      # after a dump
+GTS_VERSION=v1.3.0 docker compose up -d      # after a backup
 
 # C
 systemctl stop gts && cp go-ticket-system-web_v1.3.0_linux_amd64 /opt/gts/go-ticket-system-web && systemctl start gts
@@ -1414,6 +1538,12 @@ systemctl stop gts && cp go-ticket-system-web_v1.3.0_linux_amd64 /opt/gts/go-tic
 
 The schema migrates itself on the way up. There is no separate command, and
 nothing to run afterwards.
+
+Phones with the Android app are offered the new release's app at their next
+start: the app asks the installation which release it runs, and a press
+downloads that release's app from GitHub and hands it to Android, which asks
+to confirm it. The phone has to reach GitHub for that; one that cannot is told
+the download failed and keeps the app it has.
 
 ## Directory (LDAP) synchronisation
 
@@ -1548,10 +1678,12 @@ mistakes it for a configured installation.
 - Changing your own password ends every other session you have, and only those.
 - API tokens carry no rights of their own. Every request is evaluated against the
   owner's current role, so changing or revoking that role bites on the next call.
-- Whoever holds `roles:write` can grant themselves `settings:manage`, and
+- Whoever holds `roles:write` can grant themselves `settings:manage`, and so can
+  whoever holds `users:write`, by giving their own account a role that holds it;
   `settings:manage` is the installation. That is the cost of Settings following
   granted rights rather than the built-in account, and it is intentional — but it
-  means `roles:write` is an installation-level right, not a personnel one.
+  means `roles:write` and `users:write` are installation-level rights, not
+  personnel ones. The directory never hands out a role holding any of the three.
 
 ## Troubleshooting
 

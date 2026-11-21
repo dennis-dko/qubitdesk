@@ -803,7 +803,7 @@ func TestARefusedFeedExplainsItself(t *testing.T) {
 				func(w http.ResponseWriter, r *http.Request) {
 					// Identified, which the feed asks of every caller and refuses
 					// some that do not.
-					if agent := r.Header.Get("User-Agent"); !strings.Contains(agent, "ticket-system") {
+					if agent := r.Header.Get("User-Agent"); !strings.Contains(agent, "go-ticket-system") {
 						t.Errorf("the check identifies itself as %q", agent)
 					}
 

@@ -33,6 +33,11 @@ var administrativeChanges = []struct {
 	{http.MethodDelete, "/api/v1/users/{id}", "user.deleted", ""},
 	{http.MethodPut, "/api/v1/users/{id}/role", "user.role", "role"},
 	{http.MethodPut, "/api/v1/users/{id}/password", "user.password", ""},
+	{http.MethodDelete, "/api/v1/users/{id}/second-factor", "user.secondFactor", ""},
+	{http.MethodPost, "/api/v1/settings/backups", "installation.backup", ""},
+	{http.MethodGet, "/api/v1/settings/backups/{name}", "installation.backupDownloaded", ""},
+	{http.MethodDelete, "/api/v1/settings/backups/{name}", "installation.backupDeleted", ""},
+	{http.MethodPut, "/api/v1/settings/backups/plan", "settings.backup", ""},
 	{http.MethodPost, "/api/v1/users/import", "users.imported", ""},
 	{http.MethodPut, "/api/v1/contacts/{id}/portal-access", "contact.portalGiven", ""},
 	{http.MethodDelete, "/api/v1/contacts/{id}/portal-access", "contact.portalTaken", ""},
@@ -97,7 +102,8 @@ var administrativeChanges = []struct {
 
 // loggedRoute is one of administrativeChanges, ready to be matched. A named
 // route is one whose path names what it changes rather than numbering it - an
-// option of the system configuration - and the name is what the log keeps.
+// option of the system configuration, a backup's file - and the name is what
+// the log keeps.
 type loggedRoute struct {
 	method, action, keeps string
 	path                  *regexp.Regexp
@@ -105,7 +111,8 @@ type loggedRoute struct {
 }
 
 // loggedRoutes compiles the table once: "{id}" becomes the number it stands
-// for, "{name}" a name.
+// for, "{name}" the name a path gives instead - an option of the system
+// configuration, a backup's file.
 func loggedRoutes() []loggedRoute {
 	routes := make([]loggedRoute, 0, len(administrativeChanges))
 
@@ -167,14 +174,18 @@ func AdministrationLog(log *service.AdminLogService, logger errorLogger) func(ht
 			unchanged := false
 			r = r.WithContext(context.WithValue(r.Context(), unchangedKey{}, &unchanged))
 
-			answer := &answerRecorder{ResponseWriter: w, status: http.StatusOK, keep: target == 0}
+			// The answer is kept only where it is read: a creation's, for the id it
+			// made. Kept for every change without an id, a downloaded backup would be
+			// held in memory twice over.
+			created := target == 0 && strings.Contains(route.action, ".created")
+			answer := &answerRecorder{ResponseWriter: w, status: http.StatusOK, keep: created}
 			next.ServeHTTP(answer, r)
 
 			if unchanged || answer.status < http.StatusOK || answer.status >= http.StatusMultipleChoices {
 				return
 			}
 
-			if target == 0 && strings.Contains(route.action, ".created") {
+			if created {
 				target = createdID(answer.body.Bytes())
 			}
 

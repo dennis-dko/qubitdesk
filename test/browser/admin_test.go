@@ -33,6 +33,7 @@ func TestAGrantedAdministratorIsOfferedTheDirectoryRun(t *testing.T) {
 	p.settleWelcome()
 
 	p.run("open Settings", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="signin"]`),
 		chromedp.WaitVisible("#form-ldap", chromedp.ByID))
 
 	// Waited for the screen to be filled, not for it to exist: every card here is
@@ -59,6 +60,7 @@ func TestTheSettingsScreenFillsTheTelemetryCardAndTheOnesAfterIt(t *testing.T) {
 	p.readyAdmin()
 
 	p.run("open Settings", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="operation"]`),
 		chromedp.WaitVisible("#form-telemetry", chromedp.ByID))
 
 	// Waited for the card to be filled, not for the card to exist.
@@ -153,6 +155,7 @@ func TestTheDatabaseCardSaysWhereAConnectionWithoutASavedSettingComesFrom(t *tes
 	p.readyAdmin()
 
 	p.run("open Settings", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="operation"]`),
 		chromedp.WaitVisible("#form-datasource", chromedp.ByID))
 
 	// The form is in index.html and therefore on screen before any answer has
@@ -200,6 +203,7 @@ func TestTheConnectionCardNamesWhatIsRunningAndInventsNothing(t *testing.T) {
 	p.readyAdmin()
 
 	p.run("open Settings", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="operation"]`),
 		chromedp.WaitVisible("#form-datasource", chromedp.ByID))
 	p.waitForFilled("#datasource-active")
 	p.settled()
@@ -247,6 +251,7 @@ func TestTheConnectionCardNamesWhatIsRunningAndInventsNothing(t *testing.T) {
 	p.settled()
 
 	p.run("open Settings again", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="operation"]`),
 		chromedp.WaitVisible("#form-datasource", chromedp.ByID))
 	p.waitForFilled("#datasource-active")
 
@@ -303,6 +308,7 @@ func TestTheVersionCardCanBeAskedToLookAgain(t *testing.T) {
 	p.readyAdmin()
 
 	p.run("open Settings", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="operation"]`),
 		chromedp.WaitVisible("#update-card", chromedp.ByID))
 
 	if !p.visible("#update-check") {
@@ -380,6 +386,7 @@ func TestTheDirectoryRolePickerOffersTheRolesAfterADraftComesBack(t *testing.T) 
 	p.readyAdmin()
 
 	p.run("open Settings", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="signin"]`),
 		chromedp.WaitVisible("#form-ldap", chromedp.ByID))
 
 	if p.count("#form-ldap select[name=defaultRole] option") == 0 {
@@ -396,6 +403,7 @@ func TestTheDirectoryRolePickerOffersTheRolesAfterADraftComesBack(t *testing.T) 
 	p.settled()
 
 	p.run("open Settings again", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="signin"]`),
 		chromedp.WaitVisible("#form-ldap", chromedp.ByID))
 
 	// The draft is back - that part is deliberate and stays.
@@ -422,6 +430,7 @@ func TestTheDirectoryRolePickerIsNeverEmptyAndDefaultsToTheOrdinaryRole(t *testi
 	p.readyAdmin()
 
 	p.run("open Settings", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="signin"]`),
 		chromedp.WaitVisible("#form-ldap", chromedp.ByID))
 
 	if n := p.count("#form-ldap select[name=defaultRole] option"); n == 0 {
@@ -465,6 +474,7 @@ func TestTheDirectoryRolePickerOffersNoRoleThatAdministers(t *testing.T) {
 	p.readyAdmin()
 
 	p.run("open Settings", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="signin"]`),
 		chromedp.WaitVisible("#form-ldap", chromedp.ByID))
 
 	if n := p.count(`#form-ldap select[name=defaultRole] option[value="admin"]`); n != 0 {

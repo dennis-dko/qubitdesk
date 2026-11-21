@@ -181,6 +181,7 @@ func figure(value float64) string { return strconv.FormatFloat(value, 'f', -1, 6
 // while the server took it - and one held to less lets somebody type what the
 // server refuses.
 var numberRules = map[string]numberRule{
+	"form-backup-plan/keep": {"1", figure(model.MaxBackupsKept), "1"},
 	"form-operational/sessionLifetimeHours": {
 		figure(model.MinSessionLifetimeHours), figure(model.MaxSessionLifetimeHours), "any",
 	},

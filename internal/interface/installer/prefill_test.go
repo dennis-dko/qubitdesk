@@ -22,7 +22,6 @@ import (
 // four are what somebody needs to know to start trying one.
 func TestTheInstallerNamesTheConnectionOnlyToWhoeverHoldsTheToken(t *testing.T) {
 	s := &server{cfg: Config{
-		AppName: "Ticket System",
 		Version: "v1.2.3",
 		Token:   "the-token-from-the-log",
 		Prefill: config.Datasource{
@@ -55,7 +54,7 @@ func TestTheInstallerNamesTheConnectionOnlyToWhoeverHoldsTheToken(t *testing.T) 
 		body, state := ask(token)
 
 		// The page is labelled before anybody has typed anything.
-		if state.AppName != "Ticket System" || state.Version != "v1.2.3" {
+		if state.AppName != "Go-Ticket-System" || state.Version != "v1.2.3" {
 			t.Errorf("with the token %q the page is not told what it is setting up: %s", token, body)
 		}
 

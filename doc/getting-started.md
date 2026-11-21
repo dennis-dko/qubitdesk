@@ -29,10 +29,15 @@ The connection is tested before it is accepted, written to
 the same process**. No restart: a container that exited to finish installing
 itself would look like one that crashed.
 
+The installer also asks what the new database starts with: nothing, or a backup
+another installation made, whichever database that one ran on. A backup is read whole on that page,
+so a wrong passphrase or a file cut short is said there; the
+[operations manual](../deploy/OPERATION.md#restoring-a-backup) has the rest.
+
 It asks for a token, printed to the log when the process starts:
 
 ```text
-no database is configured, so Ticket System is serving its installer instead
+no database is configured, so Go-Ticket-System is serving its installer instead
 open http://localhost:8000 to choose one - the application will not start until you do
 setup token: 782106f2d715eaebba8e1c4b93f0a2d1
 ```
@@ -77,7 +82,8 @@ stops working the moment a real password is chosen.
 That account **cannot be deleted**, cannot be moved to a role without
 administration rights, and is never authenticated against a directory — so an
 installation can never lock itself out, and nobody who controls the directory
-can take it over.
+can take it over. Should its password be lost, `go-ticket-system-web recover` on the
+server prints a new one, once; see [A way back in](security.md#a-way-back-in).
 
 Until the initial password is replaced the server refuses the ordinary API,
 including issuing API tokens. It does **not** refuse the installation itself:

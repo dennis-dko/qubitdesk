@@ -50,7 +50,7 @@ func TestServesEmbeddedIndex(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	if !strings.Contains(rec.Body.String(), "<title>Ticket System</title>") {
+	if !strings.Contains(rec.Body.String(), "<title>Go-Ticket-System</title>") {
 		t.Error("expected the embedded index.html")
 	}
 }
@@ -152,7 +152,7 @@ func TestUnknownUIPathFallsBackToIndex(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	if !strings.Contains(rec.Body.String(), "<title>Ticket System</title>") {
+	if !strings.Contains(rec.Body.String(), "<title>Go-Ticket-System</title>") {
 		t.Error("expected the SPA fallback to serve index.html")
 	}
 }

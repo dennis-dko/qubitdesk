@@ -43,8 +43,8 @@ import (
 	"github.com/dennis-dko/go-ticket-system/internal/interface/api/v1/rest"
 	"github.com/dennis-dko/go-ticket-system/internal/interface/installer"
 	"github.com/dennis-dko/go-ticket-system/internal/interface/web"
+	"github.com/dennis-dko/go-ticket-system/internal/support/backup"
 	"github.com/dennis-dko/go-ticket-system/internal/support/hosting"
-	"github.com/dennis-dko/go-ticket-system/internal/support/imaging"
 	"github.com/dennis-dko/go-ticket-system/internal/support/security"
 )
 
@@ -81,13 +81,22 @@ func runInstaller() (installer.Result, error) {
 
 	logger := logging.NewLogger(logging.INFO)
 
+	// The key the installation will run with, read where the application reads
+	// it, so the installer can tell whether a backup's secrets will open under it.
+	secrets, err := security.NewSealer(appconfig.SecretKeyFromEnvironment())
+	if err != nil {
+		return installer.Result{}, fmt.Errorf("SECRET_KEY cannot be used: %w", err)
+	}
+
 	return installer.Serve(ctx, installer.Config{
 		Addr:           ":" + settings.HTTPPort,
-		AppName:        settings.AppName,
 		Version:        version,
 		Token:          settings.SetupToken,
 		DatasourceFile: appconfig.DatasourceFile,
 		Prefill:        settings.Prefill,
+		Schema:         newestSchema(),
+		Secrets:        secrets,
+		Favicon:        web.Favicon(),
 		Logf:           logger.Infof,
 	})
 }
@@ -264,6 +273,13 @@ func main() {
 		os.Exit(0)
 	}
 
+	// The way back into an installation whose built-in administrator nobody can
+	// sign in as. Here rather than behind the interface for the rollback's reason:
+	// the case it exists for is the one where the interface is shut to everybody.
+	if len(os.Args) > 1 && os.Args[1] == "recover" {
+		os.Exit(recoverSystemUser())
+	}
+
 	// Capture the process output before anything writes to it. GoFr's logger
 	// takes os.Stdout when gofr.New() constructs it and keeps it for the life
 	// of the process, so this is the only moment at which the log viewer can be
@@ -323,6 +339,10 @@ func main() {
 	// password; see rest.SetupHandler.Claim for the conditions on that.
 	var installerToken string
 
+	// The backup that same answer uploaded to start the database from, with what
+	// came with it; restored once the migrations have made the tables.
+	var backupToRestore *restoreRequest
+
 	if !configured {
 		chosen, err := runInstaller()
 
@@ -347,6 +367,14 @@ func main() {
 
 		ds = chosen.Datasource
 		installerToken = chosen.Token
+		if chosen.Restore != nil {
+			backupToRestore = &restoreRequest{
+				file:           chosen.Restore,
+				passphrase:     chosen.RestorePassphrase,
+				secretKey:      chosen.RestoreSecretKey,
+				withoutSecrets: chosen.RestoreWithoutSecrets,
+			}
+		}
 	}
 
 	// Asked here and said once there is a logger, never refused: an installation
@@ -488,7 +516,7 @@ func main() {
 	if misread != nil {
 		app.Logger().Warnf("database: %v", misread)
 	}
-	app.Logger().Infof("go-ticket-system %s starting (dialect=%s)", version, cfg.Dialect)
+	app.Logger().Infof("Go-Ticket-System %s starting (dialect=%s)", version, cfg.Dialect)
 
 	db := app.GetSQL()
 
@@ -552,13 +580,14 @@ func main() {
 	// The contacts say which accounts they sign in to the portal with, and
 	// such an account is given no role that administers, from either side.
 	contactRepo := sqldb.NewContactRepository(db, cfg.Dialect)
-	adminLog := appservice.NewAdminLogService(sqldb.NewAdminEventRepository(db, cfg.Dialect), userRepo, roleRepo,
-		contactRepo)
+	adminEventRepo := sqldb.NewAdminEventRepository(db, cfg.Dialect)
+	adminLog := appservice.NewAdminLogService(adminEventRepo, userRepo, roleRepo, contactRepo)
+	recovery := appservice.NewRecoveryService(userRepo, passkeyRepo, sessionRepo, adminEventRepo)
 
 	auth := appservice.NewAuthService(userRepo, roleRepo)
 	apiTokens := appservice.NewAPITokenService(tokenRepo, sessionRepo, userRepo, auth)
 	passkeys := appservice.NewPasskeyService(passkeyRepo, userRepo)
-	settingsService := appservice.NewSettingsService(settingsRepo, roleRepo, userRepo, cfg.AppName).
+	settingsService := appservice.NewSettingsService(settingsRepo, roleRepo, userRepo).
 		WithSecrets(secrets)
 
 	// The administered directory schedule wins over the configuration file, the
@@ -622,7 +651,8 @@ func main() {
 		WithLimits(limits).
 		WithMetrics(app.Metrics())
 
-	users := appservice.NewUserApplicationService(userRepo, roleRepo, userRepo, userRepo, contactRepo)
+	users := appservice.NewUserApplicationService(userRepo, roleRepo, userRepo, userRepo, contactRepo).
+		WithPasskeys(passkeyRepo)
 	roles := appservice.NewRoleApplicationService(roleRepo, contactRepo)
 	queueRepo := sqldb.NewQueueRepository(db, cfg.Dialect)
 	catalogRepos := appservice.TicketCatalogRepositories{
@@ -712,22 +742,18 @@ func main() {
 		}
 	})
 
-	// What this installation is called in a language, wherever it has to name
-	// itself: the prompt a passkey device shows.
+	// What this installation is called in a language, wherever the server names
+	// it itself: the prompt a passkey device shows and an authenticator's entry.
 	//
-	// The administered title if there is one, so a person sees the name they
-	// know rather than the default the process was started with.
+	// Without the settings it is still Go-Ticket-System, which is what it is
+	// called whatever they say.
 	instanceNameIn := func(ctx context.Context, language string) string {
 		branding, err := settingsService.Branding(ctx)
 		if err != nil {
-			return cfg.AppName
+			return model.Brand
 		}
 
-		if title := branding.TitleIn(language); title != "" {
-			return title
-		}
-
-		return cfg.AppName
+		return branding.NameIn(language)
 	}
 
 	// Signing in through the provider configured under Settings, read per sign-in
@@ -745,6 +771,21 @@ func main() {
 	// The built-in administrator is created after the migrations have run, so
 	// there is always a way in even on a brand new database.
 	prepare := func(ctx *gofr.Context) error {
+		// The backup the installer was given, first: the key and the zone below are
+		// then asked of the installation as it was restored. A restore that fails
+		// takes the saved connection with it, so the next start serves the installer
+		// again instead of an empty installation on the database the backup was for.
+		if backupToRestore != nil {
+			if err := restoreBackup(ctx, db, cfg.Dialect, *backupToRestore, secrets); err != nil {
+				_ = os.Remove(appconfig.DatasourceFile)
+
+				return fmt.Errorf("the backup was not restored, and the installer is served again "+
+					"at the next start: %w", err)
+			}
+
+			backupToRestore = nil
+		}
+
 		// Before anything writes a moment. MySQL keeps one without its zone, so a
 		// process in another zone than the one that wrote them reads every stored
 		// day as another; see StorageZoneService.
@@ -1002,6 +1043,30 @@ func main() {
 		return name
 	})
 
+	// Backups of the whole installation, sealed with BACKUP_PASSPHRASE and kept in
+	// BACKUP_DIR, on the schedule saved on their card, read in the installation's
+	// timezone. deploy/OPERATION.md says where the folder belongs.
+	backups := appservice.NewBackupService(settingsRepo,
+		func(ctx context.Context, w io.Writer) (int64, error) {
+			schema, err := sqldb.SchemaVersion(ctx, db)
+			if err != nil {
+				return 0, err
+			}
+
+			return sqldb.Dump(ctx, db, sqldb.BackupHeader{
+				Application: version, Dialect: cfg.Dialect, Schema: schema, CreatedAt: time.Now().UTC(),
+			}, w)
+		},
+		backup.NewDirectory(cfg.BackupDir), cfg.BackupPassphrase,
+		func(ctx context.Context) *time.Location {
+			zone, err := time.LoadLocation(instanceTimezone(ctx))
+			if err != nil {
+				return time.UTC
+			}
+
+			return zone
+		})
+
 	// In the language that asked, where there is one: an installation that has
 	// named itself in German and is read in German is named so on the prompt of
 	// the device a passkey is made on.
@@ -1027,7 +1092,7 @@ func main() {
 	})
 
 	v1.RegisterRoutes(app, v1.Handlers{
-		Auth: rest.NewAuthHandler(sessions, authorizer, cfg.AppName, instanceTimezone).
+		Auth: rest.NewAuthHandler(sessions, authorizer, instanceName, instanceTimezone).
 			WithMaintenance(maintenanceState).
 			// The Android app's sign-in: it shows the web interface, and is
 			// connected by a token's code rather than a password typed on a phone.
@@ -1036,7 +1101,8 @@ func main() {
 			// where that name becomes an account.
 			WithKerberos(func() bool { return kerberosAcceptor != nil && ldapClient.Enabled() }),
 		Users: rest.NewUserHandler(users, userDomain, authorizer, auth, instanceTimezone).
-			WithSessionEnder(resetEnds),
+			WithSessionEnder(resetEnds).
+			WithRecovery(recovery),
 		Roles:    rest.NewRoleHandler(roles, authorizer),
 		Catalog:  rest.NewTicketCatalogHandler(ticketCatalog, authorizer),
 		Queues:   rest.NewQueueHandler(queues, authorizer),
@@ -1057,6 +1123,7 @@ func main() {
 			// application is not the thing granted it.
 			WithImageUpdater(imageupdate.New(os.Getenv("GTS_UPDATE_REQUESTS"))).
 			WithConnection(ds),
+		Backups:  rest.NewBackupHandler(backups, authorizer),
 		Holidays: rest.NewHolidayHandler(settingsService, authorizer),
 		Sheets:   rest.NewSheetHandler(userSheets, roleSheets, authorizer),
 		Passkeys: rest.NewPasskeyHandler(passkeys, sessions, authorizer, instanceName).
@@ -1173,6 +1240,20 @@ func main() {
 
 		if removed > 0 {
 			ctx.Logger.Infof("pruned %d expired session(s)", removed)
+		}
+	})
+
+	// Backups on the plan saved on their card, asked every minute rather than
+	// handed to the scheduler: the scheduler takes its jobs once, at the start,
+	// and a schedule saved on the card has to apply without a restart.
+	app.AddCronJob("* * * * *", "backup", func(ctx *gofr.Context) {
+		made, err := backups.RunDue(ctx, time.Now())
+
+		switch {
+		case err != nil:
+			ctx.Logger.Errorf("the scheduled backup was not made: %v", err)
+		case made:
+			ctx.Logger.Infof("made the scheduled backup")
 		}
 	})
 
@@ -1327,14 +1408,10 @@ func startTLS(app *gofr.App, cfg appconfig.Config) func(context.Context) error {
 //
 // It was cached for five seconds at first, on the reasoning that this is on the
 // path of every page load. What that bought was one small SELECT of a table with
-// a handful of rows; what it cost was that saving a logo and reloading to look at
-// it showed the old one, which is exactly what somebody does immediately after
-// saving. A correctness problem in the one workflow this feature has, traded for
-// a query nobody would have noticed.
-//
-// The icon itself is cached hard by the browser instead, at an address carrying a
-// fingerprint of its contents - so a repeated page load re-reads this row and
-// fetches no image at all.
+// a handful of rows; what it cost was that saving and reloading to look at the
+// result showed the old one, which is exactly what somebody does immediately
+// after saving. A correctness problem in the one workflow this feature has,
+// traded for a query nobody would have noticed.
 func brandingFor(settings *appservice.SettingsService) web.BrandingFunc {
 	return func(ctx context.Context) web.Branding {
 		branding, err := settings.Branding(ctx)
@@ -1350,12 +1427,6 @@ func brandingFor(settings *appservice.SettingsService) web.BrandingFunc {
 			// The header's name is put there by the interface once it has loaded,
 			// and the two are only the same until somebody sets them apart.
 			Title: branding.TabName(),
-			Logo:  branding.LogoDataURI,
-			Icon:  branding.LogoIcon,
-			IconCrop: imaging.Crop{
-				X: branding.IconCrop.X, Y: branding.IconCrop.Y,
-				W: branding.IconCrop.W, H: branding.IconCrop.H,
-			},
 		}
 	}
 }

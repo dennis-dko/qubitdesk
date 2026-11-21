@@ -137,7 +137,7 @@ func TestTheInstallerIsBigEnoughToPressOnATelephone(t *testing.T) {
 
 	app := harness.StartUnconfigured(t)
 
-	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), launch("en-US")...)
+	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), launch(t, "en-US")...)
 	defer cancelAlloc()
 
 	ctx, cancel := chromedp.NewContext(alloc)
@@ -158,8 +158,11 @@ func TestTheInstallerIsBigEnoughToPressOnATelephone(t *testing.T) {
 			dialect.dispatchEvent(new Event('change', { bubbles: true }));
 		})()`, nil),
 		chromedp.Sleep(300*time.Millisecond),
+		// A tick box is pressed by the label drawn round it, as in the
+		// application, so that is what is measured for one.
 		chromedp.Evaluate(`JSON.stringify([...document.querySelectorAll('input, select, button')]
 			.filter((el) => el.offsetParent !== null && el.type !== 'hidden')
+			.map((el) => (['checkbox', 'radio'].includes(el.type) ? (el.closest('label') ?? el) : el))
 			.filter((el) => {
 				const box = el.getBoundingClientRect();
 

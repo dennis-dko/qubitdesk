@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ticket System</title>
+  <title>Go-Ticket-System</title>
   <link rel="stylesheet" href="/app.css">
   <!-- Two, because they answer different questions. The SVG is what a modern
        browser shows in the tab and scales to any size; the .ico is what a
@@ -15,9 +15,11 @@
   <link rel="alternate icon" href="/favicon.ico">
   <!-- What makes the page installable as an app. Its name, its icons and the
        screens a long press leads to are in the manifest, which the server writes
-       per installation; the colour is what a device paints around the app
+       per installation; Safari reads no manifest for a home screen's icon and
+       asks this link instead; the colour is what a device paints around the app
        before the page has. -->
   <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/app-icon/192">
   <meta name="theme-color" content="#2f6feb">
   <!-- Blocking on purpose: it has to pick the theme before the first paint,
        or the page flashes in the wrong colours. -->
@@ -40,14 +42,25 @@
        with no picture at all. -->
   <svg class="sprite" aria-hidden="true" focusable="false">
     <defs>
-      <!-- The mark this application ships with. Defined once and used twice - in
-           the logo slot while an installation has uploaded none, and beside the
-           title once one has taken that slot - because the same drawing written
-           out twice is two drawings that can drift apart. -->
-      <symbol id="icon-mark" viewBox="0 0 32 32">
-        <rect x="3" y="3" width="26" height="26" rx="7.6" fill="currentColor"/>
-        <path d="M9.6 8.6h12.8L16 16Z" fill="var(--accent-text)"/>
-        <path d="M9.6 23.4h12.8L16 16Z" fill="var(--accent-text)" opacity="0.55"/>
+      <!-- The mark this application ships with, beside the title. Defined here
+           rather than drawn where it is used, because the same drawing written
+           out twice is two drawings that can drift apart - and it is favicon.svg's
+           drawing, number for number, which TestTheMarkBesideTheTitleIsTheTabIcon
+           holds it to. -->
+      <symbol id="icon-mark" viewBox="0 0 560 560">
+        <linearGradient id="icon-mark-ground" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#0a69a7"/>
+          <stop offset="0.5" stop-color="#095795"/>
+          <stop offset="1" stop-color="#03447a"/>
+        </linearGradient>
+        <rect width="560" height="560" rx="29" fill="url(#icon-mark-ground)"/>
+        <g fill="#ffffff">
+          <path d="M78.96 95.95H314.62A130.11 127.97 0 0 0 270.18 134.8H222.7V255.83L205.5 303.96L184.1 221.09V134.8H109.96A31 31 0 0 1 78.96 103.8Z"/>
+          <path d="M184.5 387.98L197.47 420.93A5.4 5.4 0 0 0 207.45 421.09L222.65 385.88V467.82A3.35 3.35 0 0 1 219.3 471.17H219.8A35.3 40.55 0 0 1 184.5 430.62Z"/>
+          <path d="M261.75 291.85H374.93A79.18 79.96 0 0 0 454.11 211.89A77.29 79 0 0 0 376.82 132.89A78.06 75.07 0 0 0 298.76 207.96V276.95H261.14V208.49A115.42 113.28 0 0 1 376.56 95.21A115.04 116.8 0 0 1 491.6 212.01A117.12 117.73 0 0 1 374.48 329.74H298.76V465.03A6 6 0 0 1 292.76 471.03H266.64A5.5 5.5 0 0 1 261.14 465.53V360.2L284 307.35H269.82L251.86 343.72L235.47 309.61L202.54 398.88L166.71 276.03L147.72 329.82H83.15A3 3 0 0 1 80.15 326.82V316.88A3 3 0 0 1 83.15 313.88H136.55L168.15 221.93L203.85 350.51L234.35 265.28L253 309.75Z"/>
+          <circle cx="374.78" cy="216.5" r="13.25"/>
+          <path d="M378.63 216.5L378.63 153.95A3.85 3.85 0 0 0 370.93 153.95L370.93 216.5ZM377.11 219.57L426.89 181.79A3.85 3.85 0 0 0 422.23 175.65L372.45 213.43ZM376.8 213.22L338.11 189.43A3.85 3.85 0 0 0 334.07 195.99L372.76 219.78Z"/>
+        </g>
       </symbol>
 
       <symbol id="icon-users" viewBox="0 0 24 24">
@@ -151,10 +164,10 @@
         
              So the two columns say their own things now, both at once: the
              middle one is the application, always, and this one is the
-             installation. With no logo uploaded, the installation is named by
-             the first letter of the title it was given - which every
-             installation has, is different for each of them, and changes when
-             somebody changes the title. Filled by showBrandMark.
+             installation. With no logo uploaded it is a chip carrying the G of
+             Go-Ticket-System, the name every installation has; the title only adds
+             to that name, so its first letter would name the addition. Filled by
+             showBrandMark.
         
              aria-hidden because the title beside it already says the name; a
              screen reader announcing the decoration first helps nobody. -->
@@ -173,7 +186,7 @@
            so to a keyboard and a screen reader too, which a plain h1 cannot. -->
         <h1><button type="button" id="app-title" class="app-title" data-i18n-aria="welcome.goTo"
                     aria-label="Welcome page"><svg class="app-mark" viewBox="0 0 32 32" aria-hidden="true"
-                    focusable="false"><use href="#icon-mark"/></svg><span id="app-title-text">Ticket System</span></button></h1>
+                    focusable="false"><use href="#icon-mark"/></svg><span id="app-title-text">Go-Ticket-System</span></button></h1>
       </span>
 
       <span class="topbar-side topbar-side-end">
@@ -451,26 +464,19 @@
          storage, and a shared machine would hand the next person the last one's
          name - which is the same reason signing out resets it. -->
     <form method="post" id="form-login" data-no-draft class="login-card">
-      <!-- The installation's picture and its name, in a band across the top.
+      <!-- Go-Ticket-System's mark and the installation's name, in a band across
+           the top.
            The heading is drawn by the script because the name in it is the
            configured title, in the language being read. -->
       <div class="login-band">
         <div class="login-emblem">
-          <!-- The same placeholder the header carries, for an installation that
-               has not uploaded a logo. The sign-in screen used to show nothing at
-               all there, which reads as a page that has not finished loading
-               rather than as an installation without a logo. Its letter is the
-               initial of the configured title in the language being read, so it
-               follows the language the browser was detected in like every other
-               word here. -->
-          <svg id="login-mark" class="brand-mark login-mark" viewBox="0 0 32 32"
-               aria-hidden="true" focusable="false">
-            <rect x="3.6" y="3.6" width="24.8" height="24.8" rx="7.2"
-                  class="brand-mark-ground"/>
-            <text id="login-initial" x="16" y="16.9" text-anchor="middle"
-                  dominant-baseline="middle" class="brand-mark-letter"></text>
-          </svg>
-          <img id="login-logo" class="brand-logo" alt="" hidden>
+          <!-- The application's mark, whatever logo the installation has
+               uploaded: the sign-in screen is Go-Ticket-System's, as the browser tab is,
+               and an installation's logo stands at the left of the bar once
+               somebody has signed in - decided by the maintainer on 2026-11-18.
+               The one drawing, referenced, like the mark beside the title. -->
+          <svg id="login-mark" class="login-mark" viewBox="0 0 560 560"
+               aria-hidden="true" focusable="false"><use href="#icon-mark"/></svg>
         </div>
         <h2 id="login-welcome"></h2>
       </div>
@@ -1607,12 +1613,43 @@
 
     <!-- My account -->
     <section id="view-settings" class="view" hidden>
+      <!-- The screen's cards, sorted into tabs: ten cards in one column had
+           become a page somebody scrolled through rather than read. Each card
+           names its tab with data-tab and keeps its place in this file, and
+           arrangeScreenTabs moves it into its tab's panel at the start - so the
+           order here is still the order on screen within a tab. A tab whose
+           cards are all hidden, by a right the account lacks or because there is
+           nothing in them yet, is not offered. -->
+      <div id="settings-tabs" class="screen-tabs" role="tablist" aria-label="Parts of My account"
+           data-i18n-aria="settings.tabs">
+        <button type="button" role="tab" id="settings-tab-general" class="screen-tab" data-card-tab="general"
+                aria-controls="settings-panel-general" aria-selected="true"
+                data-i18n="settings.tab.general">General</button>
+        <button type="button" role="tab" id="settings-tab-signin" class="screen-tab" data-card-tab="signin"
+                aria-controls="settings-panel-signin" aria-selected="false" tabindex="-1"
+                data-i18n="settings.tab.signin">Sign-in</button>
+        <button type="button" role="tab" id="settings-tab-apps" class="screen-tab" data-card-tab="apps"
+                aria-controls="settings-panel-apps" aria-selected="false" tabindex="-1"
+                data-i18n="settings.tab.apps">Apps &amp; tokens</button>
+        <button type="button" role="tab" id="settings-tab-privacy" class="screen-tab" data-card-tab="privacy"
+                aria-controls="settings-panel-privacy" aria-selected="false" tabindex="-1"
+                data-i18n="settings.tab.privacy">Privacy &amp; help</button>
+      </div>
+      <div id="settings-panel-general" class="screen-panel" role="tabpanel"
+           aria-labelledby="settings-tab-general" data-card-panel="general"></div>
+      <div id="settings-panel-signin" class="screen-panel" role="tabpanel"
+           aria-labelledby="settings-tab-signin" data-card-panel="signin" hidden></div>
+      <div id="settings-panel-apps" class="screen-panel" role="tabpanel"
+           aria-labelledby="settings-tab-apps" data-card-panel="apps" hidden></div>
+      <div id="settings-panel-privacy" class="screen-panel" role="tabpanel"
+           aria-labelledby="settings-tab-privacy" data-card-panel="privacy" hidden></div>
+
       <!-- What reaches somebody without their asking. The application says it on
            the screen while a page is open; this card is about the two ways past
            that - a notification of this browser, and a push where the
            installation allows one - because a banner cannot reach somebody who is
            looking at another window, and neither can reach a closed one. -->
-      <div class="card" id="notify-card">
+      <div class="card" id="notify-card" data-tab="general">
         <h2 data-i18n="notify.title">Notifications</h2>
         <p class="muted" data-i18n="notify.hint">What happens to the tickets you look after is said on the screen while a page is open. This browser can also show it as a notification, so it reaches you while you are looking at another window.</p>
         <div class="row">
@@ -1638,13 +1675,55 @@
         <p class="muted" id="push-state" hidden data-i18n="push.pushed">The notifications are pushed to this browser, even while no page of it is open. On a computer the browser has to be running for that, in the background will do; one that was closed shows them when it is started again within the hour, as long as they still hold.</p>
       </div>
 
+      <!-- The way in, from the plainest to the most particular: the password
+           everybody has, the second factor anybody can add, then passkeys and the
+           organisation's sign-in, which are only offered where they work. -->
+      <form method="post" id="form-password" class="card form" data-tab="signin">
+        <h2 data-i18n="settings.changePassword">Change password</h2>
+        <div class="grid">
+          <label data-i18n="settings.currentPassword">Current password<input type="password" name="currentPassword" required></label>
+          <label data-i18n="settings.newPassword">New password<input type="password" name="newPassword" minlength="8" required></label>
+        </div>
+        <button type="submit" data-i18n="settings.changePassword">Change password</button>
+      </form>
+
+      <div class="card" id="totp-card" data-tab="signin">
+        <h2 data-i18n="totp.title">Two-factor authentication</h2>
+        <p class="muted" id="totp-state"></p>
+        <div id="totp-setup" hidden>
+          <p class="muted" data-i18n="totp.instructions">Scan this code with your authenticator app, or add the key by hand, and confirm the code it shows:</p>
+          <img id="totp-qr" class="qr" alt="" hidden>
+          <details id="totp-manual">
+            <summary data-i18n="totp.manual">Enter the key by hand instead</summary>
+            <pre class="secret" id="totp-secret"></pre>
+            <pre class="secret" id="totp-uri"></pre>
+          </details>
+        </div>
+        <!-- A form, so that a code is held to its rule before it is sent: it had
+             none, and five digits went to the server to be called wrong. Confirm
+             and Disable both submit it, and the account's state says which is
+             meant - Enter in the field presses the first of them, shown or not.
+             No draft: a code is good for half a minute. -->
+        <form method="post" id="form-totp" data-no-draft>
+          <div class="grid">
+            <label id="totp-code-field" hidden data-i18n="totp.code">Code<input type="text" id="totp-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6">
+            </label>
+          </div>
+          <div class="row">
+            <button type="button" id="totp-begin" data-i18n="totp.enable">Enable</button>
+            <button type="submit" id="totp-confirm" hidden data-i18n="totp.confirm">Confirm</button>
+            <button type="submit" id="totp-disable" class="secondary" hidden data-i18n="totp.disable">Disable</button>
+          </div>
+        </form>
+      </div>
+
       <!-- Passkeys are not offered everywhere: not to the built-in administrator
            or an account the directory holds, not in the Android app, whose
            WebView has none, and not in a browser that cannot do them here. Where
            they are not, the card says why in place of the offer: a card that is
            simply not there cannot be told from a feature that has been removed,
            and that was asked from inside the app. -->
-      <div class="card" id="passkey-card" hidden>
+      <div class="card" id="passkey-card" data-tab="signin" hidden>
         <h2 data-i18n="passkey.title">Passkeys</h2>
         <p class="muted" id="passkey-elsewhere" hidden></p>
         <div id="passkey-offer">
@@ -1677,7 +1756,7 @@
            signs people in through. Not there at all without one; for the two
            accounts a provider never signs in, a sentence saying why in place of
            the button, rather than a card that is simply missing. -->
-      <div class="card" id="openid-card" hidden>
+      <div class="card" id="openid-card" data-tab="signin" hidden>
         <h2 data-i18n="openid.title">Signing in through your organisation</h2>
         <p class="muted" data-i18n="openid.hint">Link your account to your identity at your organisation’s sign-in provider, and sign in there instead of with your password – with the provider’s own second factor. Your password keeps working alongside it.</p>
         <p id="openid-state"></p>
@@ -1687,7 +1766,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" data-tab="privacy">
         <h2 data-i18n="tour.card.title">Guided tour</h2>
         <p class="muted" data-i18n="tour.card.text">A short walk through the areas of the application. Shown once on your first sign-in; start it again whenever you like.</p>
         <button type="button" class="secondary" id="tour-restart" data-i18n="tour.card.start">Show the tour</button>
@@ -1699,18 +1778,18 @@
            release, because the page has no QR encoder; until it answers, the link
            names the newest release. Not shown inside the app, which is what the
            card offers. -->
-      <div class="card" id="install-card">
+      <div class="card" id="install-card" data-tab="apps">
         <h2 data-i18n="install.title">Install the Android app</h2>
-        <p class="muted" data-i18n="install.text">On an Android phone the ticket system is also an app of its own: it shows this interface and tells you with notifications what happens to your tickets. Scan the code with the phone's camera to download it, open the file, and allow the installation the one time Android asks.</p>
+        <p class="muted" data-i18n="install.text">On an Android phone Go-Ticket-System is also an app of its own: it shows this interface. Scan the code with the phone's camera to download it, open the file, and allow the installation the one time Android asks.</p>
         <img id="install-qr" class="qr" alt="" hidden>
-        <p class="muted" data-i18n="install.connect">Once installed, the app connects by scanning the code a new token shows under API tokens.</p>
+        <p class="muted" data-i18n="install.connect">Once installed, the app connects by scanning the code a new token shows under API tokens. From then on it offers its new version at its next start, whenever this installation has been updated.</p>
         <div class="row">
           <a id="install-android-link" class="tab" href="https://github.com/dennis-dko/go-ticket-system/releases/latest"
              target="_blank" rel="noopener noreferrer" data-i18n="install.androidLink">The Android app on GitHub ↗</a>
         </div>
       </div>
 
-      <form method="post" id="form-my-timezone" class="card form">
+      <form method="post" id="form-my-timezone" class="card form" data-tab="general">
         <h2 data-i18n="tz.myTitle">My timezone</h2>
         <p class="muted" data-i18n="tz.myHint">The zone moments are written in for you: when a ticket arrived, when a deadline falls. Leave it on "follow the instance" unless you work from another country.</p>
         <div class="grid">
@@ -1722,37 +1801,7 @@
         <button type="submit" data-i18n="action.save">Save</button>
       </form>
 
-      <div class="card" id="totp-card">
-        <h2 data-i18n="totp.title">Two-factor authentication</h2>
-        <p class="muted" id="totp-state"></p>
-        <div id="totp-setup" hidden>
-          <p class="muted" data-i18n="totp.instructions">Scan this code with your authenticator app, or add the key by hand, and confirm the code it shows:</p>
-          <img id="totp-qr" class="qr" alt="" hidden>
-          <details id="totp-manual">
-            <summary data-i18n="totp.manual">Enter the key by hand instead</summary>
-            <pre class="secret" id="totp-secret"></pre>
-            <pre class="secret" id="totp-uri"></pre>
-          </details>
-        </div>
-        <!-- A form, so that a code is held to its rule before it is sent: it had
-             none, and five digits went to the server to be called wrong. Confirm
-             and Disable both submit it, and the account's state says which is
-             meant - Enter in the field presses the first of them, shown or not.
-             No draft: a code is good for half a minute. -->
-        <form method="post" id="form-totp" data-no-draft>
-          <div class="grid">
-            <label id="totp-code-field" hidden data-i18n="totp.code">Code<input type="text" id="totp-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6">
-            </label>
-          </div>
-          <div class="row">
-            <button type="button" id="totp-begin" data-i18n="totp.enable">Enable</button>
-            <button type="submit" id="totp-confirm" hidden data-i18n="totp.confirm">Confirm</button>
-            <button type="submit" id="totp-disable" class="secondary" hidden data-i18n="totp.disable">Disable</button>
-          </div>
-        </form>
-      </div>
-
-      <div class="card" id="token-card">
+      <div class="card" id="token-card" data-tab="apps">
         <div class="card-head">
           <h2 data-i18n="token.title">API tokens</h2>
           <!-- rel="opener", which a new tab no longer gets by default: the
@@ -1797,19 +1846,10 @@
         </div>
       </div>
 
-      <form method="post" id="form-password" class="card form">
-        <h2 data-i18n="settings.changePassword">Change password</h2>
-        <div class="grid">
-          <label data-i18n="settings.currentPassword">Current password<input type="password" name="currentPassword" required></label>
-          <label data-i18n="settings.newPassword">New password<input type="password" name="newPassword" minlength="8" required></label>
-        </div>
-        <button type="submit" data-i18n="settings.changePassword">Change password</button>
-      </form>
-
       <!-- Everything this installation holds about the account, for anybody signed
            in whatever their role: the right of access is the person's, not a
            permission. Last on the screen, because it is about the whole of it. -->
-      <div class="card" id="export-card">
+      <div class="card" id="export-card" data-tab="privacy">
         <h2 data-i18n="export.title">Everything about me</h2>
         <p class="muted" data-i18n="export.hint">Everything this installation keeps about your account, as a ZIP with a JSON file for each part: the account itself, the tickets you own, answer for and watch, what you were told about, and where and when you wrote in tickets. Passwords, second factors, tokens and keys are not in it – only when they were made and last used – and neither is the text of what you wrote, which quotes the customers you answered.</p>
         <button type="button" class="secondary" id="export-me" data-i18n="export.download">Download everything about me</button>
@@ -1817,17 +1857,44 @@
     </section>
     <!-- Settings (built-in administrator only) -->
     <section id="view-admin" class="view" hidden>
+      <!-- Sorted into tabs like My account, and for the same reason: sixteen
+           cards and well over six thousand pixels in one column. The cards name
+           their tabs and keep their places here; see the comment there. -->
+      <div id="admin-tabs" class="screen-tabs" role="tablist" aria-label="Parts of Settings"
+           data-i18n-aria="admin.tabs">
+        <button type="button" role="tab" id="admin-tab-general" class="screen-tab" data-card-tab="general"
+                aria-controls="admin-panel-general" aria-selected="true"
+                data-i18n="admin.tab.general">General</button>
+        <button type="button" role="tab" id="admin-tab-signin" class="screen-tab" data-card-tab="signin"
+                aria-controls="admin-panel-signin" aria-selected="false" tabindex="-1"
+                data-i18n="admin.tab.signin">Sign-in</button>
+        <button type="button" role="tab" id="admin-tab-operation" class="screen-tab" data-card-tab="operation"
+                aria-controls="admin-panel-operation" aria-selected="false" tabindex="-1"
+                data-i18n="admin.tab.operation">Operation</button>
+        <button type="button" role="tab" id="admin-tab-logs" class="screen-tab" data-card-tab="logs"
+                aria-controls="admin-panel-logs" aria-selected="false" tabindex="-1"
+                data-i18n="admin.tab.logs">Logs</button>
+      </div>
+      <div id="admin-panel-general" class="screen-panel" role="tabpanel"
+           aria-labelledby="admin-tab-general" data-card-panel="general"></div>
+      <div id="admin-panel-signin" class="screen-panel" role="tabpanel"
+           aria-labelledby="admin-tab-signin" data-card-panel="signin" hidden></div>
+      <div id="admin-panel-operation" class="screen-panel" role="tabpanel"
+           aria-labelledby="admin-tab-operation" data-card-panel="operation" hidden></div>
+      <div id="admin-panel-logs" class="screen-panel" role="tabpanel"
+           aria-labelledby="admin-tab-logs" data-card-panel="logs" hidden></div>
+
       <!-- Restarting: the notice, the detail and the button, in the place the
            banner points at.
-      
+
            Above the version card rather than below it. A restart is the thing
            standing between this installation and the settings it has been given
            - including a version that has been downloaded and is waiting - so it
-           is the first thing on the screen somebody was sent to.
+           is the first thing on the tab somebody was sent to.
       
            The list of what is waiting lives here rather than in the banner: the
            banner is the notice, and this is where somebody acts on it. -->
-      <div id="restart-card" class="card" hidden>
+      <div id="restart-card" class="card" data-tab="operation" hidden>
         <h2 data-i18n="restart.title">Restart</h2>
         <p class="muted" id="restart-card-mode"></p>
         <p id="restart-card-hint" hidden data-i18n="restart.hint">Some settings are only read while the application starts. These are saved and waiting:</p>
@@ -1838,10 +1905,19 @@
         <p class="muted minus" id="restart-card-unsupported" hidden></p>
       </div>
 
-      <div id="update-card" class="card" hidden>
+      <div id="update-card" class="card" data-tab="operation" hidden>
         <h2 data-i18n="update.title">Version</h2>
         <p class="muted" id="update-state"></p>
         <p class="muted" id="update-hint" hidden></p>
+        <!-- Shown with the command in the hint, for the deployments it does not take. -->
+        <div id="update-by-hand" hidden>
+          <p class="muted" data-i18n="update.byHand.intro">Where the command alone is not enough:</p>
+          <ul class="muted by-hand">
+            <li data-i18n="update.byHand.overlays">Overlays given with -f, such as compose.tls.yaml: give both commands the same -f files, or list them in COMPOSE_FILE in .env - otherwise the container is recreated without them.</li>
+            <li data-i18n="update.byHand.pinned">A version pinned in GTS_VERSION in .env: set it to the new version first - otherwise the pull fetches the version already running.</li>
+            <li data-i18n="update.byHand.dockerRun">A container started with docker run rather than Compose: pull the new version's image with docker pull, then remove the container and start it again from the new image with the same options.</li>
+          </ul>
+        </div>
         <div class="row">
           <button type="button" id="update-check" class="secondary"
                   data-i18n="update.check">Check for updates</button>
@@ -1853,7 +1929,31 @@
         <p class="muted minus" id="update-problem" hidden></p>
       </div>
 
-      <form method="post" id="form-maintenance" class="card form">
+      <div id="backup-card" class="card" data-tab="operation" hidden>
+        <h2 data-i18n="backup.title">Backups</h2>
+        <p class="muted" data-i18n="backup.hint">A backup is the whole installation - every account, every ticket, every setting - sealed with BACKUP_PASSPHRASE. It is restored through the installer, into an empty database, with this passphrase - and with the SECRET_KEY it was made under, which the installer asks for where its own is another, or without the secrets that key seals.</p>
+        <p class="muted" id="backup-off" hidden></p>
+        <p class="muted" id="backup-folder"></p>
+        <div class="row">
+          <button type="button" id="backup-now" data-i18n="backup.now">Back up now</button>
+        </div>
+        <form method="post" id="form-backup-plan" class="form row-apart">
+          <div class="grid">
+            <label data-i18n="backup.schedule">Schedule<input type="text" name="schedule" maxlength="255" placeholder="0 3 * * *" autocomplete="off"></label>
+            <label data-i18n="backup.keep">Backups kept<input type="number" name="keep" min="1" max="365" step="1" required></label>
+          </div>
+          <p class="muted" data-i18n="backup.scheduleHint">Five fields - minute, hour, day of the month, month, day of the week - in the installation's timezone. Empty makes no backup on its own; after each backup the oldest go until this many are left.</p>
+          <button type="submit" data-i18n="action.save">Save</button>
+        </form>
+        <table id="table-backups">
+          <thead>
+            <tr><th data-i18n="backup.made">Made</th><th class="num" data-i18n="backup.size">Size</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <form method="post" id="form-maintenance" class="card form" data-tab="operation">
         <h2 data-i18n="maint.title">Maintenance mode</h2>
         <p class="muted" data-i18n="maint.hint">Turns everyone else away with a notice while the installation stays running. Use it before restoring or moving the database: what is written during that window is lost when the snapshot goes back, and whoever wrote it has no way to know.</p>
         <p class="muted minus" data-i18n="maint.who">While it is on, only people who may administer this installation can work: this built-in account and anyone holding the administrator role. Everyone else is turned away — that is the point.</p>
@@ -1865,7 +1965,7 @@
         <button type="submit" data-i18n="action.save">Save</button>
       </form>
 
-      <form method="post" id="form-branding" class="card form">
+      <form method="post" id="form-branding" class="card form" data-tab="general">
         <h2 data-i18n="admin.branding">Appearance</h2>
         <p class="muted" data-i18n="admin.brandingHint">Title, banner, logo and footer of this installation.</p>
         <div class="grid">
@@ -1881,11 +1981,13 @@
                  offerBrandingLanguages. -->
             <select id="branding-language" data-not-an-edit></select>
           </label>
-          <label data-i18n="admin.title">Title (header)<input type="text" name="title" maxlength="80">
+          <!-- Every installation is called Go-Ticket-System; these add to the name and
+               never replace it. See model.Named. -->
+          <label data-i18n="admin.title">Addition after “Go-Ticket-System |” (header)<input type="text" name="title" maxlength="80">
           </label>
           <!-- Shorter on purpose: a browser cuts a tab's name off after a couple
                of dozen characters, and somebody has six of them open. -->
-          <label data-i18n="admin.tabTitle">Browser tab (empty uses the title)<input type="text" name="tabTitle" maxlength="40">
+          <label data-i18n="admin.tabTitle">Addition in the browser tab (empty uses the header's)<input type="text" name="tabTitle" maxlength="40">
           </label>
           <label class="wide" data-i18n="admin.banner">Banner text (empty hides it)<input type="text" name="banner" maxlength="300">
           </label>
@@ -1924,35 +2026,19 @@
           </label>
           <button type="button" class="secondary" id="logo-clear" data-i18n="admin.logoClear">Remove logo</button>
         </div>
-        <!-- Both places the one image is used, at the size each of them gives it.
-             A logo that reads in the header can be unreadable as a banner and the
-             other way round, and the only way to know is to see it - so it is
-             shown here rather than discovered on the sign-in screen after saving,
-             which is a screen an administrator does not see again for as long as
-             they stay signed in. -->
-        <p class="muted" id="logo-crop-hint" data-i18n="admin.logoCropHint" hidden>Each of these shows a part of the logo. Press one to choose which part.</p>
+        <!-- The one place the logo is drawn, at the size it is drawn there: the left
+             of the bar, once somebody has signed in. The sign-in screen and the
+             browser tab carry Go-Ticket-System's own mark, whatever is uploaded here -
+             decided by the maintainer on 2026-11-18. The bar draws the copy the
+             sign-in card used to draw, so this place's part of the logo is the one
+             the API calls the banner's. -->
+        <p class="muted" id="logo-crop-hint" data-i18n="admin.logoCropHint" hidden>This shows the part of the logo the header draws. Press it to choose another part.</p>
         <div class="logo-uses" id="logo-preview-uses" hidden>
           <figure class="logo-use">
-            <button type="button" class="logo-use-button" data-crop="header">
+            <button type="button" class="logo-use-button" data-crop="banner">
               <img id="logo-preview" class="logo-preview" alt="">
             </button>
             <figcaption class="muted" data-i18n="admin.logoInHeader">In the header</figcaption>
-          </figure>
-          <figure class="logo-use">
-            <button type="button" class="logo-use-button" data-crop="banner">
-              <img id="logo-preview-login" class="logo-preview logo-preview-login" alt="">
-            </button>
-            <figcaption class="muted" data-i18n="admin.logoOnSignIn">On the sign-in screen</figcaption>
-          </figure>
-          <!-- The third use, and the one with the least room by a long way. A
-               wordmark that reads perfectly as a banner is a smear at sixteen
-               pixels, and that is worth seeing before saving rather than
-               discovering in the tab afterwards. -->
-          <figure class="logo-use">
-            <button type="button" class="logo-use-button" data-crop="icon">
-              <img id="logo-preview-icon" class="logo-preview logo-preview-icon" alt="">
-            </button>
-            <figcaption class="muted" data-i18n="admin.logoAsFavicon">In the browser tab</figcaption>
           </figure>
         </div>
         <!-- Away from the file picker above it: they sat on adjacent lines and
@@ -1965,7 +2051,7 @@
            push leaves through the push service of the browser's maker, and
            whether this installation talks to them is its administrator's to
            decide. -->
-      <form method="post" id="form-push" class="card form">
+      <form method="post" id="form-push" class="card form" data-tab="general">
         <h2 data-i18n="push.switchTitle">Push notifications</h2>
         <p class="muted" data-i18n="push.switchHint">What somebody is told about their tickets - a customer's answer, a ticket handed to them, a deadline running out - is pushed to the browsers they switch it on for under My account, even while no page is open. Each push leaves through the push service of the browser's maker: Google's for Chrome, Mozilla's for Firefox, Apple's for Safari. It is encrypted for that browser alone, so the push service carries it without reading it - but it learns that this installation sent something, and when.</p>
         <div class="grid">
@@ -1974,7 +2060,7 @@
         <button type="submit" data-i18n="action.save">Save</button>
       </form>
 
-      <form method="post" id="form-operational" class="card form">
+      <form method="post" id="form-operational" class="card form" data-tab="operation">
         <h2 data-i18n="ops.title">Operation and limits</h2>
         <p class="muted" data-i18n="ops.hint">Leave a field empty to keep the value from the configuration file. Changes take effect within a few seconds, without a restart - except the session lifetime, which applies from the next sign-in.</p>
         <div class="grid">
@@ -2007,7 +2093,7 @@
         </div>
       </form>
 
-      <form method="post" id="form-timezone" class="card form">
+      <form method="post" id="form-timezone" class="card form" data-tab="general">
         <h2 data-i18n="tz.title">Timezone</h2>
         <p class="muted" data-i18n="tz.hint">The zone a ticket's number takes its day from and the service hours are read in, and the one moments are written in for everyone who has not set their own under "My account".</p>
         <div class="grid">
@@ -2019,7 +2105,7 @@
         <button type="submit" data-i18n="action.save">Save</button>
       </form>
 
-      <form method="post" id="form-holidays" class="card form">
+      <form method="post" id="form-holidays" class="card form" data-tab="general">
         <h2 data-i18n="holiday.title">Public holidays</h2>
         <p class="muted" data-i18n="holiday.hint">The public holidays the service hours leave out, so that no deadline runs on one: a country and, where its holidays differ by state, nation or region, which one. Until a choice is saved, none is kept.</p>
         <div class="grid">
@@ -2033,7 +2119,7 @@
         <button type="submit" data-i18n="action.save">Save</button>
       </form>
 
-      <form method="post" id="form-datasource" class="card form">
+      <form method="post" id="form-datasource" class="card form" data-tab="operation">
         <h2 data-i18n="admin.database">Database connection</h2>
         <p class="muted" id="datasource-active"></p>
         <p class="muted" data-i18n="admin.databaseHint">The connection is saved and used the next time the application starts. Switching it while running would not be safe.</p>
@@ -2077,7 +2163,7 @@
         <p class="muted" id="datasource-test-result"></p>
       </form>
 
-      <form method="post" id="form-telemetry" class="card form">
+      <form method="post" id="form-telemetry" class="card form" data-tab="operation">
         <h2 data-i18n="tel.title">Logging, metrics and tracing</h2>
         <p class="muted" id="telemetry-active"></p>
         <p class="muted" data-i18n="tel.hint">The log level applies at once. The metrics port is bound and the trace exporter is built while the application starts, so those are saved here and applied the next time it starts; the restart card lists what is waiting. A field left following the configuration file keeps its value from there.</p>
@@ -2128,7 +2214,7 @@
         </div>
       </form>
 
-      <form method="post" id="form-ldap" class="card form">
+      <form method="post" id="form-ldap" class="card form" data-tab="signin">
         <h2 data-i18n="admin.ldap">LDAP connection</h2>
         <p class="muted" data-i18n="admin.ldapHint">When enabled, passwords are checked against the directory. Unknown users are created locally on their first successful sign-in.</p>
         <div class="perm-grid switch-row">
@@ -2160,7 +2246,7 @@
         <p class="muted" id="ldap-test-result"></p>
       </form>
 
-      <div class="card" id="sync-card">
+      <div class="card" id="sync-card" data-tab="signin">
         <h2 data-i18n="sync.title">Directory synchronisation</h2>
         <p class="muted" data-i18n="sync.hint">Reconciles the users with the directory. LDAP is only ever read, never changed.</p>
         <p class="muted minus" data-i18n="sync.warning">Careful: accounts missing from the directory are deleted here, together with their tokens and sessions, and the tickets they owned are left without an owner. This cannot be undone. Always run the preview first.</p>
@@ -2219,7 +2305,7 @@
 
       <!-- The provider people may sign in through instead of with a password.
            Read at every sign-in, so a change here holds from the next one. -->
-      <form method="post" id="form-openid" class="card form">
+      <form method="post" id="form-openid" class="card form" data-tab="signin">
         <h2 data-i18n="admin.openid">Sign-in provider (OpenID Connect)</h2>
         <p class="muted" data-i18n="admin.openidHint">People can sign in through your organisation’s provider – Keycloak, Authentik, Entra ID, Google – instead of with a password, once each of them has linked their account to it under My account. Nobody is signed in by an address alone, and no account is ever made for somebody the provider knows. Register this installation at the provider with the address below to send people back to.</p>
         <div class="perm-grid switch-row">
@@ -2244,7 +2330,7 @@
            names. A table of every option, and a form under it that changes the one
            picked, told apart by the hidden id as every form here is - the option's
            name standing in for a number. Put away while it holds no option. -->
-      <div class="card" id="sysconfig-card" data-perm="settings:manage">
+      <div class="card" id="sysconfig-card" data-perm="settings:manage" data-tab="general">
         <h2 data-i18n="sysconfig.title">System configuration</h2>
         <p class="muted" data-i18n="sysconfig.hint">How the installation behaves, option by option. An option nobody changed follows its default, a new default after an update included. A change takes effect at once.</p>
         <div class="table-wrap">
@@ -2278,7 +2364,7 @@
       <!-- Who changed how the installation is run, and when. Kept, unlike the
            live log below, which goes with the process; ids are kept and names read
            when shown, so an erased account appears by its number alone. -->
-      <div class="card" id="changes-card" data-perm="settings:manage">
+      <div class="card" id="changes-card" data-perm="settings:manage" data-tab="logs">
         <h2 data-i18n="changes.title">Changes to the installation</h2>
         <p class="muted" data-i18n="changes.hint">Who created, changed or deleted an account or a role, saved a setting, switched maintenance mode or restarted the application, newest first. An account erased since appears by its number.</p>
         <div class="table-wrap">
@@ -2298,9 +2384,9 @@
 
       <!-- The process log. Last in the administration screen because it is
            what you scroll to when something already went wrong. -->
-      <div class="card" id="log-card">
+      <div class="card" id="log-card" data-tab="logs">
         <h2 data-i18n="log.title">Live log</h2>
-        <p class="muted" data-i18n="log.hint">What this process has written, newest at the bottom. Only what the log level admits reaches here, so ticking a level below it shows nothing — the level is set under "Logging, metrics and tracing" above. Held in memory only: what was captured is gone after a restart, and this is no substitute for collecting logs.</p>
+        <p class="muted" data-i18n="log.hint">What this process has written, newest at the bottom. Only what the log level admits reaches here, so ticking a level below it shows nothing — the level is set under "Logging, metrics and tracing" on the Operation tab. Held in memory only: what was captured is gone after a restart, and this is no substitute for collecting logs.</p>
 
         <div class="log-controls">
           <div class="log-levels" id="log-levels" role="group" aria-label="Log levels"></div>

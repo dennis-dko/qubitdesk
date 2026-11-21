@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Single-page UI for the ticket system API.
+ * Single-page UI for the Go-Ticket-System API.
  *
  * Plain DOM APIs on purpose: the assets are embedded in the Go binary, so
  * keeping the UI build-step-free means `go build` is the only build there is.
@@ -485,6 +485,7 @@ const FIELD_NAMES = {
   footerText: 'Footer',
   host: 'Host',
   id: 'ID',
+  keep: 'Backups kept',
   language: 'Language',
   ldapSyncMaxDeleteRatio: 'Deletion limit',
   legalNotice: 'Legal notice',
@@ -511,6 +512,7 @@ const FIELD_NAMES = {
   rateLimit: 'Rate limit',
   rateLimitWindowSeconds: 'Rate limit window (seconds)',
   role: 'Role',
+  schedule: 'Schedule',
   sessionIdleMinutes: 'Sign out after inactivity (minutes)',
   sessionLifetimeHours: 'Session lifetime (hours)',
   stateId: 'State',
@@ -1111,6 +1113,7 @@ function openTheVersionCard() {
   switchView('admin');
 
   const card = $('#update-card');
+  openTheTabOf(card);
   if (card) card.scrollIntoView({ block: 'center' });
 }
 
@@ -1576,7 +1579,7 @@ function placeholderValues() {
       hour: '2-digit', minute: '2-digit',
     }).format(now),
     version: lastBranding.version ?? '',
-    instance: lastBranding.title || 'Ticket System',
+    instance: named(lastBranding.title),
   };
 }
 
@@ -1760,71 +1763,6 @@ function statusBadge(name, type) {
  */
 
 /**
- * Points the browser tab at the instance's logo, after it has just changed.
- *
- * The document already arrives with the right icon: the server writes the link
- * into the page, at an address carrying a fingerprint of what it answers with. So
- * on every load there is nothing to do here, and this exists for the one moment
- * that is not a load - somebody has just saved a new logo and is still looking at
- * the page they saved it from.
- *
- * This used to do the whole job, and could not. An icon patched in after the
- * document was parsed is honoured by some engines and ignored by others; the logo
- * was correct in the DOM, correct in the tests, and not in the tab. What every
- * engine does honour is a fetch of a URL it has not seen before, which is what
- * changing the fingerprint gives it.
- */
-function applyFavicon(logo) {
-  const link = document.querySelector('link[rel~="icon"]');
-  if (!link) return;
-
-  const wanted = `/favicon?v=${faviconFingerprint(logo ?? '')}`;
-
-  if (link.getAttribute('href') === wanted) return;
-
-  // Replaced rather than pointed elsewhere: setting .href on the existing element
-  // is the mutation engines disagree about honouring.
-  const fresh = document.createElement('link');
-  fresh.rel = 'icon';
-  fresh.href = wanted;
-
-  document.head.append(fresh);
-  link.remove();
-}
-
-/**
- * The same fingerprint the server puts in the address.
- *
- * It has to match, or every load would swap the link the document arrived with
- * for an identical one - a fetch, a repaint and a flicker for nothing. The server
- * hashes the logo; this cannot, so it keeps what the server sent and compares
- * against that.
- */
-let serverFaviconVersion = null;
-
-function faviconFingerprint(logo) {
-  if (serverFaviconVersion === null) {
-    const link = document.querySelector('link[rel~="icon"]');
-    const href = link?.getAttribute('href') ?? '';
-
-    serverFaviconVersion = new URLSearchParams(href.split('?')[1] ?? '').get('v') ?? '';
-    lastFaviconLogo = logo;
-  }
-
-  // Unchanged since the document was served: keep the server's own version, so
-  // nothing is refetched.
-  if (logo === lastFaviconLogo) return serverFaviconVersion;
-
-  lastFaviconLogo = logo;
-
-  // Changed while the page was open. The value only has to differ from the last
-  // one for the browser to fetch again; the server decides what comes back.
-  serverFaviconVersion = String(Date.now());
-
-  return serverFaviconVersion;
-}
-
-/**
  * Keeps a stylesheet property equal to the height of something that other parts
  * of the page make room for.
  *
@@ -1886,28 +1824,25 @@ function languageName(language) {
 }
 
 /**
- * Choosing which part of the logo one place uses.
+ * Choosing which part of the logo the bar draws.
  *
- * A logo is uploaded once and drawn in three places that want three different
- * things, and the part worth showing differs between them: a wide header can take
- * the whole wordmark, a browser tab cannot - sixteen pixels of a two-to-one
- * wordmark is a smear, and what is worth keeping there is usually the mark at one
- * end. Nobody can guess which end, so it is chosen here, per place.
+ * A logo is uploaded once and drawn in one place, the left of the bar, and the
+ * part worth showing there is not always the whole: a wordmark with a symbol at
+ * one end can read better as the symbol alone. Nobody can guess which part, so
+ * it is chosen here. It is filed under the banner's name, because the bar draws
+ * the copy the sign-in card used to draw.
  *
  * The selection is free: any part, in any shape, from any corner. It opens on
- * the shape of the place it is for, because that is the one selection nothing has
+ * the shape the bar gives a logo, because that is the one selection nothing has
  * to be done to, but nothing holds it there.
  *
- * A chosen part that is not the place's shape is fitted into that place rather
- * than stretched to fill it - scaled until it fits and left at its own
- * proportions, which is what the header and the sign-in banner do with it and
- * what the tab's icon is padded out to. So the previews show it fitted too, and
- * what is on this screen is what will be on the others.
+ * A chosen part that is not that shape is fitted into the place rather than
+ * stretched to fill it - scaled until it fits and left at its own proportions,
+ * which is what the bar does with it. So the preview shows it fitted too, and
+ * what is on this screen is what will be on the bar.
  */
 const CROP_SHAPES = {
-  header: { width: 440, height: 80, label: () => t('admin.logoInHeader', 'In the header') },
-  banner: { width: 656, height: 192, label: () => t('admin.logoOnSignIn', 'On the sign-in screen') },
-  icon: { width: 64, height: 64, label: () => t('admin.logoAsFavicon', 'In the browser tab') },
+  banner: { width: 656, height: 192, label: () => t('admin.logoInHeader', 'In the header') },
 };
 
 /** What has been chosen, per place, while the form is open. */
@@ -2271,9 +2206,6 @@ function rememberBrandingDraft() {
     brandingDraft[brandingLanguage][field] = typed === brandingFallback(field) ? '' : typed;
   }
 }
-
-/** What the icon currently shown was made from. */
-let lastFaviconLogo = null;
 
 function fmtDate(iso) {
   if (!iso) return '–';
@@ -3178,63 +3110,28 @@ function restoreDrafts() {
  * Both are always filled now:
  *
  *   middle  the application's own mark, beside the title, always
- *   left    the uploaded logo, or the installation's initial where there is none
+ *   left    the uploaded logo, or a chip with Go-Ticket-System's G where there is none
  *
- * The initial is the first letter of the title this installation was given. It
- * costs nothing, it differs between installations, and it changes when somebody
- * changes the title - which is more than a generic placeholder glyph could say,
- * and it never reads as a picture that failed to load.
- *
- * Only in the header. The sign-in card gives a logo the width of the card, and a
- * 26-pixel chip in that space would read as something broken.
+ * The chip carried the first letter of the configured title while that title
+ * was the installation's whole name. Every installation is called Go-Ticket-System now
+ * and the title only follows it, so the first letter of the title was a letter
+ * of the addition - an H beside Go-Ticket-System | htp.net - and the chip carries the
+ * name's own initial instead. It still never reads as a picture that failed to
+ * load, which is what a generic glyph would.
  */
-function showBrandMark(branding, ownLogo) {
-  // Both places that stand in for a logo: the chip in the header, and the one on
-  // the sign-in screen. The sign-in card used to show nothing when no logo was
-  // configured, which reads as a page still loading rather than as an
-  // installation that has not uploaded one.
-  const letter = initialOf(brandingIn(branding, 'title'));
+function showBrandMark(ownLogo) {
+  const mark = $('#brand-mark');
 
-  for (const [markID, initialID] of [
-    ['#brand-mark', '#brand-initial'],
-    ['#login-mark', '#login-initial'],
-  ]) {
-    const mark = $(markID);
-
-    // The attribute rather than the property, because these are SVG elements and
-    // `hidden` is defined on HTMLElement: assigning it here creates a property
-    // nobody reads and leaves the chip on screen beside the logo that replaced
-    // it.
-    if (mark) {
-      if (ownLogo) mark.setAttribute('hidden', '');
-      else mark.removeAttribute('hidden');
-    }
-
-    const initial = $(initialID);
-    if (initial) initial.textContent = letter;
-  }
-}
-
-/**
- * The one letter that stands for an installation.
- *
- * The first character that is a letter or a digit, upper-cased. Skipping past
- * anything else matters more than it sounds: a title beginning with a quotation
- * mark or a bracket would otherwise put punctuation in the chip, which reads as
- * a fault rather than as a name.
- *
- * Upper-cased through the reader's own locale, so a Turkish i becomes the
- * capital that language uses rather than the English one.
- *
- * Falls back to the application's own initial, because an installation whose
- * title is empty still has to have something in the corner.
- */
-function initialOf(title) {
-  for (const character of String(title ?? '')) {
-    if (/\p{L}|\p{N}/u.test(character)) return character.toLocaleUpperCase();
+  // The attribute rather than the property, because this is an SVG element and
+  // `hidden` is defined on HTMLElement: assigning it here creates a property
+  // nobody reads and leaves the chip on screen beside the logo that replaced it.
+  if (mark) {
+    if (ownLogo) mark.setAttribute('hidden', '');
+    else mark.removeAttribute('hidden');
   }
 
-  return 'Z';
+  const initial = $('#brand-initial');
+  if (initial) initial.textContent = BRAND.charAt(0);
 }
 
 /**
@@ -4425,6 +4322,21 @@ async function loadUsers() {
       }));
     }
 
+    // For somebody who lost the phone their second factor was on, and only where
+    // there is one to remove. Their own account turns it off under My account,
+    // asking for a code; the built-in administrator is recovered from the
+    // server's command line instead, so the way back is not one more button.
+    if (can('users:write') && !u.isSystem && u.id !== me.user?.id && (u.totpEnabled || u.hasPasskeys)) {
+      // A plain link like the reset beside it, not a red one: the column that
+      // selects rows for deletion is derived from a row's red button.
+      actions.append(el('button', {
+        class: 'link',
+        'data-action': 'remove-second-factor',
+        text: t('user.removeFactor', 'remove second factor'),
+        onclick: () => removeSecondFactor(u),
+      }));
+    }
+
     // Not your own, which the server refuses too: deleting it would end the
     // session the request arrived on and leave whoever pressed it looking at a
     // sign-in screen for an account that no longer exists.
@@ -4550,6 +4462,30 @@ async function resetPassword(user) {
 
   await patch(`/users/${user.id}/password`, { password: chosen },
     t('msg.passwordReset', 'Password reset'), refreshAll);
+}
+
+/**
+ * Takes away the second factor somebody lost with their phone.
+ *
+ * The code from the authenticator app goes, every passkey goes with it - most
+ * likely on the same phone, and a way in for whoever holds it now - and every
+ * session the account has open ends, because that phone may still be signed
+ * in. The dialog says all three, since all three happen.
+ */
+async function removeSecondFactor(user) {
+  const sure = await confirmDialog({
+    title: t('user.removeFactorTitle', 'Remove the second factor'),
+    text: fillIn(t('user.removeFactorText',
+      'For {0}, who has lost the phone it was on: the code from the authenticator app and '
+      + 'every passkey are removed, and every session this account has open ends. They sign '
+      + 'in with their password and can set the second factor up again.'), [user.name]),
+    confirmLabel: t('user.removeFactorConfirm', 'Remove'),
+  });
+
+  if (!sure) return;
+
+  await mutate(() => api(`/users/${user.id}/second-factor`, { method: 'DELETE' }),
+    t('msg.secondFactorRemoved', 'Second factor removed'), refreshAll);
 }
 
 /** Opens an existing account in the form above the table. */
@@ -9670,6 +9606,7 @@ async function finishTheProviderRound() {
 function sayWhatTheProviderRoundCameTo(returned) {
   if (returned?.linked) {
     switchView('settings');
+    openTheTabOf($('#openid-card'));
     toast(t('openid.linkedNow', 'Your account is linked. From now on you can sign in through your organisation.'), 'ok');
   } else if (returned?.problem) {
     toast(returned.problem, 'error');
@@ -9847,26 +9784,41 @@ function drawWelcome(title) {
   $('#login-welcome').textContent = fillIn(t('login.welcome', 'Welcome to {0}'), [title]);
 }
 
-const BUILT_IN_TITLE = 'Ticket System';
+/**
+ * The name of every installation. What an administrator writes under Settings
+ * is added to it after a bar and never takes its place; the server writes the
+ * same rule in model.Named, and the two have to agree.
+ */
+const BRAND = 'Go-Ticket-System';
+
+/** What an installation is called with the addition written beside the brand. */
+function named(addition) {
+  const added = (addition ?? '').trim();
+
+  // The brand written again adds nothing: it was the obvious answer while the
+  // name could still be replaced, so it is stored where nobody meant to add.
+  if (!added || added.toLowerCase() === BRAND.toLowerCase()) return BRAND;
+
+  return `${BRAND} | ${added}`;
+}
 
 function drawBranding(branding) {
-  const title = brandingIn(branding, 'title') || BUILT_IN_TITLE;
+  const title = named(brandingIn(branding, 'title'));
 
-  // The tab may be named separately, because the room runs out there first: a
-  // name that reads across the top of the screen is cut off after a couple of
-  // dozen characters in a tab, and somebody has six of them open. Where nothing
-  // separate was written, the two are the same name.
-  const tabTitle = brandingIn(branding, 'tabTitle') || title;
+  // The tab may add something of its own, because the room runs out there
+  // first: a name that reads across the top of the screen is cut off after a
+  // couple of dozen characters in a tab, and somebody has six of them open.
+  // Where nothing separate was written, it adds what the header adds.
+  const tabTitle = named(brandingIn(branding, 'tabTitle') || brandingIn(branding, 'title'));
 
-  // Remembered on the device, so the next load has the instance's own name and
-  // mark before it is painted rather than a second later. theme.js reads this;
-  // see the note there for why a reload otherwise flickers back to a name nobody
+  // Remembered on the device, so the next load has the instance's own name
+  // before it is painted rather than a second later. theme.js reads this; see
+  // the note there for why a reload otherwise flickers back to a name nobody
   // chose. The tab's name resolved rather than both fields, since the tab is the
   // only thing that reads it.
   try {
     localStorage.setItem('gts.branding', JSON.stringify({
       title: tabTitle,
-      logo: branding.logo ?? '',
     }));
   } catch {
     // Private browsing refuses storage outright, which costs only the flicker.
@@ -9878,47 +9830,32 @@ function drawBranding(branding) {
   $('#app-title-text').textContent = title;
   drawWelcome(title);
 
-  // These two places show the installation's own logo and nothing else.
+  // The one place an installation's logo is drawn: the left of the bar, once
+  // somebody has signed in. The sign-in screen and the browser tab carry
+  // Go-Ticket-System's own mark whatever is uploaded - decided by the maintainer on
+  // 2026-11-18 - and the button beside the title carries it as well.
   //
-  // For a while they fell back to the shipped mark, on the reasoning that a
-  // header of words alone looks unfinished. It is the wrong place for it: these
-  // are the slots a company's own mark goes in, and filling them with ours makes
-  // an unbranded installation look like it is branded by somebody else. The
-  // application's own mark has its own place - the browser tab, and the button
-  // beside the title - which is where it says which program this is without
-  // claiming the space meant for whoever runs it.
+  // It is the installation's slot, so with no logo it does not fall back to our
+  // mark - that would make an unbranded installation look branded by somebody
+  // else - but to the chip with the G, which showBrandMark draws.
   //
-  // Each place gets the logo at the size it draws, made when the logo was saved.
-  // The header used to be handed the original - a wordmark of a few hundred
-  // kilobytes - and scaled it down with CSS, which is a large download to draw a
-  // 40px mark and one every visitor of the sign-in screen paid for.
-  //
-  // The original is the fallback for an installation whose logo predates the
-  // derived sizes; it looks the same, it is only bigger.
-  // Both places are given the banner-sized copy now that both draw it at the
-  // same size. The header used to take the 440x80 one, which is the right file
-  // for a 40px-tall slot and a blurred one for a 96px slot - the pixels are not
-  // there to enlarge. Nothing extra is fetched: this answer already carried both
-  // copies, because the sign-in screen behind the session needs one of them.
-  const sized = {
-    '#brand-logo': branding.logoBanner || branding.logo,
-    '#login-logo': branding.logoBanner || branding.logo,
-  };
+  // At the size it draws, made when the logo was saved: the banner-sized copy,
+  // which is the one the old sign-in card drew at the same 96 pixels. The
+  // 440x80 one is the right file for a 40px slot and a blurred one here. The
+  // original is the fallback for an installation whose logo predates the derived
+  // sizes; it looks the same, it is only bigger.
+  const logo = branding.logoBanner || branding.logo;
+  const header = $('#brand-logo');
 
-  for (const holder of ['#brand-logo', '#login-logo']) {
-    const img = $(holder);
-    if (!img) continue;
-
-    const mark = sized[holder];
-
+  if (header) {
     // Emptied as well as hidden: a hidden element holding a few hundred
     // kilobytes of data URI is still holding them.
-    img.src = mark || '';
-    img.hidden = !mark;
-    img.alt = mark ? (branding.title || '') : '';
+    header.src = logo || '';
+    header.hidden = !logo;
+    header.alt = logo ? (branding.title || '') : '';
   }
 
-  showBrandMark(branding, Boolean(sized['#brand-logo']));
+  showBrandMark(Boolean(logo));
 
   // The announcement banner is separate from the "change your password" one.
   // Through the renderer, so a {year} in a copyright line stays right and a link
@@ -9938,11 +9875,6 @@ function drawBranding(branding) {
   // which is why the footer is no longer hidden when the branding is empty:
   // "which version is actually running" is the first question of every support
   // conversation, and guessing it from a container tag is not an answer.
-  // The instance's own logo in the browser tab, where somebody with several
-  // installations open tells them apart. Falls back to the built-in mark, so an
-  // instance with no logo looks as it always did.
-  applyFavicon(branding.logo);
-
   const versionEl = $('#footer-version');
   if (versionEl) {
     // The platform beside the version, as "v1.0 (windows)". The same version is
@@ -10245,6 +10177,7 @@ async function loadAdmin() {
 
   await loadOperational();
   await loadUpdate();
+  await loadBackups();
 
   const timezone = await api('/settings/timezone');
   const instanceSelect = $('#instance-timezone');
@@ -10424,9 +10357,15 @@ async function loadChanges(older = false) {
 }
 
 function drawChanges() {
+  // Nobody's account made a change numbered zero: that is the recover command,
+  // run on the server where no request and so no account is involved.
+  const changedBy = (actor) => (actor.id === 0
+    ? t('changes.byCommand', 'The command line on the server')
+    : actor.name || `#${actor.id}`);
+
   const rows = adminChanges.entries.map((entry) => el('tr', {},
     el('td', { text: fmtMoment(entry.at) }),
-    el('td', { text: entry.actor.name || `#${entry.actor.id}` }),
+    el('td', { text: changedBy(entry.actor) }),
     el('td', { text: describeChange(entry) }),
   ));
 
@@ -10445,6 +10384,8 @@ const CHANGE_SENTENCES = {
   'user.deleted': () => t('change.userDeleted', 'Deleted the account {0}'),
   'user.role': () => t('change.userRole', 'Gave {0} the role {1}'),
   'user.password': () => t('change.userPassword', 'Set a new password for {0}'),
+  'user.secondFactor': () => t('change.userSecondFactor', 'Removed the second factor of {0}'),
+  'user.recovered': () => t('change.userRecovered', 'Recovered {0}: a new password, no second factor'),
   'users.imported': () => t('change.usersImported', 'Imported accounts from a spreadsheet'),
   'contact.portalGiven': () => t('change.contactPortalGiven', 'Gave {0} access to the customer portal'),
   'contact.portalTaken': () => t('change.contactPortalTaken', 'Took the customer portal away from {0}'),
@@ -10480,6 +10421,10 @@ const CHANGE_SENTENCES = {
   'installation.restart': () => t('change.restart', 'Restarted the application'),
   'installation.update': () => t('change.update', 'Started an update'),
   'installation.setup': () => t('change.setup', 'Completed the setup'),
+  'installation.backup': () => t('change.backup', 'Made a backup'),
+  'installation.backupDownloaded': () => t('change.backupDownloaded', 'Downloaded a backup'),
+  'installation.backupDeleted': () => t('change.backupDeleted', 'Deleted a backup'),
+  'settings.backup': () => t('change.backupPlan', 'Changed when backups are made'),
   'calendar.created': () => t('change.calendarCreated', 'Created the calendar {0}'),
   'calendar.updated': () => t('change.calendarUpdated', 'Changed the calendar {0}'),
   'calendar.deleted': () => t('change.calendarDeleted', 'Deleted the calendar {0}'),
@@ -10555,30 +10500,19 @@ async function loadSyncRuns() {
 let pendingLogo = '';
 
 /**
- * Shows the chosen image at both the sizes it will actually be given.
+ * Shows the chosen image at the size the bar will give it, before saving.
  *
- * One upload, two uses: 28px beside the navigation, and up to 96px across the
- * sign-in card. A mark that reads at one of those can be unreadable at the other,
- * and the sign-in screen is the one an administrator does not see again for as
- * long as they stay signed in - so it is shown here, before saving, rather than
- * found out the next time somebody signs out.
+ * The left of the bar is the one place the logo is drawn - the sign-in screen
+ * and the browser tab carry Go-Ticket-System's own mark - and it draws the banner-sized
+ * copy, so the preview shows the part chosen for the banner.
  */
 function setLogoPreview(dataURI) {
   pendingLogo = dataURI;
 
-  // Each preview shows the part chosen for that place, so what is on this screen
-  // is what will be on the others. Drawn here rather than by the server, because
-  // nothing has been saved yet - the logo may not even have left the machine.
-  for (const [id, use] of [
-    ['#logo-preview', 'header'],
-    ['#logo-preview-login', 'banner'],
-    ['#logo-preview-icon', 'icon'],
-  ]) {
-    const preview = $(id);
-    if (!preview) continue;
-
-    preview.src = dataURI ? cropPreview(dataURI, logoCrops[use], preview) : '';
-  }
+  // Drawn here rather than by the server, because nothing has been saved yet -
+  // the logo may not even have left the machine.
+  const preview = $('#logo-preview');
+  if (preview) preview.src = dataURI ? cropPreview(dataURI, logoCrops.banner, preview) : '';
 
   const uses = $('#logo-preview-uses');
   if (uses) uses.hidden = !dataURI;
@@ -10638,9 +10572,7 @@ function wireAdmin() {
     // dialog to "all files". So the type is checked here as well, before
     // anything is read.
     if (!['image/png', 'image/jpeg'].includes(file.type)) {
-      toast(t('err.logoNotRaster',
-        'The logo must be a PNG or a JPEG. Some browsers will not take an SVG as a tab icon.'),
-      'error');
+      toast(t('err.logoNotRaster', 'The logo must be a PNG or a JPEG.'), 'error');
       e.target.value = '';
 
       return;
@@ -10690,29 +10622,22 @@ function wireAdmin() {
       translations: brandingDraft,
       crops: logoCrops,
     };
-    // Whether the tab's own identity is changing, decided before the save so the
-    // comparison is against what is currently on screen.
-    //
-    // The chosen parts count as much as the logo does. A different corner of an
-    // unchanged logo is a different icon, and leaving the reload out for that
-    // case left the tab showing the old one - which is exactly the shape of the
-    // bug that made this reload necessary in the first place.
-    const markChanged = (lastBranding.logo ?? '') !== (pendingLogo ?? '')
-      || JSON.stringify(lastBranding.crops ?? {}) !== JSON.stringify(logoCrops ?? {});
 
+    // No reload after it, though there was one for as long as the logo was the
+    // tab's icon: every engine takes that from the document it was given, so a
+    // changed logo meant a new document. The tab keeps Go-Ticket-System's mark now, and
+    // the one place the logo is drawn is redrawn by loadBranding like everything
+    // else on the page.
     saveForm(e.target, async () => {
       const saved = await api('/settings/branding',
         { method: 'PUT', body: JSON.stringify(body) });
 
       // The copy the language chooser fills its boxes from, brought up to date
-      // from what was just sent - not from the reload below.
-      //
-      // The reload is behind the notice, and between the two there is a window
-      // somebody can click in. Clicking in it filled the boxes with the name
-      // from before the save, and saving that stored the old name as a
-      // translation of the new one - a wrong value written by a screen that
-      // looked like it was showing the right one. What was sent is what the
-      // server now holds, so there is nothing to wait for.
+      // from what was just sent rather than from the load that follows: between
+      // the two there is a window somebody can click in, and clicking in it
+      // filled the boxes with the name from before the save - a wrong value
+      // written by a screen that looked like it was showing the right one. What
+      // was sent is what the server now holds, so there is nothing to wait for.
       brandingBase = { ...brandingBase, ...base };
 
       return saved;
@@ -10721,21 +10646,6 @@ function wireAdmin() {
       async () => {
         await loadBranding();
         await loadAdmin();
-
-        // A changed mark means the page is reloaded, and it is the one setting
-        // that needs it. Every engine takes the tab icon from the document it was
-        // given; Firefox in particular ignores an icon link inserted afterwards
-        // entirely, so taking a logo off and saving left the old one in the tab
-        // until something else caused a load. Chrome honours the swap, which is
-        // why this looked finished.
-        //
-        // Only for the mark, and only when it actually changed - reloading after
-        // every save on this screen would throw away whatever else was being
-        // edited for no reason at all.
-        if (markChanged) {
-          rememberPlace();
-          window.location.reload();
-        }
       });
   });
 
@@ -12242,9 +12152,9 @@ const TOUR_STEPS = [
     permission: 'users:read',
     title: () => t('tour.userTable.title', 'Who is here, and what they may do'),
     text: () => t('tour.userTable.text',
-      'The role beside each name can be changed from here. The built-in administrator is '
-      + 'the exception: it cannot be deleted and its role cannot be moved, because it is '
-      + 'the way back in.'),
+      'The role beside each name can be changed from here, a forgotten password reset and a '
+      + 'second factor lost with a phone removed. The built-in administrator is the exception: '
+      + 'it cannot be deleted and its role cannot be moved, because it is the way back in.'),
   },
   {
     target: '#form-role',
@@ -12401,6 +12311,49 @@ const TOUR_STEPS = [
       + 'value tickets carry is made invalid rather than deleted, here as in the two cards above.'),
   },
   {
+    target: '#settings-tabs',
+    view: 'settings',
+    title: () => t('tour.settingsTabs.title', 'My account, by subject'),
+    text: () => t('tour.settingsTabs.text',
+      'What you are told and your timezone, how you sign in, apps and tokens, and your data '
+      + 'each have a tab of their own. You only see the tabs that have something for you.'),
+  },
+  {
+    target: '#notify-card',
+    view: 'settings',
+    title: () => t('tour.notify.title', 'Being told'),
+    text: () => t('tour.notify.text',
+      'What happens to your tickets is said on the screen while a page is open. Here this '
+      + 'browser can say it as a notification as well, and receive it while it is closed '
+      + 'where the installation allows that.'),
+  },
+  {
+    target: '#form-my-timezone',
+    view: 'settings',
+    title: () => t('tour.myZone.title', 'Your timezone'),
+    text: () => t('tour.myZone.text',
+      'Moments are written in it for you: when a ticket arrived, when a deadline falls. It is '
+      + 'taken from your browser the first time you sign in, and this is where you disagree '
+      + 'with that.'),
+  },
+  {
+    target: '#form-password',
+    view: 'settings',
+    title: () => t('tour.password.title', 'Your password'),
+    text: () => t('tour.password.text',
+      'Changing it ends every other session but this one. An account that signs in through '
+      + 'the directory has no password here to change.'),
+  },
+  {
+    target: '#totp-card',
+    view: 'settings',
+    title: () => t('tour.totp.title', 'A second factor'),
+    text: () => t('tour.totp.text',
+      'A code from an authenticator app, set up by scanning a QR code - or by typing the '
+      + 'secret, where scanning is not an option. Lost with a phone, it is removed by an '
+      + 'administrator, and you set it up again.'),
+  },
+  {
     target: '#passkey-card',
     view: 'settings',
     title: () => t('tour.passkey.title', 'Signing in without a password'),
@@ -12425,33 +12378,8 @@ const TOUR_STEPS = [
     title: () => t('tour.install.title', 'The Android app'),
     text: () => t('tour.install.text',
       'Scan this code with an Android phone to download the app of the release this '
-      + 'installation runs. It shows this interface.'),
-  },
-  {
-    target: '#notify-card',
-    view: 'settings',
-    title: () => t('tour.notify.title', 'Being told'),
-    text: () => t('tour.notify.text',
-      'What happens to your tickets is said on the screen while a page is open. Here this '
-      + 'browser can say it as a notification as well, and receive it while it is closed '
-      + 'where the installation allows that.'),
-  },
-  {
-    target: '#form-my-timezone',
-    view: 'settings',
-    title: () => t('tour.myZone.title', 'Your timezone'),
-    text: () => t('tour.myZone.text',
-      'Moments are written in it for you: when a ticket arrived, when a deadline falls. It is '
-      + 'taken from your browser the first time you sign in, and this is where you disagree '
-      + 'with that.'),
-  },
-  {
-    target: '#totp-card',
-    view: 'settings',
-    title: () => t('tour.totp.title', 'A second factor'),
-    text: () => t('tour.totp.text',
-      'A code from an authenticator app, set up by scanning a QR code - or by typing the '
-      + 'secret, where scanning is not an option.'),
+      + 'installation runs. It shows this interface, and at every start offers its new '
+      + 'version once this installation has been updated.'),
   },
   {
     target: '#token-card',
@@ -12463,14 +12391,6 @@ const TOUR_STEPS = [
       + 'shown once, when it is created.'),
   },
   {
-    target: '#form-password',
-    view: 'settings',
-    title: () => t('tour.password.title', 'Your password'),
-    text: () => t('tour.password.text',
-      'Changing it ends every other session but this one. An account that signs in through '
-      + 'the directory has no password here to change.'),
-  },
-  {
     target: '#export-card',
     view: 'settings',
     title: () => t('tour.export.title', 'Everything about you'),
@@ -12479,31 +12399,13 @@ const TOUR_STEPS = [
       + 'Passwords, second factors, tokens and keys stay out of it.'),
   },
   {
-    target: '#restart-card',
+    target: '#admin-tabs',
     view: 'admin',
     permission: 'settings:manage',
-    title: () => t('tour.restart.title', 'Restarting'),
-    text: () => t('tour.restart.text',
-      'Some settings are read only while the application starts. Saved ones wait here until '
-      + 'a restart applies them, and this is where to restart on purpose.'),
-  },
-  {
-    target: '#update-card',
-    view: 'admin',
-    permission: 'settings:manage',
-    title: () => t('tour.update.title', 'Which version runs here'),
-    text: () => t('tour.update.text',
-      'The version this installation runs, and whether a newer one is out. Where it can '
-      + 'replace itself, it downloads and installs the new one from here.'),
-  },
-  {
-    target: '#form-maintenance',
-    view: 'admin',
-    permission: 'settings:manage',
-    title: () => t('tour.maintenance.title', 'Maintenance mode'),
-    text: () => t('tour.maintenance.text',
-      'Closes the installation with an explanation, shown on the sign-in screen as well - '
-      + 'so somebody who cannot get in is told why rather than left guessing.'),
+    title: () => t('tour.adminTabs.title', 'Settings, by subject'),
+    text: () => t('tour.adminTabs.text',
+      'General settings, how people sign in, how the installation runs, and its logs each '
+      + 'have a tab of their own. The walk opens each one as it gets there.'),
   },
   {
     target: '#form-branding',
@@ -12511,8 +12413,9 @@ const TOUR_STEPS = [
     permission: 'settings:manage',
     title: () => t('tour.branding.title', 'What this installation looks like'),
     text: () => t('tour.branding.text',
-      'Title, banner, logo and footer. The logo becomes the icon in the browser tab, which '
-      + 'is what tells a test instance from the real one at a glance.'),
+      'What follows Go-Ticket-System, banner, logo and footer. The logo stands at the left of '
+      + "the header once somebody has signed in; the browser tab and the sign-in screen always "
+      + "show Go-Ticket-System's own."),
   },
   {
     target: '#form-push',
@@ -12522,15 +12425,6 @@ const TOUR_STEPS = [
     text: () => t('tour.push.text',
       'Whether notifications reach a browser that is closed. Off until you switch it on, '
       + 'because every push leaves through the push service of the browser\'s maker.'),
-  },
-  {
-    target: '#form-operational',
-    view: 'admin',
-    permission: 'settings:manage',
-    title: () => t('tour.limits.title', 'Limits and lifetimes'),
-    text: () => t('tour.limits.text',
-      'How long a session lasts, how many requests a caller may make, and how much of the '
-      + 'directory one synchronisation may remove.'),
   },
   {
     target: '#form-timezone',
@@ -12552,22 +12446,13 @@ const TOUR_STEPS = [
       + 'its public holidays out; until a choice is saved, none is left out.'),
   },
   {
-    target: '#form-datasource',
+    target: '#sysconfig-card',
     view: 'admin',
     permission: 'settings:manage',
-    title: () => t('tour.database.title', 'The database'),
-    text: () => t('tour.database.text',
-      'Which database this installation writes to. The connection is tested before it is '
-      + 'saved, and the change applies at the next start.'),
-  },
-  {
-    target: '#form-telemetry',
-    view: 'admin',
-    permission: 'settings:manage',
-    title: () => t('tour.telemetry.title', 'Metrics and tracing'),
-    text: () => t('tour.telemetry.text',
-      'The log level, the metrics endpoint and where traces are exported to. The level applies '
-      + 'at once; the other two are read when the process starts, so they wait for the next one.'),
+    title: () => t('tour.sysconfig.title', 'How the installation behaves'),
+    text: () => t('tour.sysconfig.text',
+      'The options of the system configuration with their defaults, under the names KIX18 gives them. '
+      + 'Only what was changed is kept, and putting an option back to its default forgets it again.'),
   },
   {
     target: '#form-ldap',
@@ -12587,6 +12472,88 @@ const TOUR_STEPS = [
       'People can sign in through your organisation\'s provider instead of with a password, '
       + 'once each has linked their account to it. Nobody gets an account just because the '
       + 'provider knows them.'),
+  },
+  {
+    target: '#restart-card',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.restart.title', 'Restarting'),
+    text: () => t('tour.restart.text',
+      'Some settings are read only while the application starts. Saved ones wait here until '
+      + 'a restart applies them, and this is where to restart on purpose.'),
+  },
+  {
+    target: '#update-card',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.update.title', 'Which version runs here'),
+    text: () => t('tour.update.text',
+      'The version this installation runs, and whether a newer one is out. Where it can '
+      + 'replace itself, it downloads and installs the new one from here.'),
+  },
+  {
+    target: '#backup-card',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.backup.title', 'Backups'),
+    text: () => t('tour.backup.text',
+      'The whole installation in one sealed file: made now and downloaded, or made on a '
+      + 'schedule and kept on the server, the oldest going past the number you set. It '
+      + 'comes back through the installer, into an empty database.'),
+  },
+  {
+    target: '#form-maintenance',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.maintenance.title', 'Maintenance mode'),
+    text: () => t('tour.maintenance.text',
+      'Closes the installation with an explanation, shown on the sign-in screen as well - '
+      + 'so somebody who cannot get in is told why rather than left guessing.'),
+  },
+  {
+    target: '#form-operational',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.limits.title', 'Limits and lifetimes'),
+    text: () => t('tour.limits.text',
+      'How long a session lasts, how many requests a caller may make, and how much of the '
+      + 'directory one synchronisation may remove.'),
+  },
+  {
+    target: '#form-datasource',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.database.title', 'The database'),
+    text: () => t('tour.database.text',
+      'Which database this installation writes to. The connection is tested before it is '
+      + 'saved, and the change applies at the next start.'),
+  },
+  {
+    target: '#form-telemetry',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.telemetry.title', 'Metrics and tracing'),
+    text: () => t('tour.telemetry.text',
+      'The log level, the metrics endpoint and where traces are exported to. The level applies '
+      + 'at once; the other two are read when the process starts, so they wait for the next one.'),
+  },
+  {
+    target: '#changes-card',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.changes.title', 'Who changed what'),
+    text: () => t('tour.changes.text',
+      'Every account, role and setting created, changed or deleted, every switch of '
+      + 'maintenance mode and every restart, with who did it, newest first.'),
+  },
+  {
+    target: '#log-card',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.log.title', 'The log, without a shell'),
+    text: () => t('tour.log.text',
+      'What this process is writing, filterable by level. It is the first place to look '
+      + 'when something refused and the reason was not on screen.'),
   },
   {
     target: '#calendar-card',
@@ -12662,33 +12629,6 @@ const TOUR_STEPS = [
       + 'have been given.'),
   },
   {
-    target: '#sysconfig-card',
-    view: 'admin',
-    permission: 'settings:manage',
-    title: () => t('tour.sysconfig.title', 'How the installation behaves'),
-    text: () => t('tour.sysconfig.text',
-      'The options of the system configuration with their defaults, under the names KIX18 gives them. '
-      + 'Only what was changed is kept, and putting an option back to its default forgets it again.'),
-  },
-  {
-    target: '#changes-card',
-    view: 'admin',
-    permission: 'settings:manage',
-    title: () => t('tour.changes.title', 'Who changed what'),
-    text: () => t('tour.changes.text',
-      'Every account, role and setting created, changed or deleted, every switch of '
-      + 'maintenance mode and every restart, with who did it, newest first.'),
-  },
-  {
-    target: '#log-card',
-    view: 'admin',
-    permission: 'settings:manage',
-    title: () => t('tour.log.title', 'The log, without a shell'),
-    text: () => t('tour.log.text',
-      'What this process is writing, filterable by level. It is the first place to look '
-      + 'when something refused and the reason was not on screen.'),
-  },
-  {
     target: '#theme-picker',
     view: null,
     title: () => t('tour.theme.title', 'Appearance and language'),
@@ -12720,12 +12660,16 @@ function applicableTourSteps() {
  * complete, and every other screen was simply never mentioned. A step switches to its own screen before it runs, so where
  * somebody is standing right now says nothing about whether the control exists.
  *
- * What does say so is a hidden that is not a screen - a card kept back because
- * there is nothing in it yet, or one a permission removed.
+ * What does say so is a hidden that is not a screen, nor a tab of one - a card
+ * kept back because there is nothing in it yet, or one a permission removed. A
+ * card on a tab that is not chosen is reachable for the same reason one on
+ * another screen is: the step opens its tab before it points at it.
  */
 function tourTargetIsReachable(node) {
   for (let current = node; current && current !== document.body; current = current.parentElement) {
-    if (current.hidden && !current.classList.contains('view')) return false;
+    const aPlaceToGo = current.classList.contains('view') || current.getAttribute('role') === 'tabpanel';
+
+    if (current.hidden && !aPlaceToGo) return false;
   }
 
   return Boolean(node);
@@ -12846,6 +12790,7 @@ async function renderTourStep() {
     return;
   }
 
+  openTheTabOf(node);
   showWhatTheStepPointsAt(node);
 
   node.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -13238,19 +13183,21 @@ const SETUP_STEPS = {
   },
 
   branding: {
-    title: () => t('setup.branding.title', 'Name this installation'),
+    title: () => t('setup.branding.title', 'Add to the name'),
     text: () => t('setup.branding.text',
-      'The title appears in the browser tab and the header. Optional, but it is what tells '
-      + 'a test instance apart from the real one at a glance.'),
+      'Every installation is called Go-Ticket-System. What you write here follows it after a bar, '
+      + 'as in Go-Ticket-System | htp.net, in the header and the browser tab. Optional, but it is '
+      + 'what tells a test instance apart from the real one at a glance.'),
     // One field per language, rather than one field.
     //
-    // The title is the first thing an installation says about itself and the one
-    // thing this step exists for, so a company that works in two languages should
-    // not have to come back to the appearance screen afterwards to say it twice.
-    // Two boxes is small enough to put on the wizard; the four texts on the
-    // appearance screen are not, which is why that one has a switcher instead.
+    // What follows the name is the first thing an installation says about itself
+    // and the one thing this step exists for, so a company that works in two
+    // languages should not have to come back to the appearance screen afterwards
+    // to say it twice. Two boxes is small enough to put on the wizard; the four
+    // texts on the appearance screen are not, which is why that one has a
+    // switcher instead.
     fields: () => BRANDING_LANGUAGES.map((language) => el('label', {
-      text: `${t('setup.instanceName', 'Name of this installation')} — ${languageName(language)}`,
+      text: `${t('setup.instanceName', 'After “Go-Ticket-System |”')} — ${languageName(language)}`,
     }, el('input', { type: 'text', name: `title.${language}`, maxlength: '80' }))),
     submit: async (values) => {
       const written = {};
@@ -13744,8 +13691,10 @@ function renderUpdate(state) {
   const button = $('#update-now');
   const notes = $('#update-notes');
   const problem = $('#update-problem');
+  const byHand = $('#update-by-hand');
 
   button.hidden = !state.available;
+  byHand.hidden = true;
   notes.hidden = !state.url;
 
   if (state.url) notes.href = state.url;
@@ -13802,7 +13751,7 @@ function renderUpdate(state) {
       .replace('{0}', state.pending);
 
     hint.textContent = state.restartable
-      ? t('update.pendingRestart', 'Use the restart below, or restart the application yourself.')
+      ? t('update.pendingRestart', 'Use the restart above, or restart the application yourself.')
       : t(`restart.unsupported.${state.restartCode || 'other'}`,
         'Restart the application the way it was started.');
 
@@ -13879,6 +13828,11 @@ function renderUpdate(state) {
       + 'the container is recreated. Update the image by hand: '
       + 'docker compose pull && docker compose up -d - or add '
       + 'deploy/compose.update.yaml to the deployment and this card will do it.');
+
+    // That command is Compose's with its overlays listed in COMPOSE_FILE. The
+    // guide recommends pinning the version and describes overlays given with -f
+    // and a bare docker run, and it does not take any of those as it stands.
+    byHand.hidden = false;
 
     return;
   }
@@ -14053,6 +14007,126 @@ function saySoAfterTheReload() {
  * The whole state comes back, so the card is redrawn from the answer rather than
  * loaded again - one request, and the same rendering path a fresh load takes.
  */
+// ------------------------------------------------------------------- backups
+
+/** The backup card's last answer, kept so a change of language redraws it. */
+let backupState = null;
+
+/**
+ * Reads the backup card: the plan, the backups kept, and whether one can be made
+ * at all. Only for an account that may administer the installation, as the
+ * server asks: a backup is all of it.
+ */
+async function loadBackups() {
+  const card = $('#backup-card');
+  if (!card) return;
+
+  if (!can('settings:manage')) {
+    card.hidden = true;
+
+    return;
+  }
+
+  backupState = await api('/settings/backups');
+  card.hidden = false;
+  redrawable('backups', drawBackups);
+}
+
+function drawBackups() {
+  const state = backupState;
+  if (!state) return;
+
+  // Without the passphrase the server refuses every backup, so the button is not
+  // offered and the card says what to set instead.
+  const off = $('#backup-off');
+  off.hidden = state.enabled;
+  off.textContent = fillIn(t('backup.off',
+    'No backup is made until BACKUP_PASSPHRASE is set on the server - at least {0} '
+    + 'characters - and the application restarted. Every backup is sealed with it, and '
+    + 'an unsealed one is not offered.'), [state.minPassphraseLength]);
+  $('#backup-now').hidden = !state.enabled;
+
+  $('#backup-folder').textContent = fillIn(t('backup.folder', 'Kept in {0} on the server.'), [state.folder]);
+
+  const form = $('#form-backup-plan');
+  if (!beingEdited(form)) {
+    form.elements.schedule.value = state.schedule ?? '';
+    form.elements.keep.value = String(state.keep);
+  }
+
+  form.elements.keep.max = String(state.maxKeep);
+
+  const rows = (state.backups ?? []).map((kept) => el('tr', {},
+    el('td', { text: fmtMoment(kept.made) }),
+    el('td', { class: 'num', text: fmtFileSize(kept.size) }),
+    el('td', { class: 'actions' },
+      el('button', {
+        type: 'button',
+        class: 'link',
+        'data-action': 'download',
+        text: t('backup.download', 'download'),
+        onclick: () => mutate(() => downloadBackup(kept.name), null, null),
+      }),
+      deleteButton({
+        label: kept.name,
+        path: `/settings/backups/${encodeURIComponent(kept.name)}`,
+        message: t('backup.deleted', 'Backup deleted'),
+        after: loadBackups,
+      })),
+  ));
+
+  fillTable($('#table-backups tbody'), rows, 3, t('backup.none', 'No backup has been kept yet.'));
+}
+
+/** Saves a kept backup under its own name, which says when it was made. */
+function downloadBackup(name) {
+  return saveDownload(`${API}/settings/backups/${encodeURIComponent(name)}`, name);
+}
+
+/** A file's size in the unit it is read in, written the reader's way. */
+function fmtFileSize(bytes) {
+  const megabytes = bytes >= 1024 * 1024;
+
+  return new Intl.NumberFormat(activeLocale(), {
+    style: 'unit',
+    unit: megabytes ? 'megabyte' : 'kilobyte',
+    maximumFractionDigits: megabytes ? 1 : 0,
+  }).format(megabytes ? bytes / (1024 * 1024) : Math.max(1, Math.round(bytes / 1024)));
+}
+
+/**
+ * Making one downloads it as well - what somebody pressing "Back up now" wants
+ * is the file - and saving the plan answers with the whole card, drawn from
+ * what was kept rather than from what was typed.
+ */
+function wireBackups() {
+  $('#backup-now')?.addEventListener('click', () => mutate(
+    () => api('/settings/backups', { method: 'POST' }),
+    t('backup.madeNow', 'Backup made'),
+    async (made) => {
+      await loadBackups();
+      await downloadBackup(made.name);
+    },
+  ));
+
+  $('#form-backup-plan')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const form = e.target;
+
+    saveForm(form, () => api('/settings/backups/plan', {
+      method: 'PUT',
+      body: JSON.stringify({
+        schedule: form.elements.schedule.value.trim(),
+        keep: Number(form.elements.keep.value),
+      }),
+    }), t('admin.saved', 'Settings saved'), (state) => {
+      backupState = state;
+      redrawable('backups', drawBackups);
+    });
+  });
+}
+
 function wireUpdateCheck() {
   const button = $('#update-check');
   if (!button) return;
@@ -14532,6 +14606,7 @@ function openTheRestartCard() {
   switchView('admin');
 
   const card = $('#restart-card');
+  openTheTabOf(card);
   if (card) card.scrollIntoView({ block: 'center' });
 }
 
@@ -15920,9 +15995,11 @@ function logViewerActive() {
 
   // The sign-in screen being up means there is no session to poll with. Without
   // this the poller keeps asking through a password change - which ends every
-  // session - and paints the screen with authentication failures.
-  return can('settings:manage') && !$('#view-admin').hidden && $('#login-screen').hidden
-    && !document.hidden;
+  // session - and paints the screen with authentication failures. And only on
+  // its own tab: on one that is not chosen it is as unseen as on a screen that
+  // is not.
+  return can('settings:manage') && !$('#view-admin').hidden && !onAHiddenTab(card)
+    && $('#login-screen').hidden && !document.hidden;
 }
 
 function setLogStatus(text) {
@@ -16091,7 +16168,7 @@ function warnAboutLevelsTheProcessDoesNotWrite() {
   warning.textContent = quieter.length
     ? t('log.levelTooQuiet',
       'This installation is writing {0} and above, so {1} will stay empty. '
-      + 'The log level is set under "Logging, metrics and tracing" above.')
+      + 'The log level is set under "Logging, metrics and tracing" on the Operation tab.')
       .replace('{0}', logView.runningLevel)
       .replace('{1}', quieter.join(', '))
     : '';
@@ -16626,6 +16703,170 @@ function navigationMenuIsOpen() {
   return $('.topbar')?.classList.contains('nav-open') === true;
 }
 
+// ------------------------------------------------------------- screen tabs
+
+/**
+ * Sorts the two long screens, My account and Settings, into their tabs.
+ *
+ * Each had grown into one long column of cards - Settings to well over six
+ * thousand pixels - which is a page somebody scrolls through rather than reads.
+ * A card says which tab it is on with data-tab and keeps its place in the
+ * markup; this moves it into its tab's panel once, in the order the markup has
+ * them, so the order of the markup is still the order on screen within a tab.
+ *
+ * A tab is offered while something on it is shown. Whether a card is shown, and
+ * to whom, is decided by the code that loads it and by the account's rights,
+ * and neither has any business knowing which tab the card is on - so the cards'
+ * own hidden is watched instead of every place that sets it being taught.
+ */
+function arrangeScreenTabs() {
+  for (const strip of $$('.screen-tabs')) {
+    const view = strip.closest('.view');
+    if (!view) continue;
+
+    const cards = $$(':scope > [data-tab]', view);
+
+    for (const card of cards) {
+      $(`[role="tabpanel"][data-card-panel="${card.dataset.tab}"]`, view)?.append(card);
+    }
+
+    for (const tab of $$('[role="tab"]', strip)) {
+      tab.addEventListener('click', () => chooseScreenTab(view, tab.dataset.cardTab));
+    }
+
+    strip.addEventListener('keydown', (event) => walkTheScreenTabs(strip, event));
+
+    const watcher = new MutationObserver(() => offerTheTabsThatHoldSomething(view));
+    for (const card of cards) watcher.observe(card, { attributes: true, attributeFilter: ['hidden'] });
+
+    showScreenTab(view, rememberedScreenTab(view) ?? $('[role="tab"]', strip)?.dataset.cardTab);
+    offerTheTabsThatHoldSomething(view);
+  }
+}
+
+/**
+ * Shows one tab of a screen, and hides the panels of the others.
+ *
+ * Kept for the session, per screen, so a reload comes back to the same tab
+ * rather than to the first one, which is seldom where somebody was working.
+ */
+function showScreenTab(view, key, { focus = false } = {}) {
+  if (!key) return;
+
+  for (const tab of $$('[role="tab"]', view)) {
+    const chosen = tab.dataset.cardTab === key;
+
+    tab.setAttribute('aria-selected', String(chosen));
+    tab.tabIndex = chosen ? 0 : -1;
+
+    if (chosen && focus) tab.focus();
+  }
+
+  for (const panel of $$('[role="tabpanel"]', view)) {
+    const shown = panel.dataset.cardPanel === key;
+    if (panel.hidden === shown) panel.hidden = !shown;
+  }
+
+  try {
+    sessionStorage.setItem(`gts.tab.${view.id}`, key);
+  } catch {
+    // Private browsing refuses storage; the screen then opens on its first tab.
+  }
+}
+
+/**
+ * Changes to another tab of a screen.
+ *
+ * What the tabs left behind showed is let go as it is when the screen itself is
+ * left: on a tab that is not chosen it is just as unseen. A password read in the
+ * clear goes back behind its dots; a token's value and a second factor's key -
+ * each a credential shown once - come off their cards; and the log stops being
+ * read.
+ */
+function chooseScreenTab(view, key, options) {
+  showScreenTab(view, key, options);
+
+  hideEveryRevealedPassword();
+
+  if (onAHiddenTab($('#token-card'))) forgetTheTokenValue();
+  if (onAHiddenTab($('#totp-card')) && $('#totp-setup') && !$('#totp-setup').hidden) renderTOTPState();
+
+  if (logViewerActive()) schedulePoll({ immediate: true });
+  else stopLogPolling();
+}
+
+/** The tab a screen last showed in this session, if it still has it. */
+function rememberedScreenTab(view) {
+  let key = null;
+
+  try {
+    key = sessionStorage.getItem(`gts.tab.${view.id}`);
+  } catch {
+    return null;
+  }
+
+  if (!key || !/^[a-z]+$/.test(key)) return null;
+
+  return $(`[role="tab"][data-card-tab="${key}"]`, view) ? key : null;
+}
+
+/**
+ * Offers the tabs that have something on them, and only those.
+ *
+ * The chosen one moves to the first left when it empties, and the strip goes
+ * when one tab is all there is: a choice of one says nothing the cards do not.
+ */
+function offerTheTabsThatHoldSomething(view) {
+  const tabs = $$('[role="tab"]', view);
+  let first = null;
+
+  for (const tab of tabs) {
+    const panel = document.getElementById(tab.getAttribute('aria-controls'));
+    const holds = [...(panel?.children ?? [])].some((card) => !card.hidden);
+
+    if (tab.hidden === holds) tab.hidden = !holds;
+    if (holds && !first) first = tab;
+  }
+
+  const strip = $('.screen-tabs', view);
+  const several = tabs.filter((tab) => !tab.hidden).length > 1;
+
+  if (strip && strip.hidden === several) strip.hidden = !several;
+
+  const chosen = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true');
+  if (first && (!chosen || chosen.hidden)) chooseScreenTab(view, first.dataset.cardTab);
+}
+
+/** Moves along a strip with the arrow keys, Home and End, as any tab strip does. */
+function walkTheScreenTabs(strip, event) {
+  const tabs = $$('[role="tab"]', strip).filter((tab) => !tab.hidden);
+  const at = tabs.indexOf(document.activeElement);
+  if (at < 0) return;
+
+  const to = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: tabs.length - 1 }[event.key];
+  if (to === undefined) return;
+
+  event.preventDefault();
+  chooseScreenTab(strip.closest('.view'), tabs[(to + tabs.length) % tabs.length].dataset.cardTab, { focus: true });
+}
+
+/**
+ * Opens the tab a card is on, for whatever is about to point at it - a banner's
+ * way to a card, or a step of the guided tour. A scroll to an element on a tab
+ * that is not chosen lands nowhere, and a ring drawn round it rings nothing.
+ */
+function openTheTabOf(node) {
+  const panel = node?.closest('[role="tabpanel"]');
+  const view = panel?.closest('.view');
+
+  if (panel?.hidden && view) chooseScreenTab(view, panel.dataset.cardPanel);
+}
+
+/** Whether an element is on a tab of its screen that is not the chosen one. */
+function onAHiddenTab(node) {
+  return Boolean(node?.closest('[role="tabpanel"]')?.hidden);
+}
+
 // --------------------------------------------------------------- bootstrap
 
 // viewTheReaderMayHave answers with the screen asked for, or the welcome screen
@@ -16706,75 +16947,6 @@ function switchView(name) {
   }
 }
 
-/**
- * Where somebody was on the page, kept across a reload this application caused.
- *
- * Saving a logo reloads: the tab's icon comes from the document, and no engine
- * takes a new one from a link swapped in afterwards. What that cost was the
- * place - the appearance settings are a long way down a long screen, and coming
- * back to the top of it after every save means scrolling back down to see
- * whether the thing that was just saved looks right.
- *
- * In the session rather than on the device, and cleared as soon as it is used:
- * this is about one reload that is already in flight, not about where somebody
- * was yesterday. That is what rememberedView is for.
- */
-const PLACE_KEY = 'gts.place';
-
-/** Records the place, immediately before reloading. */
-function rememberPlace() {
-  try {
-    sessionStorage.setItem(PLACE_KEY, JSON.stringify({
-      view: currentHashView(),
-      y: Math.round(window.scrollY),
-    }));
-  } catch {
-    // Private browsing refuses storage; the reload then starts at the top,
-    // which is where it always used to start.
-  }
-}
-
-/**
- * Puts somebody back where they were, once there is enough page to do it.
- *
- * Not in one go: at the moment this runs the screen is a few hundred pixels of
- * empty form, and scrolling to where the LDAP section will be scrolls to the
- * bottom of nothing. The page grows as each panel answers, so this keeps asking
- * until the scroll actually lands or the patience runs out - either of which
- * leaves somebody looking at a page rather than at a spinner.
- */
-function restorePlace() {
-  let place = null;
-
-  try {
-    place = JSON.parse(sessionStorage.getItem(PLACE_KEY) || 'null');
-    sessionStorage.removeItem(PLACE_KEY);
-  } catch {
-    return;
-  }
-
-  if (!place || typeof place.y !== 'number' || place.y <= 0) return;
-
-  // Only back to the screen it was taken on. A reload that ends up somewhere
-  // else - a session that expired, a link that named another view - has no
-  // business being scrolled to an offset measured on a different page.
-  if (place.view && place.view !== currentHashView()) return;
-
-  const deadline = Date.now() + 3000;
-
-  const settle = () => {
-    window.scrollTo(0, place.y);
-
-    // Arrived, near enough: the last panel to answer can be a pixel or two
-    // shorter than it was, and chasing that would never finish.
-    if (Math.abs(window.scrollY - place.y) <= 2) return;
-
-    if (Date.now() < deadline) requestAnimationFrame(settle);
-  };
-
-  requestAnimationFrame(settle);
-}
-
 /** The view named in the address bar, if it names one. */
 function currentHashView() {
   return decodeURIComponent(window.location.hash.replace(/^#/, ''));
@@ -16822,8 +16994,8 @@ function rememberView(name) {
  *
  * refreshAll marks the page loaded once every screen has been filled from the
  * server, and for a refresh that is the truth. On the way in it is one step
- * early: the first view has still to be chosen, and on a page load the reader
- * has still to be put back where they were. Both of those switch the view.
+ * early: the first view has still to be chosen, and choosing it switches the
+ * view.
  *
  * That mark is what anything outside this page has to go on - a browser case, or
  * a person wondering whether a blank card is empty or unanswered - and it was
@@ -16834,14 +17006,10 @@ function rememberView(name) {
  * So the mark is taken back and given again around the choice. Nothing is
  * awaited in between, so it is never observably given too early.
  */
-function openTheStartingView({ restoring = false } = {}) {
+function openTheStartingView() {
   document.documentElement.dataset.loaded = 'no';
 
   switchView(startingView());
-
-  // Back to where a reload this application caused took somebody from. Only on a
-  // page load: signing in is not coming back from anywhere.
-  if (restoring) restorePlace();
 
   document.documentElement.dataset.loaded = 'yes';
 }
@@ -16945,6 +17113,11 @@ async function refreshAll() {
   if (me.user?.mustChangePassword) {
     fillSettingsForm();
     switchView('settings');
+
+    // And on the tab the password is on, which is not the first: a screen of
+    // working hours the server will refuse to save, with the one form that
+    // gets past the block a tab away, is the wizard pointing at nothing.
+    openTheTabOf($('#form-password'));
 
     // Loaded, as far as this account is going to get: the server refuses the
     // rest until the password is replaced, so there is nothing else coming.
@@ -17144,6 +17317,10 @@ async function init() {
   // covered without anybody remembering to come back here.
   enhanceDateFields();
 
+  // Before anything is shown or loaded: the cards of the two long screens into
+  // their tabs, so every loader below fills a card where it will stay.
+  arrangeScreenTabs();
+
   // The same again for what the browser says when it refuses a field: bound to
   // the document, so a form drawn later is covered too.
   wireValidityMessages();
@@ -17174,9 +17351,9 @@ async function init() {
   try {
     await loadBranding();
   } catch {
-    // Falls back to the built-in title, which the header carries in its markup
-    // and the sign-in heading has to be told.
-    drawWelcome(BUILT_IN_TITLE);
+    // Falls back to the brand alone, which the header carries in its markup and
+    // the sign-in heading has to be told.
+    drawWelcome(BRAND);
   }
 
   // Applied before the first render so the sign-in screen already speaks the
@@ -17204,6 +17381,7 @@ async function init() {
     wireRestart();
     wireUpdate();
     wireUpdateCheck();
+    wireBackups();
     wireCropChooser();
 
     // The one control on the rights notice, and the whole of what there is to do
@@ -17249,7 +17427,7 @@ async function init() {
     restoreDrafts();
 
     hideLogin();
-    openTheStartingView({ restoring: true });
+    openTheStartingView();
 
     // After the first view is up, so the tour highlights something that is
     // actually on screen.
@@ -17304,7 +17482,7 @@ function afterAFailedFirstLoad(err) {
   if (me.user && err?.status !== 401) {
     restoreDrafts();
     hideLogin();
-    openTheStartingView({ restoring: true });
+    openTheStartingView();
     toastFailure(err, t('msg.loadFailed', 'Could not load everything'));
 
     return;

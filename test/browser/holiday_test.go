@@ -55,6 +55,7 @@ func TestTheInstallationsHolidaysStartOnGermany(t *testing.T) {
 	p.readyAdmin()
 
 	p.run("open Settings", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="general"]`),
 		chromedp.WaitVisible("#form-holidays", chromedp.ByID))
 
 	p.waitForNode(`#instance-holidays option[value="BY"]`)

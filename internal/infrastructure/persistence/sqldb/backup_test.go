@@ -1,0 +1,341 @@
+package sqldb_test
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/migration"
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+)
+
+// newestMigration is the schema the test databases are at.
+func newestMigration() int64 {
+	var newest int64
+	for version := range migration.All(sqldb.DialectSQLite) {
+		newest = max(newest, version)
+	}
+
+	return newest
+}
+
+// filled is a database with something of each kind a backup has to carry: an
+// id, text, a number, a moment, a boolean, bytes and a NULL - an account, a
+// ticket it owns with the article it was opened with and the minutes noted
+// there, a passkey and two settings.
+func filled(t *testing.T) (*sql.DB, *model.User) {
+	t.Helper()
+
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	role, err := sqldb.NewRoleRepository(db, sqldb.DialectSQLite).GetByName(ctx, model.RoleAgent)
+	if err != nil {
+		t.Fatalf("read seeded role: %v", err)
+	}
+
+	wera, err := sqldb.NewUserRepository(db, sqldb.DialectSQLite).Save(ctx, &model.User{
+		Name: "Wera", Email: "wera@example.com", RoleID: role.ID, MustChangePassword: true,
+	})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	var queue, state, priority, kind uint
+
+	for _, read := range []struct {
+		into  *uint
+		query string
+	}{
+		{&queue, "SELECT id FROM queues WHERE name = 'Service Desk'"},
+		{&state, "SELECT id FROM ticket_states WHERE name = 'open'"},
+		{&priority, "SELECT id FROM ticket_priorities WHERE name = 'normal'"},
+		{&kind, "SELECT id FROM ticket_types WHERE name = 'unclassified'"},
+	} {
+		if err := db.QueryRow(read.query).Scan(read.into); err != nil {
+			t.Fatalf("%s: %v", read.query, err)
+		}
+	}
+
+	at := time.Date(2026, 11, 19, 8, 30, 0, 0, time.UTC)
+
+	if _, err := sqldb.NewTicketRepository(db, sqldb.DialectSQLite).Create(ctx, &model.Ticket{
+		Title: "Printer jams", QueueID: queue, StateID: state, PriorityID: priority, TypeID: kind,
+		OwnerID: &wera.ID, Channel: model.ChannelPhone, CreatedAt: at, UpdatedAt: at,
+	}, &model.Article{
+		Sender: model.SenderAgent, Channel: model.ChannelPhone, Body: "It jams at page two.", CreatedAt: at,
+	}, 15, func(id uint) string { return fmt.Sprintf("20261119%08d", id) }); err != nil {
+		t.Fatalf("open a ticket: %v", err)
+	}
+
+	if _, err := sqldb.NewPasskeyRepository(db, sqldb.DialectSQLite).Save(ctx, &model.Passkey{
+		UserID: wera.ID, Name: "phone", CredentialID: []byte{0, 1, 2, 250}, PublicKey: []byte("key"),
+		CreatedAt: time.Date(2026, 11, 19, 8, 30, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("passkey: %v", err)
+	}
+
+	// A setting that comes back, and the one a restore leaves out: the zone a
+	// MySQL installation records for the process that wrote its moments, which
+	// only MySQL installations hold.
+	settings := sqldb.NewSettingsRepository(db, sqldb.DialectSQLite)
+
+	for key, value := range map[string]string{
+		model.SettingTimezone:    "Europe/Berlin",
+		model.SettingStorageZone: "the zone of the server the backup was made on",
+	} {
+		if err := settings.Set(ctx, key, value); err != nil {
+			t.Fatalf("set %s: %v", key, err)
+		}
+	}
+
+	return db, wera
+}
+
+func dumped(t *testing.T, db *sql.DB) *bytes.Buffer {
+	t.Helper()
+
+	var out bytes.Buffer
+
+	if _, err := sqldb.Dump(context.Background(), db, sqldb.BackupHeader{
+		Application: "test", Dialect: sqldb.DialectSQLite, Schema: newestMigration(), CreatedAt: time.Now(),
+	}, &out); err != nil {
+		t.Fatalf("dump: %v", err)
+	}
+
+	return &out
+}
+
+// A backup restored into a database the migrations have just made holds what
+// the original held: the accounts, the tickets and what was written in them, the
+// moments, the booleans, the bytes - and the ids, which everything else points
+// at.
+func TestABackupRestoresWhatWasBackedUp(t *testing.T) {
+	original, wera := filled(t)
+	backup := dumped(t, original)
+
+	restored := newTestDB(t)
+	ctx := context.Background()
+
+	summary, err := sqldb.Restore(ctx, restored, sqldb.DialectSQLite, newestMigration(), backup, nil)
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	if summary.Tables != len(sqldb.BackupTables) {
+		t.Errorf("restored %d tables, want all %d", summary.Tables, len(sqldb.BackupTables))
+	}
+
+	back, err := sqldb.NewUserRepository(restored, sqldb.DialectSQLite).GetByEmail(ctx, "wera@example.com")
+	if err != nil {
+		t.Fatalf("the account did not come back: %v", err)
+	}
+
+	if back.ID != wera.ID || !back.MustChangePassword || back.Name != "Wera" {
+		t.Errorf("the account came back as %+v, want id %d, Wera, must change her password", back, wera.ID)
+	}
+
+	tickets := sqldb.NewTicketRepository(restored, sqldb.DialectSQLite)
+
+	var id uint
+
+	if err := restored.QueryRow("SELECT id FROM tickets").Scan(&id); err != nil {
+		t.Fatalf("the ticket did not come back: %v", err)
+	}
+
+	ticket, err := tickets.GetByID(ctx, id)
+	if err != nil {
+		t.Fatalf("the ticket came back unreadable: %v", err)
+	}
+
+	if ticket.Title != "Printer jams" || ticket.OwnerID == nil || *ticket.OwnerID != wera.ID ||
+		ticket.Locked || ticket.PendingUntil != nil ||
+		!ticket.CreatedAt.Equal(time.Date(2026, 11, 19, 8, 30, 0, 0, time.UTC)) {
+		t.Errorf("the ticket came back as %+v", ticket)
+	}
+
+	articles, err := tickets.Articles(ctx, ticket.ID)
+	if err != nil || len(articles) != 1 || articles[0].Body != "It jams at page two." {
+		t.Errorf("the ticket's articles came back as %+v, %v", articles, err)
+	}
+
+	if minutes, err := tickets.AccountedMinutes(ctx, ticket.ID); err != nil || minutes != 15 {
+		t.Errorf("the ticket came back with %d minutes noted (%v), want 15", minutes, err)
+	}
+
+	keys, err := sqldb.NewPasskeyRepository(restored, sqldb.DialectSQLite).GetByUser(ctx, wera.ID)
+	if err != nil || len(keys) != 1 || !bytes.Equal(keys[0].CredentialID, []byte{0, 1, 2, 250}) ||
+		keys[0].LastUsedAt != nil {
+		t.Errorf("the passkey came back as %+v, %v", keys, err)
+	}
+
+	settings := sqldb.NewSettingsRepository(restored, sqldb.DialectSQLite)
+
+	if zone, _ := settings.Get(ctx, model.SettingTimezone); zone != "Europe/Berlin" {
+		t.Errorf("the timezone came back as %q", zone)
+	}
+
+	if zone, _ := settings.Get(ctx, model.SettingStorageZone); zone != "" {
+		t.Errorf("the backup's server's storage zone came back as %q; the restoring process writes "+
+			"every moment, so it is the one to record its own", zone)
+	}
+
+	// And the next account gets an id of its own rather than one the restore wrote.
+	role, _ := sqldb.NewRoleRepository(restored, sqldb.DialectSQLite).GetByName(ctx, model.RoleAgent)
+
+	next, err := sqldb.NewUserRepository(restored, sqldb.DialectSQLite).Save(ctx, &model.User{
+		Name: "Next", Email: "next@example.com", RoleID: role.ID,
+	})
+	if err != nil || next.ID <= wera.ID {
+		t.Errorf("the next account was given id %v (%v) after a restore that wrote %d", next, err, wera.ID)
+	}
+}
+
+// A restore goes only into a database that holds no account, from a schema no
+// newer than its own, and a backup cut short is refused whole: the database is
+// left as the migrations made it, seeded roles and all.
+func TestARestoreRefusesWhatItCannotFinish(t *testing.T) {
+	original, _ := filled(t)
+	backup := dumped(t, original).String()
+	ctx := context.Background()
+
+	if _, err := sqldb.Restore(ctx, original, sqldb.DialectSQLite, newestMigration(),
+		strings.NewReader(backup), nil); !errors.Is(err, sqldb.ErrNotEmpty) {
+		t.Errorf("into a database with accounts: %v, want ErrNotEmpty", err)
+	}
+
+	older := newTestDB(t)
+	if _, err := sqldb.Restore(ctx, older, sqldb.DialectSQLite, newestMigration()-1,
+		strings.NewReader(backup), nil); !errors.Is(err, sqldb.ErrNewerSchema) {
+		t.Errorf("into an older schema: %v, want ErrNewerSchema", err)
+	}
+
+	cut := newTestDB(t)
+
+	var seeded int
+
+	if err := cut.QueryRow("SELECT COUNT(*) FROM roles").Scan(&seeded); err != nil || seeded == 0 {
+		t.Fatalf("the migrations seeded %d roles (%v)", seeded, err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(backup), "\n")
+	short := strings.Join(lines[:len(lines)-1], "\n")
+
+	if _, err := sqldb.Restore(ctx, cut, sqldb.DialectSQLite, newestMigration(),
+		strings.NewReader(short), nil); !errors.Is(err, sqldb.ErrCutShort) {
+		t.Errorf("a backup without its last line: %v, want ErrCutShort", err)
+	}
+
+	var users, roles int
+
+	_ = cut.QueryRow("SELECT COUNT(*) FROM users").Scan(&users)
+	_ = cut.QueryRow("SELECT COUNT(*) FROM roles").Scan(&roles)
+
+	if users != 0 || roles != seeded {
+		t.Errorf("a refused restore left %d accounts and %d roles, want none and the %d seeded",
+			users, roles, seeded)
+	}
+}
+
+// What a restore's last step changes - its secrets sealed again or left behind -
+// lands with the restore or not at all: a last step that fails takes every row
+// the restore wrote back with it, rather than leaving an installation whose
+// secrets nothing can open.
+func TestARestoresLastStepIsPartOfItsTransaction(t *testing.T) {
+	original, _ := filled(t)
+	backup := dumped(t, original).String()
+	target := newTestDB(t)
+
+	failed := errors.New("the last step failed")
+
+	_, err := sqldb.Restore(context.Background(), target, sqldb.DialectSQLite, newestMigration(),
+		strings.NewReader(backup), func(context.Context, sqldb.DB) error { return failed })
+	if !errors.Is(err, failed) {
+		t.Fatalf("the restore answered %v, want the failure of its last step", err)
+	}
+
+	var users int
+
+	if err := target.QueryRow("SELECT COUNT(*) FROM users").Scan(&users); err != nil || users != 0 {
+		t.Errorf("a restore whose last step failed left %d accounts (%v), want none", users, err)
+	}
+}
+
+// A backup is read whole before anything is restored from it: what a restore
+// would refuse is refused by the read, which writes nothing, and the key check of
+// the installation it was made on is found, for the installer to ask its own key
+// about.
+func TestABackupIsReadWholeBeforeItIsRestored(t *testing.T) {
+	original, _ := filled(t)
+
+	if _, err := original.Exec("INSERT INTO settings (key_name, value, updated_at) VALUES (?, ?, ?)",
+		model.SettingSecretKeyCheck, "gts.v1:as-it-was-kept", time.Now()); err != nil {
+		t.Fatalf("keeping a key check: %v", err)
+	}
+
+	backup := dumped(t, original).String()
+
+	contents, err := sqldb.InspectBackup(strings.NewReader(backup), newestMigration())
+	if err != nil || contents.Tables != len(sqldb.BackupTables) || contents.Rows == 0 ||
+		contents.KeyCheck != "gts.v1:as-it-was-kept" {
+		t.Fatalf("the whole backup reads as %+v (%v), want every table, its rows and the key check", contents, err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(backup), "\n")
+	last := lines[len(lines)-1]
+	counted := strings.TrimSuffix(strings.TrimPrefix(last, `{"end":true,"rows":`), "}")
+
+	if counted == last {
+		t.Fatalf("the backup's last line is %q, not the count this case changes", last)
+	}
+
+	for _, refused := range []struct {
+		name   string
+		file   string
+		schema int64
+		want   error
+	}{
+		{"into an older schema", backup, newestMigration() - 1, sqldb.ErrNewerSchema},
+		{"cut short", strings.Join(lines[:len(lines)-1], "\n"), newestMigration(), sqldb.ErrCutShort},
+		{"counting a row more than it holds", strings.Join(lines[:len(lines)-1], "\n") +
+			"\n" + `{"end":true,"rows":` + counted + `0}`, newestMigration(), nil},
+		{"naming a table no backup carries", strings.Replace(backup, `"table":"roles"`,
+			`"table":"nothing_like_it"`, 1), newestMigration(), nil},
+	} {
+		_, err := sqldb.InspectBackup(strings.NewReader(refused.file), refused.schema)
+
+		switch {
+		case err == nil:
+			t.Errorf("a backup %s reads without a word", refused.name)
+		case refused.want != nil && !errors.Is(err, refused.want):
+			t.Errorf("a backup %s: %v, want %v", refused.name, err, refused.want)
+		}
+	}
+}
+
+// What a backup's header says goes into the log on one line. The release and
+// the dialect are read from the file, and a line break in either would start a
+// log line of its own, written by whoever made the file.
+func TestABackupIsDescribedOnOneLine(t *testing.T) {
+	header := sqldb.BackupHeader{
+		Application: "v1.0.0\nERROR the built-in administrator was deleted",
+		Dialect:     "postgres\r\nINFO all is well",
+		CreatedAt:   time.Date(2026, 11, 19, 21, 0, 0, 0, time.UTC),
+	}
+
+	said := header.Describe()
+
+	if strings.ContainsAny(said, "\r\n") {
+		t.Errorf("a backup is described over more than one line: %q", said)
+	}
+
+	if !strings.Contains(said, "v1.0.0") || !strings.Contains(said, "2026-11-19T21:00:00Z") {
+		t.Errorf("a backup is described as %q, without its release or its moment", said)
+	}
+}

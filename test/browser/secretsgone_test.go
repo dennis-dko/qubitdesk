@@ -22,20 +22,17 @@ import (
 // page must not be handed on. A QR code carries its secret in its picture rather
 // than as text, so every img.qr is asked for its address the same way - the
 // enrolment's and the one a new token is shown with for an app to scan.
+//
+// In two rounds, because the enrolment and the token are on different tabs of
+// My account, and changing tabs takes a secret off the screen as leaving the
+// screen does: a token, signed out; then an enrolment, signed out. Between them
+// every marked element has to have held something, or the case is not covering
+// what it means to.
 func TestNothingMarkedSecretSurvivesTheSignOut(t *testing.T) {
 	t.Parallel()
 
 	p := open(t)
 	p.readyWorker()
-
-	p.run("start an enrolment and make a token",
-		p.click(`.tab[data-view="settings"]`),
-		chromedp.WaitVisible("#totp-card", chromedp.ByID),
-		p.click("#totp-begin"),
-		chromedp.WaitVisible("#totp-setup", chromedp.ByID),
-		chromedp.SendKeys(`#form-token input[name="name"]`, "Reader", chromedp.ByQuery),
-		p.click(`#form-token button[type="submit"]`),
-		chromedp.WaitVisible("#token-secret", chromedp.ByID))
 
 	filled := func(when string) map[string]string {
 		t.Helper()
@@ -58,34 +55,60 @@ func TestNothingMarkedSecretSurvivesTheSignOut(t *testing.T) {
 		return read
 	}
 
-	before := filled("while signed in")
+	held := map[string]bool{}
 
-	if len(before) == 0 {
+	// signOutAndLook notes what was held, signs out and reports whatever is still held.
+	signOutAndLook := func(round string) map[string]string {
+		t.Helper()
+
+		before := filled("while signed in " + round)
+
+		for id, value := range before {
+			if value != "" {
+				held[id] = true
+			}
+		}
+
+		p.run("sign out "+round, p.click("#logout"),
+			chromedp.WaitVisible("#form-login", chromedp.ByID))
+
+		for id, value := range filled("after signing out " + round) {
+			if value != "" {
+				t.Errorf("#%s is marked as a secret and still holds %q after the session "+
+					"ended %s", id, value, round)
+			}
+		}
+
+		return before
+	}
+
+	p.run("make a token",
+		p.click(`.tab[data-view="settings"]`),
+		p.click(`#settings-tabs [data-card-tab="apps"]`),
+		chromedp.SendKeys(`#form-token input[name="name"]`, "Reader", chromedp.ByQuery),
+		p.click(`#form-token button[type="submit"]`),
+		chromedp.WaitVisible("#token-secret", chromedp.ByID))
+
+	marked := signOutAndLook("with a token")
+
+	if len(marked) == 0 {
 		t.Fatal("nothing on the page is marked as a secret, so this case checks nothing")
 	}
 
-	held := 0
+	p.signIn(workerEmail, workerPassword)
+	p.waitGone("#login-screen")
 
-	for _, value := range before {
-		if value != "" {
-			held++
-		}
-	}
+	p.run("start an enrolment",
+		p.click(`.tab[data-view="settings"]`),
+		p.click(`#settings-tabs [data-card-tab="signin"]`),
+		chromedp.WaitVisible("#totp-card", chromedp.ByID),
+		p.click("#totp-begin"),
+		chromedp.WaitVisible("#totp-setup", chromedp.ByID))
 
-	if held < 5 {
-		t.Fatalf("only %d of %d marked elements are holding anything, so this case "+
-			"is not covering what it means to: %v", held, len(before), before)
-	}
+	signOutAndLook("in the middle of an enrolment")
 
-	p.run("sign out", p.click("#logout"),
-		chromedp.WaitVisible("#form-login", chromedp.ByID))
-
-	for id, value := range filled("after signing out") {
-		if value == "" {
-			continue
-		}
-
-		t.Errorf("#%s is marked as a secret and still holds %q after the session "+
-			"ended", id, value)
+	if len(held) < len(marked) || len(held) < 5 {
+		t.Fatalf("only %d of %d marked elements held anything in either round, so this case "+
+			"is not covering what it means to: %v", len(held), len(marked), held)
 	}
 }

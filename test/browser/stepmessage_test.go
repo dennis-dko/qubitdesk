@@ -18,6 +18,7 @@ func TestAStepIsTheServersAndSaidInTheScreensWords(t *testing.T) {
 	p := open(t)
 	p.readyAdmin()
 	p.showView("admin")
+	p.showTabOf("#form-operational")
 	p.waitShown("#form-operational")
 
 	p.run("ask for a sign-out after two and a half minutes",

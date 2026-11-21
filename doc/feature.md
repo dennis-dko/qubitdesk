@@ -16,10 +16,13 @@ installation already has.
 | Schema | GoFr migrations, applied automatically at start-up |
 | API | REST under `/api/v1`, documented at `/api-docs` |
 | Web interface | Embedded via `go:embed`, vanilla JS with no build step |
+| Screens in tabs | *My account* is sorted into working time, sign-in, apps and calendar, and privacy and help; *Settings* into general, sign-in, operation and logs. A tab with nothing on it for an account is not offered, a screen comes back on the tab it was left on, and whatever points at a card - a banner's link, the guided tour - opens its tab |
 | Access control | RBAC with roles administered at run time; bcrypt password hashes |
 | Sign-in | Session cookies, optional passkeys and TOTP two-factor per user, a browser's Kerberos ticket where a keytab and a directory are configured, and an OpenID Connect provider - Keycloak, Authentik, Entra ID, Google - for the accounts their owners linked to it |
 | Live log | The process log, filterable and searchable, for whoever administers |
-| Administration log | Who created, changed or deleted an account, a role, a ticket state, priority or type, saved a setting, switched maintenance mode or restarted the application, kept across restarts and readable under *Settings* by whoever administers |
+| Administration log | Who created, changed or deleted an account, a role, a ticket state, priority or type, saved a setting, switched maintenance mode, made or downloaded a backup or restarted the application, kept across restarts and readable under *Settings* by whoever administers |
+| Backups | The whole installation in one file sealed with `BACKUP_PASSPHRASE`, made under *Settings* now and downloaded, or on a schedule and kept on the server, the oldest going past the number set; restored through the installer into an empty database of any of the three dialects |
+| A way back in | `go-ticket-system-web recover` on the server gives the built-in administrator a one-time password and takes its second factor off; an administrator removes a lost second factor from anybody else's account |
 | Tickets | Under *Tickets*, the tickets of the queues the reader's role reaches, what is still to do first, narrowed by queue, to the reader's own and by words in the title or number. A ticket is opened with a title, its queue and what was said, and starts new, normal and unclassified unless told otherwise, owed what its queue's service level promises - the moments it is owed shown with it, and marked overdue in the list once one has passed unkept; opened from the list by its number it shows what was written in it, takes a note or a call with the minutes worked and the files that come with it - at most 20 MB each, saved again under the names they came with - is corrected in the form that opened it, locked - which makes whoever locks a ticket nobody owns its owner, which a move to another queue releases unless the installation says otherwise, and which frees itself once it has run as long as the queue allows, counted from the lock or from the last answer the customer saw in the installation's working hours where it names a calendar of its own - set to wait for a moment, after which a ticket in a state that moves on by itself goes to the state that state names - closed for the one that ships - and loses its lock where that closes it, watched, and tells what happened to it by the names things had then. A ticket of a queue the role only reads is shown and not offered for change, and one of a queue the role does not reach is not there at all |
 | Customers | Under *Customers*, the organisations tickets come from - each with its number where it has one, its address and its website, shown as a link - and the people at them, found by name or address and narrowed to one organisation: seen by whoever holds *See customers* and changed by whoever holds *Create and change customers*, whichever queue a ticket for them landed in. A ticket is for a contact, found by typing in the form that opens it, and for the contact's organisation unless corrected, and it names both. An organisation contacts or tickets belong to is retired rather than deleted; deleting a contact tickets are for asks a second time, saying how many, and keeps the tickets, for nobody. Whoever changes customers gives a contact access to the customer portal from the contact's row: an account under the contact's name and address, which reaches the portal and nothing else, with a password for one sign-in - a new one is given the same way and ends the sessions the account had open. The account follows the contact's name and address and goes with the contact, or when the access is taken away; whether the contact sees their organisation's tickets in the portal as well as their own is a switch on the contact, off unless somebody turns it on. An account a contact signs in with is given no role that administers the installation, whichever way it would get there |
 | Ticket setup | The queues tickets are sorted to - a tree, each with the roles that reach it to read its tickets or to work in it, and nobody else, and saying whether customers open tickets in it from the portal, as the shipped Service Desk does - and the states, priorities and types tickets are sorted by, a waiting state with the state it moves a ticket on to, the service levels a ticket is owed - minutes until the first answer, between answers - counted from the last answer the customer saw, or from the first of what they wrote since, and owed by nobody while a ticket waits or is finished - and until the solution, counted in the level's calendar, in the installation's where it names none, or around the clock - the calendars their minutes are counted in - the hours of each weekday with their breaks, less the public holidays of a place and free days of its own, once or every year - and the state types a queue's unlock time frees a lock in, new and open always among them, and the answer templates - KIX18's text modules, each offered in its queue or in every queue and filled for the ticket an article is started from it in - administered under *Ticket setup* by whoever holds *Set up queues*. Shipped with KIX18's values - seven states, one of each type, five priorities and three types - named in the reader's language; an installation adds its own, and retires a value tickets carry rather than deleting it. What the application moves tickets into by itself - the states new, open, closed and merged, the priority normal, the type unclassified - stays as it shipped |
@@ -34,7 +37,7 @@ installation already has.
 | Public holidays | The public holidays of seventeen countries - Austria, Belgium, Czechia, Denmark, Finland, France, Germany, Ireland, Italy, Luxembourg, the Netherlands, Norway, Poland, Portugal, Sweden, the United Kingdom and the United States - worked out in the binary rather than fetched from anywhere. A country is chosen first, Germany standing ready, and a second picker follows where its holidays differ: a German state or a British nation always, and Alsace, Moselle, South Tyrol, the Azores or Madeira where they keep a day or two more than the rest of their country. The installation chooses under *Settings*. A holiday a country moves off a weekend is kept on the weekday it moves to, and said to be. Nothing reads them yet: they are kept for the service hours a service level is measured in |
 | Everything about me | Everything the installation keeps about your account, as a ZIP with a JSON file per part - exactly what erasing it would delete or release, without the hashes, seeds and keys - from *My account*, for anybody signed in |
 | Transport | Optional HTTPS with automatic Let's Encrypt certificates |
-| Installable | A manifest and icons per installation - its own name and logo - so the page installs as an app on a telephone or a desktop, with a shortcut to *My account*. Browsers offer this over HTTPS or on localhost only. *My account* shows the installation's address beside the offer, as text and as a QR code, to open it on a telephone by scanning it rather than typing it |
+| Installable | A manifest and icons per installation - its own name, and Go-Ticket-System's mark - so the page installs as an app on a telephone or a desktop, with a shortcut to *My account*. Browsers offer this over HTTPS or on localhost only. *My account* shows the installation's address beside the offer, as text and as a QR code, to open it on a telephone by scanning it rather than typing it |
 | Offline | The installed application opens without a network from the shell it kept, and says the installation cannot be reached rather than showing a dead page. Nothing the installation answers is ever shown from a copy. Over HTTPS or on localhost only, like installing |
 | Operations | Health and liveness endpoints, Prometheus metrics, tracing (all from GoFr), administered under *Settings* |
 
@@ -134,82 +137,72 @@ and the values in it. The reasons are a fixed set, so each one travels as a code
 whatever its sentence names — the row number, the offending word — rather than as a
 sentence assembled on the server in English.
 
-## The logo, and what a tab does with it
+## The logo, and where it is drawn
 
-A logo is a **PNG or a JPEG**, up to 256 KB. Not an SVG: the same file that
-renders perfectly in the header and on the sign-in screen can be refused as a tab
-icon, silently, by an engine with its own rules about what it will rasterise —
-nothing in the response says so, and the tab is simply empty.
+**The logo stands at the left of the bar once somebody has signed in, and
+nowhere else.** The browser tab, the sign-in screen and the installed app's icons
+show Go-Ticket-System's own mark whatever is uploaded — decided on 2026-11-18, because
+those places say which program this is, before anybody has signed in to the
+installation that runs it.
 
-**It is converted when it is saved**, into the size each place draws it:
+A logo is a **PNG or a JPEG**, up to 256 KB. Not an SVG: the bar draws a copy cut
+to the part chosen for it, and the cut is made on the server, from pixels — a
+drawing would be stored and never cut.
 
-| | Kept at | Drawn at |
-| --- | --- | --- |
-| Header | 440×80 | 220×40 |
-| Sign-in card | 656×192 | 328×96 |
-| Browser tab | 64×64, square | 16, 32 or more |
+**It is converted when it is saved**, into the size the bar draws it: kept at
+656×192 for the 328×96 the bar gives it, twice the drawn size because a screen at
+twice the density draws twice as many pixels for the same box. Derived once and
+stored, so a page load reads it rather than making it, and a restart has nothing
+to redo. It also shrinks what every visitor downloads: the branding answer carries
+the copy rather than the original. A 440×80 copy is made beside it as well,
+because the API has always sent one as `logoHeader`.
 
-Twice the drawn size, because a screen at twice the density draws twice as many
-pixels for the same box. Derived once and stored, so a page load reads them
-rather than making them, and a restart has nothing to redo.
-
-That matters most for the tab. What an installation uploads is a wordmark made
-for a header — a few thousand pixels across, often twice as wide as it is tall —
-and handed to a browser at that size, every decision is the browser's: whether to
-accept it at all, how to fit two-to-one into a square, whether to bother. The
-answers differ by engine, and one that decides against shows nothing and says
-nothing. The tab's version is padded out to a square for the same reason; the
-other two are not, because a header places the mark itself.
-
-It also shrinks what every visitor downloads. The sign-in screen used to receive
-the whole original inside the branding response, before anybody had signed in.
-
-**Which part of the logo each place uses is yours to choose.** Press a preview on
+**Which part of the logo the bar uses is yours to choose.** Press the preview on
 the appearance screen and drag: any part, in any shape, from any corner. The
-selection opens on the shape of the place it is for, because that is the one
-selection nothing has to be done to, but nothing holds it there — and a part that
-is not that shape is fitted into the place rather than stretched to fill it. A
-wide header can take the whole wordmark; a browser tab has sixteen pixels, and the part worth
-keeping there is usually the mark at one end rather than whatever falls in the
-middle. Nothing has to be chosen — a logo starts as all of itself in all three
-places, which is what most installations will leave it as.
+selection opens on the shape of the bar's room, because that is the one selection
+nothing has to be done to, but nothing holds it there — and a part that is not
+that shape is fitted into the room rather than stretched to fill it. A wordmark
+with a symbol at one end can read better as the symbol alone. Nothing has to be
+chosen: a logo starts as all of itself, which is what most installations will
+leave it as.
 
-The choice is remembered per place and per logo. Uploading a different logo
-forgets it, because a selection made against one picture means nothing against
-another.
+The choice is remembered per logo. Uploading a different logo forgets it, because
+a selection made against one picture means nothing against another.
 
-Fitted, not cropped: nothing of the logo is cut. That does mean a wide wordmark
-becomes a thin strip at the sixteen pixels a tab draws, which is a fact about
-wordmarks rather than about this. The appearance screen shows the logo at exactly
-that size beside the header and sign-in previews, so it is seen before saving. A
-square mark is what reads best there — many companies keep one for exactly this.
+**Until a logo is configured, the bar shows a chip with Go-Ticket-System's G.** That slot
+belongs to whoever runs the installation, and filling it with our mark would make
+an unbranded installation look branded by somebody else, so the chip only stands
+in for a logo. The application's own mark — Go-Ticket-System's T and P, a pulse running
+through them and a clock in the P — has its own places: the browser tab, the
+sign-in card, the installer, the installed app's icons, the `.exe`, the Android
+app, and the button beside the title that leads to the welcome screen. It is
+drawn (`internal/interface/web/asset/favicon.svg`) rather than a font character.
+`go run ./build/icon > build/icon.ico` and
+`go run ./build/icon -favicon > internal/interface/web/asset/favicon.ico` redraw
+the two icon files from the same geometry whenever it changes, and tests fail
+until they have.
 
-**Until a logo is configured, the header and the sign-in card carry nothing.**
-Those two slots belong to whoever runs the installation, and filling them with
-our mark makes an unbranded installation look branded by somebody else. The
-application's own mark — an hourglass — has its own places: the browser tab, the
-`.exe`, and the button beside the title that leads to the welcome screen. It is
-drawn (`internal/interface/web/asset/favicon.svg`) rather than a font character,
-and `go run ./build/icon > build/icon.ico` redraws the Windows copy from the same
-geometry whenever it changes.
+**Every installation is called Go-Ticket-System, and the title is added to that
+name.** It follows after a bar, as in *Go-Ticket-System | htp.net*. The full name
+appears in the header, on the sign-in card, in an authenticator app and on a
+passkey prompt. With nothing written, the name is *Go-Ticket-System* alone.
+`APP_NAME` names none of these; it is the name the framework records traces
+under.
 
-**The tab can be named separately from the header**, under *Browser tab* beside
-the title. The two are one name until the header's is too long to be a tab: a
+**The tab can add something shorter of its own**, under *Browser tab* beside the
+title. The two additions are one until the header's is too long for a tab: a
 browser cuts a tab off after a couple of dozen characters, and somebody has six
-of them open — "Ticketsystem der Beispiel GmbH & Co. KG" reads as
-"Ticketsystem der B…" in every one. Left empty, the tab keeps the title, which
-is what every installation configured before this existed goes on doing. It
-translates like the other texts.
+of them open — "Go-Ticket-System | Beispiel GmbH & Co. KG" reads as
+"Go-Ticket-System | Beispie…" in every one. Left empty, the tab adds what the
+header adds. It translates like the other texts.
 
-**A language you have written nothing for follows the base**, the same way an
-unconfigured logo falls back to the shipped mark. The form fills each language
+**A language you have written nothing for follows the base.** The form fills each language
 with the base text so you can see what a reader of it currently gets; leaving
 that untouched means exactly what it looks like — nothing written here. Rename
 the installation later and every untranslated language follows along.
 
-Saving a mark reloads the page, because no engine takes a new tab icon from a
-link swapped in afterwards — and the reload comes back to where you were on the
-screen rather than to the top of it.
+Saving redraws the bar where it stands, without reloading the page, so you stay
+where you were on the screen.
 
 ## Business rules
 

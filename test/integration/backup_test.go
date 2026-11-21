@@ -1,0 +1,582 @@
+//go:build integration
+
+package integration
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"math"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/go-ticket-system/internal/support/backup"
+	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	"github.com/dennis-dko/go-ticket-system/test/harness"
+)
+
+const backupPassphrase = "the installation's own passphrase"
+
+// backupCard is what GET /settings/backups answers.
+type backupCard struct {
+	Enabled  bool   `json:"enabled"`
+	Folder   string `json:"folder"`
+	Schedule string `json:"schedule"`
+	Keep     int    `json:"keep"`
+	Backups  []struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+	} `json:"backups"`
+}
+
+func readBackupCard(t *testing.T, admin *client) backupCard {
+	t.Helper()
+
+	var card backupCard
+
+	admin.must(admin.api(http.MethodGet, "/settings/backups", nil), http.StatusOK).Data(t, &card)
+
+	return card
+}
+
+// newestAdminChange is the action of the newest entry in the administration log.
+func newestAdminChange(t *testing.T, c *client) string {
+	t.Helper()
+
+	var page struct {
+		Entries []struct {
+			Action string `json:"action"`
+		} `json:"entries"`
+	}
+
+	c.must(c.api(http.MethodGet, "/admin/changes", nil), http.StatusOK).Data(t, &page)
+
+	if len(page.Entries) == 0 {
+		t.Fatal("the administration log is empty")
+	}
+
+	return page.Entries[0].Action
+}
+
+// madeBackup makes a backup through the API and downloads it.
+func madeBackup(t *testing.T, admin *client) (string, []byte) {
+	t.Helper()
+
+	var made struct {
+		Name string `json:"name"`
+	}
+
+	admin.must(admin.api(http.MethodPost, "/settings/backups", nil), http.StatusOK, http.StatusCreated).Data(t, &made)
+
+	if !backup.ValidName(made.Name) {
+		t.Fatalf("a backup was made under the name %q", made.Name)
+	}
+
+	return made.Name, admin.must(admin.api(http.MethodGet, "/settings/backups/"+made.Name, nil), http.StatusOK).Body
+}
+
+// An administrator makes a backup, finds it listed, downloads a file that opens
+// with the server's passphrase to a backup of this database, and deletes it -
+// and the administration log holds every step, the download included, because
+// a download is the whole installation leaving the server. An account that may
+// not administer the installation sees none of it.
+func TestAnAdministratorMakesDownloadsAndDeletesABackup(t *testing.T) {
+	t.Parallel()
+
+	a := start(t, "BACKUP_PASSPHRASE="+backupPassphrase)
+	admin := a.signInAsAdmin("a-much-better-password")
+	worker := a.signInAsAgent(admin, "Wera", "wera@example.com")
+
+	if card := readBackupCard(t, admin); !card.Enabled || len(card.Backups) != 0 || card.Keep < 1 {
+		t.Fatalf("a new installation's card reads %+v, want backups possible and none kept", card)
+	}
+
+	if r := worker.api(http.MethodGet, "/settings/backups", nil); r.Status != http.StatusForbidden {
+		t.Errorf("an account that does not administer the installation read its backups: %d", r.Status)
+	}
+
+	name, file := madeBackup(t, admin)
+
+	if card := readBackupCard(t, admin); len(card.Backups) != 1 || card.Backups[0].Name != name ||
+		card.Backups[0].Size != int64(len(file)) {
+		t.Errorf("after one backup the card lists %+v, want %s of %d bytes", card.Backups, name, len(file))
+	}
+
+	var header sqldb.BackupHeader
+
+	if err := backup.Open(file, backupPassphrase, func(content io.Reader) error {
+		contents, err := sqldb.InspectBackup(content, math.MaxInt64)
+		header = contents.Header
+
+		return err
+	}); err != nil || header.Dialect == "" || header.CreatedAt.IsZero() {
+		t.Errorf("the downloaded file opens to %+v (%v), want a backup naming its database and its moment",
+			header, err)
+	}
+
+	if action := newestAdminChange(t, admin); action != "installation.backupDownloaded" {
+		t.Errorf("the newest change in the administration log is %q, want the download", action)
+	}
+
+	admin.must(admin.api(http.MethodDelete, "/settings/backups/"+name, nil), http.StatusOK, http.StatusNoContent)
+
+	if card := readBackupCard(t, admin); len(card.Backups) != 0 {
+		t.Errorf("a deleted backup is still listed: %+v", card.Backups)
+	}
+
+	if r := admin.api(http.MethodGet, "/settings/backups/"+name, nil); r.Status != http.StatusNotFound {
+		t.Errorf("a deleted backup still downloads: %d", r.Status)
+	}
+
+	if action := newestAdminChange(t, admin); action != "installation.backupDeleted" {
+		t.Errorf("the newest change in the administration log is %q, want the deletion", action)
+	}
+}
+
+// Without BACKUP_PASSPHRASE the card says so and no backup is made: an
+// unencrypted backup is not the fallback, it is what was ruled out.
+func TestNoBackupIsMadeWithoutAPassphrase(t *testing.T) {
+	t.Parallel()
+
+	a := start(t)
+	admin := a.signInAsAdmin("a-much-better-password")
+
+	if card := readBackupCard(t, admin); card.Enabled {
+		t.Error("an installation without BACKUP_PASSPHRASE says it can make backups")
+	}
+
+	refused := admin.api(http.MethodPost, "/settings/backups", nil)
+	if got := refusalOf(t, refused); refused.Status != http.StatusConflict || got.Code != "backupNeedsPassphrase" {
+		t.Errorf("making a backup without a passphrase answered %d %q, want 409 backupNeedsPassphrase",
+			refused.Status, got.Code)
+	}
+}
+
+// A plan the scheduler could not read is refused as a field rather than stored,
+// and one it can is kept and read back.
+func TestABackupPlanIsKeptOnlyIfItCanRun(t *testing.T) {
+	t.Parallel()
+
+	a := start(t, "BACKUP_PASSPHRASE="+backupPassphrase)
+	admin := a.signInAsAdmin("a-much-better-password")
+
+	never := admin.api(http.MethodPut, "/settings/backups/plan", map[string]any{"schedule": "0 25 * * *", "keep": 7})
+	if never.Status != http.StatusBadRequest {
+		t.Errorf("a schedule with a twenty-fifth hour was answered %d, want 400", never.Status)
+	}
+
+	admin.must(admin.api(http.MethodPut, "/settings/backups/plan", map[string]any{"schedule": "0 3 * * *", "keep": 7}),
+		http.StatusOK)
+
+	if card := readBackupCard(t, admin); card.Schedule != "0 3 * * *" || card.Keep != 7 {
+		t.Errorf("the plan reads back as %q keeping %d, want 0 3 * * * keeping 7", card.Schedule, card.Keep)
+	}
+}
+
+// uploadBackup sends a backup to the installer the way its page does: the file
+// as the body, the passphrase as base64 of its UTF-8 in a header.
+func uploadBackup(t *testing.T, c *installerClient, file []byte, passphrase string) (int, map[string]any) {
+	t.Helper()
+
+	return uploadBackupWith(t, c, file, passphrase, nil)
+}
+
+// uploadBackupWith is uploadBackup with more headers, as the page sends what it
+// asked for about the backup's secrets.
+func uploadBackupWith(
+	t *testing.T,
+	c *installerClient,
+	file []byte,
+	passphrase string,
+	headers map[string]string,
+) (int, map[string]any) {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodPost, c.app.BaseURL()+"/install/backup", bytes.NewReader(file))
+	if err != nil {
+		t.Fatalf("cannot build the upload: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("X-Setup-Token", c.token)
+	req.Header.Set("X-Backup-Passphrase", base64.StdEncoding.EncodeToString([]byte(passphrase)))
+
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
+
+	res, err := (&http.Client{Timeout: time.Minute}).Do(req)
+	if err != nil {
+		t.Fatalf("upload the backup: %v", err)
+	}
+
+	defer func() { _ = res.Body.Close() }()
+
+	var body map[string]any
+
+	_ = json.NewDecoder(res.Body).Decode(&body)
+
+	return res.StatusCode, body
+}
+
+// A backup comes back through the installer of a new installation: everybody
+// signs in with the password they had, and finds what they had booked - into a
+// database of the dialect the suite runs on, so the CI runs on PostgreSQL and
+// MySQL restore into their own as well as from them.
+//
+// The installer opens the file before a database is chosen for it, so a wrong
+// passphrase is said on its page, and it refuses a restore into a database that
+// already holds accounts.
+func TestABackupIsRestoredThroughTheInstallerOfANewInstallation(t *testing.T) {
+	t.Parallel()
+
+	source := start(t, "BACKUP_PASSPHRASE="+backupPassphrase)
+	admin := source.signInAsAdmin("a-much-better-password")
+	worker := source.signInAsAgent(admin, "Wera", "wera@example.com")
+
+	openTicket(t, worker, theDesk(t, worker), "Before the restore", map[string]any{"minutes": 15})
+
+	admin.must(admin.api(http.MethodPut, "/settings/backups/plan", map[string]any{"schedule": "", "keep": 3}),
+		http.StatusOK)
+
+	_, file := madeBackup(t, admin)
+
+	c := openInstaller(t)
+
+	if status, body := uploadBackup(t, c, file, "not the passphrase at all"); status != http.StatusBadRequest ||
+		body["code"] != "backupWrongPassphrase" {
+		t.Errorf("a wrong passphrase was answered %d %v, want 400 backupWrongPassphrase", status, body)
+	}
+
+	if status, body := uploadBackup(t, c, file, backupPassphrase); status != http.StatusOK {
+		t.Fatalf("the backup was not taken: %d %v", status, body)
+	}
+
+	answer := map[string]any{"restore": true}
+	for key, value := range harness.FreshDatasource(t) {
+		answer[key] = value
+	}
+
+	if status, body := c.post("/install/save", c.token, answer); status != http.StatusOK {
+		t.Fatalf("saving the connection with the restore asked for: %d %v", status, body)
+	}
+
+	waitForTheApplication(t, c)
+
+	restored := &app{App: c.app, t: t}
+
+	back := restored.newClient()
+	back.signIn("wera@example.com", "another-password-1")
+
+	var tickets ticketList
+
+	back.must(back.api(http.MethodGet, "/tickets", nil), http.StatusOK).Data(t, &tickets)
+
+	if tickets.TotalCount != 1 || tickets.Items[0].Title != "Before the restore" ||
+		tickets.Items[0].AccountedMinutes != 15 {
+		t.Fatalf("after the restore Wera finds %+v, want her ticket with its 15 minutes\n%s", tickets, c.app.Log())
+	}
+
+	again := restored.newClient()
+	again.signIn(adminEmail, "a-much-better-password")
+
+	if card := readBackupCard(t, again); card.Keep != 3 {
+		t.Errorf("the restored installation keeps %d backups, want the 3 its plan said", card.Keep)
+	}
+}
+
+// sealedBackup writes lines as a backup sealed with the suite's passphrase: a
+// file the application did not make whole, the way one cut off on its way
+// arrives at the installer.
+func sealedBackup(t *testing.T, lines ...any) []byte {
+	t.Helper()
+
+	file, err := backup.Seal(backupPassphrase, func(w io.Writer) error {
+		encoder := json.NewEncoder(w)
+
+		for _, line := range lines {
+			if err := encoder.Encode(line); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("sealing a backup: %v", err)
+	}
+
+	return file
+}
+
+// The installer reads a backup whole before it takes it, so what the restore
+// would refuse is refused on the installer's own screen: a backup cut short, as
+// a download that stopped is, and one from a newer version of Go-Ticket-System than
+// this one. Both used to be taken - only their first line was read - and then
+// refused by the restore, which runs after the installer has handed over, where
+// a refusal can only end the process.
+func TestTheInstallerRefusesWhatTheRestoreWouldRefuse(t *testing.T) {
+	t.Parallel()
+
+	header := func(schema int64) sqldb.BackupHeader {
+		return sqldb.BackupHeader{Format: "gts-backup", Version: 1, Application: "Go-Ticket-System",
+			Dialect: "sqlite", Schema: schema, CreatedAt: time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)}
+	}
+
+	roles := map[string]any{"table": "roles", "columns": []string{"id", "name"}, "kinds": []string{"int", "text"}}
+
+	c := openInstaller(t)
+
+	for _, refused := range []struct {
+		name string
+		file []byte
+		code string
+	}{
+		{"cut short", sealedBackup(t, header(20260730120000), roles, []any{1, "admin"}), "backupCutShort"},
+		{"from a newer version", sealedBackup(t, header(99991231235959), map[string]any{"end": true, "rows": 0}),
+			"backupFromNewerVersion"},
+	} {
+		if status, body := uploadBackup(t, c, refused.file, backupPassphrase); status != http.StatusBadRequest ||
+			body["code"] != refused.code {
+			t.Errorf("a backup %s was answered %d %v, want 400 %s", refused.name, status, body, refused.code)
+		}
+	}
+}
+
+// A backup made where SECRET_KEY was set carries its secrets sealed with that
+// key, so it is refused by an installer whose key cannot open them - on the
+// installer's own screen, saying which key is missing - and taken by one with
+// the same key, which then restores it. It used to be taken whatever the key,
+// and the start then refused the restored installation for its key, ending the
+// process in a window that closed with it.
+func TestTheInstallerAsksForTheKeyABackupWasSealedWith(t *testing.T) {
+	t.Parallel()
+
+	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("k"), 32))
+	other := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("o"), 32))
+
+	source := start(t, "BACKUP_PASSPHRASE="+backupPassphrase, "SECRET_KEY="+key)
+	admin := source.signInAsAdmin("a-much-better-password")
+
+	_, file := madeBackup(t, admin)
+
+	for _, refused := range []struct {
+		name string
+		env  []string
+		code string
+	}{
+		{"without a key", nil, "backupNeedsSecretKey"},
+		{"with another key", []string{"SECRET_KEY=" + other}, "backupOtherSecretKey"},
+	} {
+		c := openInstaller(t, refused.env...)
+
+		if status, body := uploadBackup(t, c, file, backupPassphrase); status != http.StatusBadRequest ||
+			body["code"] != refused.code {
+			t.Errorf("an installer %s answered %d %v, want 400 %s", refused.name, status, body, refused.code)
+		}
+	}
+
+	c := openInstaller(t, "SECRET_KEY="+key)
+
+	if status, body := uploadBackup(t, c, file, backupPassphrase); status != http.StatusOK {
+		t.Fatalf("an installer with the same key answered %d %v", status, body)
+	}
+
+	answer := map[string]any{"restore": true}
+	for name, value := range harness.FreshDatasource(t) {
+		answer[name] = value
+	}
+
+	if status, body := c.post("/install/save", c.token, answer); status != http.StatusOK {
+		t.Fatalf("saving the connection with the restore asked for: %d %v", status, body)
+	}
+
+	waitForTheApplication(t, c)
+
+	(&app{App: c.app, t: t}).newClient().signIn(adminEmail, "a-much-better-password")
+}
+
+// A backup made where another SECRET_KEY was set is restored with that key given
+// once, the way its passphrase is: the installer refuses a key that does not open
+// the backup's secrets and takes the one that does, and the restore seals them
+// again under this installation's own key - so the second factor of the account
+// it carries works here, under a key the backup never knew. Where that key is
+// lost, the backup comes back without its secrets, and the account signs in with
+// its password alone.
+func TestABackupMadeUnderAnotherKeyIsRestoredWithItOrWithoutItsSecrets(t *testing.T) {
+	t.Parallel()
+
+	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("k"), 32))
+	other := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("o"), 32))
+	header := func(value string) string { return base64.StdEncoding.EncodeToString([]byte(value)) }
+
+	source := start(t, "BACKUP_PASSPHRASE="+backupPassphrase, "SECRET_KEY="+key)
+	admin := source.signInAsAdmin("a-much-better-password")
+
+	setup := beginEnrolment(t, admin)
+
+	code, err := security.CurrentTOTPCode(setup.Secret)
+	if err != nil {
+		t.Fatalf("generate a code: %v", err)
+	}
+
+	admin.must(admin.api(http.MethodPut, "/me/totp", map[string]any{"code": code}), http.StatusOK, http.StatusNoContent)
+
+	_, file := madeBackup(t, admin)
+
+	restore := func(t *testing.T, c *installerClient) *app {
+		t.Helper()
+
+		answer := map[string]any{"restore": true}
+		for name, value := range harness.FreshDatasource(t) {
+			answer[name] = value
+		}
+
+		if status, body := c.post("/install/save", c.token, answer); status != http.StatusOK {
+			t.Fatalf("saving the connection with the restore asked for: %d %v", status, body)
+		}
+
+		waitForTheApplication(t, c)
+
+		return &app{App: c.app, t: t}
+	}
+
+	t.Run("with the key it was sealed with", func(t *testing.T) {
+		t.Parallel()
+
+		c := openInstaller(t, "SECRET_KEY="+other)
+
+		if status, body := uploadBackupWith(t, c, file, backupPassphrase,
+			map[string]string{"X-Backup-Secret-Key": header(other)}); status != http.StatusBadRequest ||
+			body["code"] != "backupSecretKeyWrong" {
+			t.Errorf("a key that does not open the backup was answered %d %v, want 400 backupSecretKeyWrong",
+				status, body)
+		}
+
+		if status, body := uploadBackupWith(t, c, file, backupPassphrase,
+			map[string]string{"X-Backup-Secret-Key": header(key)}); status != http.StatusOK {
+			t.Fatalf("the key the backup was sealed with was answered %d %v", status, body)
+		}
+
+		restored := restore(t, c)
+
+		// The next step's code: the current one was spent turning the factor on.
+		next, err := security.TOTPCodeAt(setup.Secret, time.Now().Add(30*time.Second))
+		if err != nil {
+			t.Fatalf("generate a code: %v", err)
+		}
+
+		back := restored.newClient()
+		back.must(back.api(http.MethodPost, "/auth/login", map[string]string{
+			"email": adminEmail, "password": "a-much-better-password", "totp": next,
+		}), http.StatusOK, http.StatusCreated)
+	})
+
+	t.Run("without its secrets", func(t *testing.T) {
+		t.Parallel()
+
+		c := openInstaller(t)
+
+		if status, body := uploadBackupWith(t, c, file, backupPassphrase,
+			map[string]string{"X-Backup-Without-Secrets": "true"}); status != http.StatusOK {
+			t.Fatalf("the backup without its secrets was answered %d %v", status, body)
+		}
+
+		restored := restore(t, c)
+
+		if opened, asked := passwordSignIn(t, restored, adminEmail, "a-much-better-password"); opened == nil || asked {
+			t.Errorf("after a restore without its secrets the account signs in: %v, asked for a second factor: %v",
+				opened != nil, asked)
+		}
+	})
+}
+
+// A backup moves between kinds of database, both ways: one made on the suite's
+// database comes back into SQLite, and one made on SQLite comes back into the
+// suite's database. The installer offers every kind for a restore and the file
+// says nothing about the kind it was made on - trying a server's backup on one's
+// own computer is the first thing somebody does with it.
+//
+// On the SQLite run both directions stay on SQLite, so the PostgreSQL and MySQL
+// runs are the ones that cross.
+func TestABackupMovesBetweenSQLiteAndTheSuitesDatabase(t *testing.T) {
+	t.Parallel()
+
+	sqlite := map[string]string{"dialect": "sqlite", "name": "chosen"}
+
+	for _, direction := range []struct {
+		name   string
+		source []string
+		madeOn string
+		target map[string]string
+	}{
+		{"from the suite's database into SQLite", nil, "", sqlite},
+		{"from SQLite into the suite's database", []string{"DB_DIALECT=sqlite", "DB_NAME=source"}, "sqlite", nil},
+	} {
+		t.Run(direction.name, func(t *testing.T) {
+			t.Parallel()
+
+			source := start(t, append([]string{"BACKUP_PASSPHRASE=" + backupPassphrase}, direction.source...)...)
+			admin := source.signInAsAdmin("a-much-better-password")
+			worker := source.signInAsAgent(admin, "Wera", "wera@example.com")
+
+			openTicket(t, worker, theDesk(t, worker), "Before the restore", map[string]any{"minutes": 15})
+
+			_, file := madeBackup(t, admin)
+
+			c := openInstaller(t)
+
+			status, body := uploadBackup(t, c, file, backupPassphrase)
+			if status != http.StatusOK {
+				t.Fatalf("the backup was not taken: %d %v", status, body)
+			}
+
+			// What the file says it was made on, so the case is seen to cross rather
+			// than assumed to: the source's environment is what decides it.
+			madeOn := direction.madeOn
+			if madeOn == "" {
+				madeOn = source.Dialect()
+			}
+
+			if body["dialect"] != madeOn {
+				t.Fatalf("the backup says it was made on %v, want %s", body["dialect"], madeOn)
+			}
+
+			target := direction.target
+			if target == nil {
+				target = harness.FreshDatasource(t)
+			}
+
+			answer := map[string]any{"restore": true}
+			for key, value := range target {
+				answer[key] = value
+			}
+
+			if status, body := c.post("/install/save", c.token, answer); status != http.StatusOK {
+				t.Fatalf("saving the connection with the restore asked for: %d %v", status, body)
+			}
+
+			waitForTheApplication(t, c)
+
+			back := (&app{App: c.app, t: t}).newClient()
+			back.signIn("wera@example.com", "another-password-1")
+
+			var tickets ticketList
+
+			back.must(back.api(http.MethodGet, "/tickets", nil), http.StatusOK).Data(t, &tickets)
+
+			if tickets.TotalCount != 1 || tickets.Items[0].Title != "Before the restore" ||
+				tickets.Items[0].AccountedMinutes != 15 {
+				t.Fatalf("after the restore Wera finds %+v, want her ticket with its 15 minutes\n%s",
+					tickets, c.app.Log())
+			}
+
+			// And she opens another: the ids a restore wrote are taken, so a database
+			// that counts its own - PostgreSQL's sequences - has to count on from them.
+			openTicket(t, back, theDesk(t, back), "After the restore", nil)
+		})
+	}
+}
