@@ -13,11 +13,11 @@ import (
 	"github.com/dennis-dko/go-ticket-system/test/harness"
 )
 
-// The installer asks what a new database starts with as one choice - empty, the
-// demo data or a backup - and lets anybody go from any answer to any other. It
-// was two tick boxes, and ticking the backup switched the demo off: going from
-// the backup to the demo meant unticking it first, and nothing on the screen
-// said that the two excluded each other.
+// The installer asks what a new database starts with as one choice - empty or a
+// backup - and lets anybody go from either answer to the other. In the time
+// recording this was cloned from it was tick boxes beside its demo data, and
+// ticking the backup switched the demo off: going back meant unticking it
+// first, and nothing on the screen said that the two excluded each other.
 func TestTheInstallerOffersWhatADatabaseStartsWithAsOneChoice(t *testing.T) {
 	t.Parallel()
 
@@ -36,7 +36,7 @@ func TestTheInstallerOffersWhatADatabaseStartsWithAsOneChoice(t *testing.T) {
 		var c choice
 
 		if err := chromedp.Run(ctx, chromedp.Evaluate(`(() => {
-			const boxes = [...document.querySelectorAll('#empty, #demo, #restore')];
+			const boxes = [...document.querySelectorAll('#empty, #restore')];
 
 			return {
 				chosen: boxes.filter((box) => box.checked).map((box) => box.id),
@@ -51,8 +51,8 @@ func TestTheInstallerOffersWhatADatabaseStartsWithAsOneChoice(t *testing.T) {
 	}
 
 	if c := read(); !slices.Equal(c.Chosen, []string{"empty"}) ||
-		!slices.Equal(c.Kinds, []string{"radio:start", "radio:start", "radio:start"}) || c.Fields {
-		t.Errorf("a new installer offers %+v, want empty, the demo and a backup as one choice, empty chosen", c)
+		!slices.Equal(c.Kinds, []string{"radio:start", "radio:start"}) || c.Fields {
+		t.Errorf("a new installer offers %+v, want empty and a backup as one choice, empty chosen", c)
 	}
 
 	for _, step := range []struct {
@@ -60,7 +60,7 @@ func TestTheInstallerOffersWhatADatabaseStartsWithAsOneChoice(t *testing.T) {
 		fields bool
 	}{
 		{"restore", true},
-		{"demo", false},
+		{"empty", false},
 		{"restore", true},
 		{"empty", false},
 	} {

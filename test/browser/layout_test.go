@@ -561,6 +561,7 @@ func TestOnAShortWindowTheBarScrollsAwayWithThePage(t *testing.T) {
 	p.readyWorker()
 
 	p.run("open a long screen", p.click(`.tab[data-view="settings"]`),
+		p.click(`#settings-tabs [data-card-tab="signin"]`),
 		chromedp.WaitVisible("#form-password", chromedp.ByID))
 
 	for _, window := range []struct {

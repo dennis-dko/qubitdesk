@@ -175,11 +175,8 @@ func TestTheBuiltInAdministratorIsNotOfferedPasskeys(t *testing.T) {
 
 	p.readyAdmin()
 
-	// Waits for the password form rather than the working times, which this
-	// account no longer has: a daily target and a ceiling are figures nothing
-	// would measure against for somebody who records no time, so that card is
-	// gated on settings:write:own and the built-in administrator does not hold
-	// it. Waiting for it here was waiting for something that never arrives.
+	// Waits for the password form, which every account has, on the tab the
+	// passkeys are on.
 	p.run("open My account", chromedp.Click(`.tab[data-view="settings"]`, chromedp.ByQuery),
 		p.click(`#settings-tabs [data-card-tab="signin"]`),
 		chromedp.WaitVisible("#form-password", chromedp.ByID))
@@ -191,19 +188,6 @@ func TestTheBuiltInAdministratorIsNotOfferedPasskeys(t *testing.T) {
 	// And told so, where the card is, rather than left to wonder where it went.
 	if said := p.text("#passkey-elsewhere"); !p.visible("#passkey-elsewhere") || !strings.Contains(said, "built-in administrator") {
 		t.Errorf("the built-in administrator is not told why it has no passkeys: %q", said)
-	}
-
-	// And the reason this test now waits on something else, asserted rather than
-	// left as a comment - otherwise the next person to see the working times
-	// missing from this screen has no way to tell intent from regression.
-	// Working times are on another tab, so that tab, with the timezone beside them
-	// shown, before asking: on the sign-in tab they would be out of sight whatever
-	// the administrator's rights said.
-	p.run("open the working time", p.click(`#settings-tabs [data-card-tab="work"]`),
-		chromedp.WaitVisible("#form-my-timezone", chromedp.ByID))
-
-	if p.visible("#form-working-times") {
-		t.Error("the built-in administrator is offered working times, which it has no use for")
 	}
 }
 

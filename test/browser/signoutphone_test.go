@@ -30,6 +30,7 @@ func TestSigningOutOnAPhoneLeavesNothingOfTheApplicationOnScreen(t *testing.T) {
 	p.readyWorker()
 
 	p.run("open My account", p.click(`.tab[data-view="settings"]`))
+	p.showTabOf("#form-password")
 	p.waitShown("#form-password")
 
 	p.run("a telephone", chromedp.EmulateViewport(390, 760))

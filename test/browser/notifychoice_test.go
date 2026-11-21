@@ -34,6 +34,7 @@ func TestAnAgentChoosesWhatTheyAreToldUnderMyAccount(t *testing.T) {
 	p.becomeWorker()
 
 	p.run("open my account", p.click(`.tab[data-view="settings"]`),
+		p.click(`#settings-tabs [data-card-tab="general"]`),
 		chromedp.WaitVisible("#form-notify-choices", chromedp.ByID))
 	p.waitForText("#notify-optional", "Opened, if you like")
 

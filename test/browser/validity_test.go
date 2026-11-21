@@ -28,6 +28,7 @@ func TestABrowserRefusalSpeaksTheScreensLanguage(t *testing.T) {
 	p.chooseLanguage("de")
 
 	p.showView("settings")
+	p.showTabOf("#form-token")
 	p.waitShown("#form-token")
 
 	const (

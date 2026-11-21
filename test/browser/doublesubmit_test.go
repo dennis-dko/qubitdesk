@@ -28,6 +28,7 @@ func TestATokenPressedTwiceIsMadeOnce(t *testing.T) {
 	p.readyWorker()
 
 	p.showView("settings")
+	p.showTabOf("#form-token")
 	p.waitShown("#form-token")
 
 	p.run("fill in a token",

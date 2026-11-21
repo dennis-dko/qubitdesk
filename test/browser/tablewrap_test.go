@@ -135,6 +135,7 @@ func TestATableWithOrdinaryDataFitsItsCard(t *testing.T) {
 	for _, width := range []int64{1600, 1280, 1024} {
 		p.run(fmt.Sprintf("%dpx", width), chromedp.EmulateViewport(width, 900))
 		p.run("open My account", p.click(`.tab[data-view="settings"]`))
+		p.showTabOf("#table-tokens")
 		p.waitShown("#table-tokens tbody td.actions")
 
 		check(fmt.Sprintf("the tokens at %dpx", width), "#table-tokens")

@@ -405,6 +405,7 @@ func (p *page) makeTokens(labels []string) {
 	p.t.Helper()
 
 	p.showView("settings")
+	p.showTabOf("#form-token")
 	p.waitShown("#form-token")
 
 	for _, label := range labels {

@@ -154,6 +154,7 @@ func (p *page) becomeCustomer() {
 
 	p.run("replace the initial password",
 		chromedp.Click(`.tab[data-view="settings"]`, chromedp.ByQuery),
+		p.click(`#settings-tabs [data-card-tab="signin"]`),
 		chromedp.WaitVisible("#form-password", chromedp.ByID),
 		chromedp.SendKeys(`#form-password input[name="currentPassword"]`, "initial-password-1", chromedp.ByQuery),
 		chromedp.SendKeys(`#form-password input[name="newPassword"]`, "carls-own-password", chromedp.ByQuery),
