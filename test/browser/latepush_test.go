@@ -105,7 +105,9 @@ func (p *page) serviceWorkerRegistration() serviceworker.RegistrationID {
 	// whole of its time and said nothing about why. Where there is no
 	// registration at all, the page's own attempt failed in silence - it means
 	// to, an installation reached over plain HTTP simply goes without - so the
-	// case registers again and says how that went, which is the browser's reason.
+	// case registers again and says how that went, which is the browser's reason,
+	// and does what the worker's install does from the page, which says why that
+	// fails.
 	var ready string
 
 	p.awaitJSON(`Promise.race([
@@ -118,7 +120,17 @@ func (p *page) serviceWorkerRegistration() serviceworker.RegistrationID {
 						+ (made.active ? made.active.state : made.installing ? 'one still installing'
 							: made.waiting ? 'one waiting' : 'nothing that lived')),
 					(error) => 'registering again was refused: ' + error);
-				return 'no registration for ' + location.href + '; ' + again;
+
+				// What the worker's install does - keep the shell - done from the page,
+				// which may: the statuses of what it fetches, and why keeping them fails.
+				const shell = ['/', '/app.js', '/app.css', '/theme.js', '/favicon.svg'];
+				const statuses = await Promise.all(shell.map((path) => fetch(path).then(
+					(res) => path + ' ' + res.status, (error) => path + ' ' + error)));
+				const kept = await caches.open('probe').then((cache) => cache.addAll(shell)).then(
+					() => 'kept', (error) => 'not kept: ' + error);
+
+				return 'no registration for ' + location.href + '; ' + again + '; ' + statuses.join(', ') + '; '
+					+ kept;
 			}
 			const state = (worker) => (worker ? worker.state : '-');
 			return 'not ready after 30s: installing ' + state(registration.installing) + ', waiting '
