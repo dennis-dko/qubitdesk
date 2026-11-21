@@ -13,19 +13,20 @@ import (
 	"golang.org/x/image/vector"
 )
 
-// The mark, in the 560-unit box favicon.svg is drawn in: an hourglass in white
-// on a blue tile, its lower half dimmer.
+// The mark, in the 560-unit box favicon.svg is drawn in: QubitDesk's Q and D in
+// white on a blue tile, the right of the Q's ring the stem of the D, and a
+// ticket in the Q's counter.
 //
 // Drawn rather than kept as pictures, because a picture in the tree is a copy of
 // favicon.svg nobody can regenerate - and a copy that silently keeps an old mark
 // is what happened to the tab icon once already. The numbers are the SVG's, and
 // TestTheMarkIsFaviconSVGsGeometry fails the moment the two part. There is no
-// renderer here that reads SVG documents, and one added to draw a few figures
+// renderer here that reads SVG documents, and one added to draw two figures
 // would be a dependency doing far more than this needs; the figures are written
 // in lines and elliptical arcs, which trace below follows.
 const (
 	markBox        = 560.0
-	markTileRadius = 163.69
+	markTileRadius = 29.0
 )
 
 // groundStop is one colour the tile passes through, at a fraction of the way
@@ -35,25 +36,29 @@ type groundStop struct {
 	ink color.NRGBA
 }
 
-// markGround is the tile's colour from its top edge to its bottom one: the
-// accent, the same all the way down.
+// markGround is the tile's colour from its top edge to its bottom one.
 var markGround = []groundStop{
-	{0, color.NRGBA{R: 0x2f, G: 0x6f, B: 0xeb, A: 0xff}},
-	{1, color.NRGBA{R: 0x2f, G: 0x6f, B: 0xeb, A: 0xff}},
+	{0, color.NRGBA{R: 0x0a, G: 0x69, B: 0xa7, A: 0xff}},
+	{0.5, color.NRGBA{R: 0x09, G: 0x57, B: 0x95, A: 0xff}},
+	{1, color.NRGBA{R: 0x03, G: 0x44, B: 0x7a, A: 0xff}},
 }
 
-// markFigure is one of the white shapes as the SVG has it: its path, and how
-// much of the white it is painted with.
-type markFigure struct {
-	path    string
-	opacity float64
-}
-
-// markFigures are the white shapes: the hourglass's upper half, and its lower
-// half, dimmer, which is the sand that has already fallen.
-var markFigures = []markFigure{
-	{"M142.15 120.62H417.85L280 280Z", 1},
-	{"M142.15 439.38H417.85L280 280Z", 0.55},
+// markFigures are the white shapes, each a path of its own as the SVG has them:
+// the Q and the D, their counters cut out by running the other way round, and
+// the ticket with its notches and its three perforations.
+var markFigures = []string{
+	"M73.36 268A140 140 0 0 1 302.82 160.31V128H346.64A140 140 0 0 1 486.64 268A140 140 0 0 1 346.64 408H333.06" +
+		"L297.64 443.42L255.67 401.45A140 140 0 0 1 73.36 268ZM111.36 268A102 102 0 0 0 213.36 370" +
+		"A102 102 0 0 0 315.36 268A102 102 0 0 0 213.36 166A102 102 0 0 0 111.36 268ZM346.64 166H309.26" +
+		"A140 140 0 0 1 309.26 370H346.64A102 102 0 0 0 448.64 268A102 102 0 0 0 346.64 166Z",
+	"M155.38 249.62L194.98 210.02A8 8 0 0 1 206.29 210.02L230.33 234.06A12 12 0 0 0 230.33 251.03" +
+		"A12 12 0 0 0 247.3 251.03L271.34 275.07A8 8 0 0 1 271.34 286.38L231.74 325.98A8 8 0 0 1 220.43 325.98" +
+		"L196.39 301.94A12 12 0 0 0 196.39 284.97A12 12 0 0 0 179.42 284.97L155.38 260.93A8 8 0 0 1 155.38 249.62" +
+		"ZM200.1 275.6A4 4 0 0 0 200.1 281.26A4 4 0 0 0 205.76 281.26L206.47 280.55A4 4 0 0 0 206.47 274.89" +
+		"A4 4 0 0 0 200.81 274.89ZM210.18 265.53A4 4 0 0 0 210.18 271.18A4 4 0 0 0 215.83 271.18" +
+		"L216.54 270.47A4 4 0 0 0 216.54 264.82A4 4 0 0 0 210.89 264.82ZM220.25 255.45" +
+		"A4 4 0 0 0 220.25 261.11A4 4 0 0 0 225.91 261.11L226.62 260.4A4 4 0 0 0 226.62 254.74" +
+		"A4 4 0 0 0 220.96 254.74Z",
 }
 
 var (
@@ -80,24 +85,18 @@ func Mark(size int) (image.Image, error) {
 	// cancel where they meet.
 	figures := image.NewAlpha(image.Rect(0, 0, size, size))
 
-	for _, figure := range markFigures {
+	for _, data := range markFigures {
 		var traced error
 
-		drawn := coverage(size, func(r *vector.Rasterizer) error {
-			traced = trace(r, figure.path, scale)
+		layer(figures, coverage(size, func(r *vector.Rasterizer) error {
+			traced = trace(r, data, scale)
 
 			return traced
-		})
+		}))
 
 		if traced != nil {
 			return nil, fmt.Errorf("tracing the mark: %w", traced)
 		}
-
-		for i, a := range drawn.Pix {
-			drawn.Pix[i] = uint8(float64(a)*figure.opacity + 0.5)
-		}
-
-		layer(figures, drawn)
 	}
 
 	out := image.NewNRGBA(image.Rect(0, 0, size, size))

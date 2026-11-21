@@ -8,11 +8,14 @@ import (
 	"github.com/dennis-dko/qubitdesk/internal/support/imaging"
 )
 
-// The mark is drawn at the size asked for, and is the mark: an hourglass in
-// white on a tile of the accent, one colour from top to bottom, its lower half
-// dimmer than its upper one, and nothing outside the tile's rounded corners.
+// The mark is drawn at the size asked for, and is the mark: QubitDesk's Q and D
+// in white on a tile that runs from a lighter blue at the top to a darker one at
+// the bottom, a ticket in the Q's counter, and nothing outside the tile's
+// rounded corners.
 //
-// Each point is named in the 560-unit box favicon.svg is drawn in.
+// Each point is named in the 560-unit box favicon.svg is drawn in. The ones in
+// the two counters are the ones that say the arcs are traced the right way
+// round: an arc swept the wrong way fills a counter, or cuts a ring.
 func TestTheShippedMarkIsDrawnAtTheSizeAsked(t *testing.T) {
 	for _, size := range []int{16, 192, 512} {
 		encoded, err := imaging.MarkPNG(size)
@@ -29,8 +32,8 @@ func TestTheShippedMarkIsDrawnAtTheSizeAsked(t *testing.T) {
 			t.Fatalf("the mark asked for at %d is %dx%d", size, b.Dx(), b.Dy())
 		}
 
-		// At sixteen pixels a half of the hourglass is a few pixels and its
-		// edges are all anti-aliasing, so only the size is asked of it.
+		// At sixteen pixels a corner of 29 units is under one pixel and the ticket
+		// runs into the ring, so only the size is asked of it.
 		if size < 64 {
 			continue
 		}
@@ -41,30 +44,39 @@ func TestTheShippedMarkIsDrawnAtTheSizeAsked(t *testing.T) {
 			return [4]uint32{r >> 8, g >> 8, b >> 8, a >> 8}
 		}
 
-		if corner := at(20, 20); corner[3] != 0 {
+		if corner := at(0, 0); corner[3] != 0 {
 			t.Errorf("the corner of the %d mark is not transparent: %v", size, corner)
 		}
 
-		accent := [4]uint32{0x2f, 0x6f, 0xeb, 0xff}
-
-		tile := func(where string, p [4]uint32) {
-			if p != accent {
-				t.Errorf("%s of the %d mark reads as rgba%v, want the accent rgba%v", where, size, p, accent)
+		blue := func(where string, p [4]uint32) {
+			if p[3] != 0xff || p[2] < 0x70 || p[2] <= p[1] || p[1] <= p[0] {
+				t.Errorf("%s of the %d mark reads as rgba%v, want the tile's blue", where, size, p)
 			}
 		}
 
-		tile("the tile above the hourglass", at(280, 40))
-		tile("the tile beside its waist", at(60, 280))
-		tile("the tile below the hourglass", at(280, 520))
-
-		if upper := at(280, 170); upper[3] != 0xff || upper[0] < 0xf0 || upper[1] < 0xf0 || upper[2] < 0xf0 {
-			t.Errorf("the upper half of the %d mark reads as rgba%v, want white", size, upper)
+		white := func(where string, p [4]uint32) {
+			if p[3] != 0xff || p[0] < 0xf0 || p[1] < 0xf0 || p[2] < 0xf0 {
+				t.Errorf("%s of the %d mark reads as rgba%v, want white", where, size, p)
+			}
 		}
 
-		// White at 0.55 over the accent: lighter than the tile by far, and short
-		// of white by as far.
-		if lower := at(280, 390); lower[3] != 0xff || lower[0] < 0x80 || lower[0] > 0xc0 {
-			t.Errorf("the lower half of the %d mark reads as rgba%v, want white dimmed over the accent", size, lower)
+		top, middle, bottom := at(280, 30), at(40, 280), at(450, 530)
+
+		blue("the tile above the Q and the D", top)
+		blue("the tile left of the Q", middle)
+		blue("the tile below the D", bottom)
+
+		if top[0]+top[1]+top[2] <= bottom[0]+bottom[1]+bottom[2]+40 {
+			t.Errorf("the %d mark's tile is %v at the top and %v at the bottom, want it darker going down",
+				size, top, bottom)
 		}
+
+		white("the ring of the Q", at(92, 268))
+		white("the bow of the D", at(467, 268))
+		white("the tail of the Q", at(297, 425))
+		white("the ticket", at(234.6, 289.2))
+
+		blue("the Q's counter above the ticket", at(213.36, 180))
+		blue("the D's counter", at(400, 268))
 	}
 }

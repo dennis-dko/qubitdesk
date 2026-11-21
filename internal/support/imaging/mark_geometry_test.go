@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -16,9 +15,12 @@ import (
 // The tab shows the SVG itself, while the installed app's icons and the Windows
 // icon are drawn from the figures in mark.go: two copies of one drawing. Two
 // copies nothing compares are how one of them goes on showing an old picture -
-// the tab icon once did - so every figure, how much of the white each is
-// painted with, the tile and its colours are read out of the SVG and held to
-// Mark's.
+// the tab icon once did - so every figure, the tile and its colours are read out
+// of the SVG and held to Mark's. Mark fills every figure in the one white and
+// draws nothing on the tile but paths, so a figure carrying anything besides its
+// path - an opacity, a fill, a transform - and a shape that is not a path are
+// refused here, rather than drawn one way in the tab and another on a home
+// screen.
 func TestTheMarkIsFaviconSVGsGeometry(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "interface", "web", "asset", "favicon.svg"))
 	if err != nil {
@@ -27,21 +29,23 @@ func TestTheMarkIsFaviconSVGsGeometry(t *testing.T) {
 
 	svg := string(raw)
 
-	var figures []markFigure
+	var figures []string
 
-	for _, found := range regexp.MustCompile(`<path d="([^"]+)"( opacity="([^"]+)")?`).FindAllStringSubmatch(svg, -1) {
-		opacity := 1.0
+	for _, found := range regexp.MustCompile(`<path d="([^"]+)"/>`).FindAllStringSubmatch(svg, -1) {
+		figures = append(figures, found[1])
+	}
 
-		if found[3] != "" {
-			read, err := strconv.ParseFloat(found[3], 64)
-			if err != nil {
-				t.Fatalf("a figure's opacity in favicon.svg: %v", err)
-			}
+	if drawn := strings.Count(svg, "<path"); drawn != len(figures) {
+		t.Errorf("favicon.svg has %d figures and %d of them carry nothing but their path, which is all Mark draws",
+			drawn, len(figures))
+	}
 
-			opacity = read
-		}
+	if shape := regexp.MustCompile(`<(circle|ellipse|polygon|polyline|line)\b`).FindString(svg); shape != "" {
+		t.Errorf("favicon.svg draws a %s, which Mark does not", shape[1:])
+	}
 
-		figures = append(figures, markFigure{path: found[1], opacity: opacity})
+	if rects := strings.Count(svg, "<rect"); rects != 1 {
+		t.Errorf("favicon.svg has %d rectangles, where Mark draws the tile and nothing else as one", rects)
 	}
 
 	if !slices.Equal(figures, markFigures) {

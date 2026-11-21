@@ -9,12 +9,13 @@ import (
 // The app's icons are favicon.svg's drawing.
 //
 // The launcher's tile and figures, the status bar's shape and the mark on the
-// app's own screens are vector drawables, and the hourglass was once written
-// into each by hand, in coordinates worked out from the SVG's - and once more as
-// drawing code in Look.kt. Each drawable carries the SVG's own path data,
-// opacities and colours now, placed by a group, so each is held to the file
-// here: a figure the SVG gains, loses, moves or dims that a drawable does not is
-// reported rather than found on somebody's home screen.
+// app's own screens are vector drawables, and the hourglass they showed before
+// was written into each by hand, in coordinates worked out from the SVG's - and
+// once more as drawing code in Look.kt. Each drawable carries the SVG's own path
+// data and colours now, placed by a group, so each is held to the file here: a
+// figure the SVG gains, loses or moves that a drawable does not is reported
+// rather than found on somebody's home screen, and so is a drawable painting a
+// figure at a fillAlpha the SVG gives it no opacity for.
 func TestTheAppsIconsAreTheMark(t *testing.T) {
 	svg := read(t, "../web/asset/favicon.svg")
 

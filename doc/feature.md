@@ -174,9 +174,9 @@ a selection made against one picture means nothing against another.
 **Until a logo is configured, the bar shows a chip with QubitDesk's Q.** That slot
 belongs to whoever runs the installation, and filling it with our mark would make
 an unbranded installation look branded by somebody else, so the chip only stands
-in for a logo. The application's own mark — an hourglass on a blue tile, its
-lower half dimmer, which the ticket system took with it from the time recording
-and which stands in until it has a mark of its own — has its own places: the
+in for a logo. The application's own mark — QubitDesk's Q and D in white on a
+blue tile, the right of the Q's ring the stem of the D, the Q's tail coming to a
+point beneath them and a ticket in its counter — has its own places: the
 browser tab, the sign-in card, the installer, the installed app's icons, the
 `.exe`, the Android app, and the button beside the title that leads to the
 welcome screen. It is drawn (`internal/interface/web/asset/favicon.svg`) rather

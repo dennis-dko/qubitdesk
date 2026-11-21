@@ -18,7 +18,7 @@ What is below was raised and is not recorded as decided anywhere.
 
 ## Decisions waiting on the maintainer
 
-Five: four raised on 2026-11-17 by the automation, the notifications and the mail to come, and one on 2026-11-21 by taking over the time recording's latest.
+Four, raised on 2026-11-17 by the automation, the notifications and the mail to come.
 
 | | Question |
 | --- | --- |
@@ -26,7 +26,6 @@ Five: four raised on 2026-11-17 by the automation, the notifications and the mai
 | K5 | The automation screen offers what a step can name and what a job's criteria can take from the lists the ticket rights read: the queues, states, priorities and types through *Read tickets* or *Set up queues*, the accounts through *Read accounts*, the contacts and organisations through *Read customers*. A role given *Set up the automation* without them is offered nothing to choose, though the server takes a step naming any record that is there. Keep it - each right reads what it reads, and the administrator holds them all - or let *Set up the automation* read those lists as well? |
 | K6 | The notifications are set up with *Set up queues*, whose description already covers how tickets are sorted and answered, the answer templates and the mailboxes to come. KIX18 files them under Communication, a group of its own beside the ticket setup that its mail accounts and templates belong to as well. Keep them with the queues, or give the communication a right - and later a screen - of its own? |
 | K7 | The mail (P10) fetches from mailboxes and sends through a mail server. Sending needs nothing beyond the standard library (`net/smtp`, `net/mail`, `mime/multipart`); fetching needs IMAP or POP3, which the standard library does not speak. Write the client for the part KIX18 uses - log in, list what is unseen, fetch it, mark it seen - or take a library such as github.com/emersion/go-imap v2, a dependency this repository would carry from then on? Until it is decided the knowledge base (P12) and the customer portal (P11) go first. |
-| K8 | The time recording this was cloned from - TimePulse since 2026-11-17 - now calls every installation by its product's name with the Settings title after a bar, and draws its own mark on the sign-in screen, in the tab and on the app whatever logo is uploaded. Both mechanisms came over on 2026-11-21 with QubitDesk as the name (`model.Brand`, `BRAND` in `app.js`). Its mark - a T and a P - is TimePulse's and was not taken: the hourglass the clone has carried since 2026-11-12 stands in. Keep the name after a bar, or let a title replace it as before? And which mark is QubitDesk's - a drawing of its own in the same style (a blue tile, white figures), the hourglass, or something else? |
 
 ## Measurements reading cannot make
 
