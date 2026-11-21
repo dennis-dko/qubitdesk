@@ -12,11 +12,14 @@ const (
 
 	// LinkConfigItem is a configuration item.
 	LinkConfigItem LinkObject = "configitem"
+
+	// LinkChange is a change.
+	LinkChange LinkObject = "change"
 )
 
 // LinkObjects are the kinds a link may join.
 func LinkObjects() []LinkObject {
-	return []LinkObject{LinkTicket, LinkConfigItem}
+	return []LinkObject{LinkTicket, LinkConfigItem, LinkChange}
 }
 
 // LinkType is how two records are joined, by KIX18's names. A Normal link reads

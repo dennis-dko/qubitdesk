@@ -49,6 +49,7 @@ type Handlers struct {
 	ClassDefinitions *rest.ClassDefinitionHandler
 	ConfigItems      *rest.ConfigItemHandler
 	Links            *rest.LinkHandler
+	Changes          *rest.ChangeHandler
 }
 
 // RegisterRoutes registers all v1 routes.
@@ -372,6 +373,13 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.GET(base+"/links", h.Links.List)
 	app.POST(base+"/links", h.Links.Create)
 	app.DELETE(base+"/links/{id}", h.Links.Delete)
+
+	// The changes, read with changes:read and written with changes:write.
+	app.GET(base+"/changes", h.Changes.List)
+	app.GET(base+"/changes/{id}", h.Changes.Get)
+	app.POST(base+"/changes", h.Changes.Create)
+	app.PUT(base+"/changes/{id}", h.Changes.Update)
+	app.DELETE(base+"/changes/{id}", h.Changes.Delete)
 
 	app.GET(base+"/response-templates", h.Templates.List)
 	app.GET(base+"/response-templates/{id}", h.Templates.Get)

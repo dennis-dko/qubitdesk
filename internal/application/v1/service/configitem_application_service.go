@@ -307,24 +307,7 @@ func (s *ConfigItemApplicationService) version(
 // entry is the value of the general catalog's class an id names, or nil where
 // it names no value of that class. An error is one of reading, never of the id.
 func (s *ConfigItemApplicationService) entry(ctx context.Context, id uint, class string) (*model.CatalogItem, error) {
-	if id == 0 {
-		return nil, nil
-	}
-
-	entry, err := s.catalog.GetByID(ctx, id)
-	if apperror.KindOf(err) == apperror.KindNotFound {
-		return nil, nil
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	if entry.Class != class {
-		return nil, nil
-	}
-
-	return entry, nil
+	return catalogEntry(ctx, s.catalog, id, class)
 }
 
 // stillOffered refuses a value of the general catalog that has been retired,

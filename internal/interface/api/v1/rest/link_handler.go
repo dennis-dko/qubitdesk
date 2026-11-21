@@ -69,6 +69,12 @@ func rightFor(object string, change bool) (string, error) {
 		}
 
 		return model.PermAssetRead, nil
+	case model.LinkChange:
+		if change {
+			return model.PermChangeWrite, nil
+		}
+
+		return model.PermChangeRead, nil
 	}
 
 	return "", apperror.InvalidFields("object")

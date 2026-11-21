@@ -26,6 +26,7 @@ type LinkApplicationService struct {
 	links   repository.LinkRepository
 	tickets *TicketApplicationService
 	items   *ConfigItemApplicationService
+	changes *ChangeApplicationService
 	now     func() time.Time
 }
 
@@ -37,6 +38,14 @@ func NewLinkApplicationService(
 	items *ConfigItemApplicationService,
 ) *LinkApplicationService {
 	return &LinkApplicationService{links: links, tickets: tickets, items: items, now: time.Now}
+}
+
+// WithChanges lets links reach changes. Optional: without it a change is no
+// record a link can name.
+func (s *LinkApplicationService) WithChanges(changes *ChangeApplicationService) *LinkApplicationService {
+	s.changes = changes
+
+	return s
 }
 
 // LinkCommand is a link as somebody makes it: from the record they change, to
@@ -245,6 +254,22 @@ func (s *LinkApplicationService) label(
 		}
 
 		return item.Number + " " + item.Name, nil
+	case model.LinkChange:
+		right := model.PermChangeRead
+		if change {
+			right = model.PermChangeWrite
+		}
+
+		if s.changes == nil || !caller.Can(right) {
+			return "", apperror.NotFound("change", strconv.FormatUint(uint64(id), 10))
+		}
+
+		found, err := s.changes.Get(ctx, id)
+		if err != nil {
+			return "", err
+		}
+
+		return found.Number + " " + found.Title, nil
 	}
 
 	return "", apperror.InvalidFields("object")

@@ -47,6 +47,7 @@ val refusalValues: Map<String, Map<Int, String>> = mapOf(
     "catalogValueRetired" to mapOf(0 to "catalogValueTitle"),
     "configItemClassRetired" to mapOf(0 to "catalogValueTitle"),
     "configItemNoDefinition" to mapOf(0 to "catalogValueTitle"),
+    "changeStateNotAllowed" to mapOf(0 to "catalogValueTitle", 1 to "catalogValueTitle"),
 )
 
 /**

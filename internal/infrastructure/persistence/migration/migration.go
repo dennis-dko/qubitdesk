@@ -223,6 +223,17 @@ func All(dialect string) map[int64]migration.Migrate {
 		// The lists a change and its work orders pick from, as OTRS::ITSM ships
 		// its change management.
 		20261121030000: {UP: func(d migration.Datasource) error { return seedChangeCatalog(d, dialect) }},
+
+		// The changes, OTRS's state machine for them, and its matrix of category
+		// and impact.
+		20261121030100: {UP: func(d migration.Datasource) error { return createChanges(d, dialect) }},
+		20261121030200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_changes_state", "changes", "state_id")
+		}},
+		20261121030300: {UP: func(d migration.Datasource) error { return createChangeTransitions(d, dialect) }},
+		20261121030400: {UP: func(d migration.Datasource) error { return seedChangeTransitions(d, dialect) }},
+		20261121030500: {UP: func(d migration.Datasource) error { return createChangeCIP(d, dialect) }},
+		20261121030600: {UP: func(d migration.Datasource) error { return seedChangeCIP(d, dialect) }},
 	}
 }
 
@@ -280,6 +291,147 @@ func seedChangeCatalog(d migration.Datasource, dialect string) error {
 	}
 
 	return nil
+}
+
+// createChanges keeps the changes, as OTRS::ITSM's change management keeps
+// them. The number is written in the transaction that makes the row, as a
+// ticket's is, and is nullable for that moment. The manager and the builder are
+// accounts and lose them when they are erased; created_by and changed_by are ids
+// without a key, read as names when shown.
+func createChanges(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE changes (
+		%[1]s,
+		number VARCHAR(40) UNIQUE,
+		title VARCHAR(250) NOT NULL,
+		description %[4]s NOT NULL,
+		justification %[4]s NOT NULL,
+		manager_id %[2]s REFERENCES users(id),
+		builder_id %[2]s REFERENCES users(id),
+		category_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		impact_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		priority_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		requested_at %[3]s,
+		created_at %[3]s NOT NULL,
+		changed_at %[3]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0,
+		changed_by INT NOT NULL DEFAULT 0
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), longText(dialect)))
+}
+
+// createChangeTransitions keeps OTRS's change state machine: which state may
+// follow which, a state a change starts in having no state before it, and a
+// state nothing leads out of ending a change. Data rather than code, as OTRS
+// keeps it, because the states are the installation's.
+func createChangeTransitions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE change_transitions (
+		from_state_id %[1]s REFERENCES general_catalog(id),
+		to_state_id %[1]s NOT NULL REFERENCES general_catalog(id),
+		UNIQUE (from_state_id, to_state_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// seedChangeTransitions writes OTRS's default change state machine, from
+// _StateMachineDefaultSet in ITSMChangeManagement's package setup: a change is
+// requested, may wait for approval, is approved, is in progress, may wait for
+// its review, and ends rejected, retracted, failed, successful or canceled.
+func seedChangeTransitions(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect, "INSERT INTO change_transitions (from_state_id, to_state_id) VALUES (?, ?)")
+
+	for _, step := range []struct{ from, to string }{
+		{"", "requested"},
+		{"requested", "rejected"}, {"requested", "retracted"}, {"requested", "pending-approval"},
+		{"requested", "in-progress"},
+		{"pending-approval", "rejected"}, {"pending-approval", "retracted"}, {"pending-approval", "approved"},
+		{"approved", "retracted"}, {"approved", "in-progress"},
+		{"in-progress", "pending-pir"}, {"in-progress", "retracted"}, {"in-progress", "failed"},
+		{"in-progress", "successful"}, {"in-progress", "canceled"},
+		{"pending-pir", "failed"}, {"pending-pir", "successful"},
+	} {
+		var from any
+
+		if step.from != "" {
+			id, err := catalogID(d, dialect, "ITSM::ChangeManagement::Change::State", step.from)
+			if err != nil {
+				return err
+			}
+
+			from = id
+		}
+
+		to, err := catalogID(d, dialect, "ITSM::ChangeManagement::Change::State", step.to)
+		if err != nil {
+			return err
+		}
+
+		if _, err := d.SQL.Exec(insert, from, to); err != nil {
+			return fmt.Errorf("seeding the change state machine's %s -> %s: %w", step.from, step.to, err)
+		}
+	}
+
+	return nil
+}
+
+// createChangeCIP keeps OTRS's matrix of category and impact: the priority a
+// change of each is given unless it is given another.
+func createChangeCIP(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE change_cip (
+		category_id %[1]s NOT NULL REFERENCES general_catalog(id),
+		impact_id %[1]s NOT NULL REFERENCES general_catalog(id),
+		priority_id %[1]s NOT NULL REFERENCES general_catalog(id),
+		PRIMARY KEY (category_id, impact_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// seedChangeCIP writes OTRS's default matrix, from _CIPDefaultMatrixSet: a row
+// an impact, a column a category, each cell the priority on the same scale.
+func seedChangeCIP(d migration.Datasource, dialect string) error {
+	scale := []string{"1-very-low", "2-low", "3-normal", "4-high", "5-very-high"}
+	matrix := [5][5]int{
+		{0, 0, 1, 1, 2},
+		{0, 1, 1, 2, 3},
+		{1, 1, 2, 3, 3},
+		{1, 2, 3, 3, 4},
+		{2, 3, 3, 4, 4},
+	}
+	insert := sqldb.Rebind(dialect, "INSERT INTO change_cip (category_id, impact_id, priority_id) VALUES (?, ?, ?)")
+
+	for impact, row := range matrix {
+		for category, priority := range row {
+			ids := make([]any, 3)
+
+			for i, lookup := range []struct{ class, name string }{
+				{"ITSM::ChangeManagement::Category", scale[category]},
+				{"ITSM::ChangeManagement::Impact", scale[impact]},
+				{"ITSM::ChangeManagement::Priority", scale[priority]},
+			} {
+				id, err := catalogID(d, dialect, lookup.class, lookup.name)
+				if err != nil {
+					return err
+				}
+
+				ids[i] = id
+			}
+
+			if _, err := d.SQL.Exec(insert, ids...); err != nil {
+				return fmt.Errorf("seeding the change matrix: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// catalogID is the id of a value the general catalog ships.
+func catalogID(d migration.Datasource, dialect, class, name string) (int64, error) {
+	var id int64
+
+	if err := d.SQL.QueryRow(sqldb.Rebind(dialect,
+		"SELECT id FROM general_catalog WHERE catalog_class = ? AND name = ?"), class, name).Scan(&id); err != nil {
+		return 0, fmt.Errorf("finding the catalog's %s %s: %w", class, name, err)
+	}
+
+	return id, nil
 }
 
 // createGeneralCatalog keeps the general catalog, KIX18's general_catalog with

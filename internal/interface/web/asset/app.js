@@ -463,6 +463,7 @@ const FIELD_NAMES = {
   address: 'Address',
   banner: 'Banner text',
   body: 'Text',
+  builderId: 'Change builder',
   baseDn: 'Base DN',
   channel: 'Channel',
   class: 'Class',
@@ -476,6 +477,7 @@ const FIELD_NAMES = {
   country: 'Country',
   clientId: 'Client ID',
   issuer: 'Issuer address',
+  justification: 'Justification',
   label: 'Name on the sign-in form',
   defaultRole: 'Default role',
   deploymentStateId: 'Deployment state',
@@ -487,6 +489,7 @@ const FIELD_NAMES = {
   footerText: 'Footer',
   host: 'Host',
   id: 'ID',
+  impactId: 'Impact',
   incidentStateId: 'Incident state',
   keep: 'Backups kept',
   language: 'Language',
@@ -513,6 +516,7 @@ const FIELD_NAMES = {
   queue: 'Queue',
   queueId: 'Queue',
   region: 'State or region',
+  requestedAt: 'Requested for',
   responsibleId: 'Responsible',
   rateLimit: 'Rate limit',
   rateLimitWindowSeconds: 'Rate limit window (seconds)',
@@ -555,6 +559,7 @@ const FIELD_NAMES = {
   nextStateId: 'Moves on to',
   criteria: 'Which tickets',
   macroIds: 'Macros',
+  managerId: 'Change manager',
   planIds: 'Execution plans',
   pendingMinutes: 'Waits for (minutes)',
   locked: 'Locked',
@@ -717,6 +722,7 @@ const REFUSAL_VALUES = {
   catalogValueRetired: { 0: catalogValueTitle },
   configItemClassRetired: { 0: catalogValueTitle },
   configItemNoDefinition: { 0: catalogValueTitle },
+  changeStateNotAllowed: { 0: catalogValueTitle, 1: catalogValueTitle },
 };
 
 /** The values of one refusal, each written the way the rest of the screen writes it. */
@@ -2628,6 +2634,8 @@ const PERMISSION_TITLES = {
   'catalog:write': 'Set up the general catalog',
   'assets:read': 'See the configuration items',
   'assets:write': 'Create and change configuration items',
+  'changes:read': 'See the changes',
+  'changes:write': 'Create, move and change changes',
   'portal:use': 'Use the customer portal',
 };
 
@@ -2659,6 +2667,8 @@ const PERMISSION_DETAILS = {
   'catalog:write': 'Add to and change the general catalog - the classes a configuration item can be of, its deployment and incident states and what each means, and the lists its details pick from - and retire a value nobody should pick any more.',
   'assets:read': 'Every configuration item and every version of it, whatever its class.',
   'assets:write': 'Create a configuration item, write its next version and delete it.',
+  'changes:read': 'Every change, whatever it is about and whoever manages it.',
+  'changes:write': 'Create a change, correct it, move it on as its states allow, and delete it.',
   'portal:use': 'As a customer: open tickets, read and answer one’s own, and read the public knowledge base. Nothing of anybody else’s.',
 };
 
@@ -2675,6 +2685,7 @@ const PERMISSION_GROUPS = {
   reports: 'Evaluations',
   catalog: 'General catalog',
   assets: 'Configuration items',
+  changes: 'Changes',
   portal: 'Customer portal',
 };
 

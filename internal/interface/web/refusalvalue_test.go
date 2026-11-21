@@ -258,7 +258,7 @@ func writtenWith(value ast.Expr) string {
 		if record, ok := v.X.(*ast.Ident); ok && v.Sel.Name == "Name" {
 			return map[string]string{
 				"state": "statusName", "priority": "priorityName", "kind": "ticketTypeName", "role": "roleTitle",
-				"class": "catalogValueTitle", "entry": "catalogValueTitle",
+				"class": "catalogValueTitle", "entry": "catalogValueTitle", "standing": "catalogValueTitle",
 			}[record.Name]
 		}
 	}

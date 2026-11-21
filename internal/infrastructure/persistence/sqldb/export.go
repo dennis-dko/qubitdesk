@@ -58,6 +58,8 @@ var accountExport = []struct {
 		"FROM config_item_versions WHERE created_by = ? ORDER BY id"},
 	{"links-made", "SELECT id, source_object, source_id, target_object, target_id, type, created_at " +
 		"FROM links WHERE created_by = ? ORDER BY id"},
+	{"changes-managed", "SELECT id, number, title, created_at FROM changes WHERE manager_id = ? ORDER BY id"},
+	{"changes-built", "SELECT id, number, title, created_at FROM changes WHERE builder_id = ? ORDER BY id"},
 }
 
 // ExportUser reads everything held about an account, a part per table, each row

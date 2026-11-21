@@ -88,6 +88,12 @@ const (
 	PermAssetRead  = "assets:read"
 	PermAssetWrite = "assets:write"
 
+	// PermChangeRead and PermChangeWrite are the changes: reading every change,
+	// and making, correcting, moving and deleting one. Not narrowed like the
+	// tickets: a change is the organisation's.
+	PermChangeRead  = "changes:read"
+	PermChangeWrite = "changes:write"
+
 	// PermPortalUse is the customer's side: opening tickets, reading and answering
 	// their own, and the published knowledge base. It belongs to an account linked
 	// to a contact, and reaches that contact's tickets and nobody else's - an
@@ -111,6 +117,7 @@ func AllPermissions() []string {
 		PermReportRead,
 		PermCatalogWrite,
 		PermAssetRead, PermAssetWrite,
+		PermChangeRead, PermChangeWrite,
 		PermPortalUse,
 	}
 }
@@ -139,13 +146,14 @@ func AdminPermissions() []string {
 		PermReportRead,
 		PermCatalogWrite,
 		PermAssetRead, PermAssetWrite,
+		PermChangeRead, PermChangeWrite,
 	}
 }
 
 // AgentPermissions is what somebody who works on tickets holds: the tickets of
-// the queues their role reaches, the customers, the knowledge base, the figures
-// and the configuration items to look up - and nothing that changes how the
-// installation is set up, nor the inventory itself.
+// the queues their role reaches, the customers, the knowledge base, the figures,
+// and the configuration items and changes to look up - and nothing that changes
+// how the installation is set up, nor the inventory or the changes themselves.
 func AgentPermissions() []string {
 	return []string{
 		PermTicketRead, PermTicketCreate, PermTicketWrite,
@@ -153,6 +161,7 @@ func AgentPermissions() []string {
 		PermFAQRead, PermFAQWrite,
 		PermReportRead,
 		PermAssetRead,
+		PermChangeRead,
 	}
 }
 

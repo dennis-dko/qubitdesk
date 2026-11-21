@@ -69,6 +69,10 @@
     {
       "name": "assets",
       "description": "The configuration items, as KIX18 keeps its assets: an item of a class, in versions each written under the definition its class had then. Read with `assets:read`, written with `assets:write`; a version is never changed, a change to an item is its next version."
+    },
+    {
+      "name": "changes",
+      "description": "Changes to what the organisation runs, as OTRS::ITSM's change management keeps them."
     }
   ],
   "paths": {
@@ -5778,6 +5782,240 @@
         "responses": {
           "204": {
             "description": "Undone"
+          }
+        }
+      }
+    },
+    "/changes": {
+      "get": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "A page of the changes",
+        "description": "The most recently changed first, narrowed by state - one or several, comma-separated - and by words in the title or the number. Takes changes:read.",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "One state or several, by their ids, comma-separated"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Words in the title or the number"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Changes a page, 50 unless said, at most 200"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The page, from 1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "Make a change",
+        "description": "In the state OTRS's state machine starts with; category and impact are 3 normal unless given, and the priority follows their matrix unless given. Takes changes:write.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "maxLength": 250
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "justification": {
+                    "type": "string"
+                  },
+                  "managerId": {
+                    "type": "integer"
+                  },
+                  "clearManager": {
+                    "type": "boolean"
+                  },
+                  "builderId": {
+                    "type": "integer"
+                  },
+                  "clearBuilder": {
+                    "type": "boolean"
+                  },
+                  "categoryId": {
+                    "type": "integer"
+                  },
+                  "impactId": {
+                    "type": "integer"
+                  },
+                  "priorityId": {
+                    "type": "integer"
+                  },
+                  "stateId": {
+                    "type": "integer"
+                  },
+                  "requestedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "clearRequestedAt": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/changes/{id}": {
+      "get": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "One change",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "With the states the machine lets it move to. Takes changes:read.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "Correct or move a change",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "What the request names; the state only as the machine allows. Takes changes:write.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "maxLength": 250
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "justification": {
+                    "type": "string"
+                  },
+                  "managerId": {
+                    "type": "integer"
+                  },
+                  "clearManager": {
+                    "type": "boolean"
+                  },
+                  "builderId": {
+                    "type": "integer"
+                  },
+                  "clearBuilder": {
+                    "type": "boolean"
+                  },
+                  "categoryId": {
+                    "type": "integer"
+                  },
+                  "impactId": {
+                    "type": "integer"
+                  },
+                  "priorityId": {
+                    "type": "integer"
+                  },
+                  "stateId": {
+                    "type": "integer"
+                  },
+                  "requestedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "clearRequestedAt": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "Delete a change",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "With its links. Takes changes:write.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
           }
         }
       }

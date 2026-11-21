@@ -56,6 +56,8 @@ func (r *UserRepository) PurgeUser(ctx context.Context, userID uint) error {
 			query string
 		}{
 			{"responsibility for tickets", "UPDATE tickets SET responsible_id = NULL WHERE responsible_id = ?"},
+			{"changes managed", "UPDATE changes SET manager_id = NULL WHERE manager_id = ?"},
+			{"changes built", "UPDATE changes SET builder_id = NULL WHERE builder_id = ?"},
 			{"link to a contact", "UPDATE contacts SET user_id = NULL WHERE user_id = ?"},
 			{"watched tickets", "DELETE FROM ticket_watchers WHERE user_id = ?"},
 			{"notifications", "DELETE FROM notifications WHERE user_id = ?"},
