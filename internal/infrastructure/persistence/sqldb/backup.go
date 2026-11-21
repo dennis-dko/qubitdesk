@@ -31,6 +31,7 @@ var BackupTables = []string{
 	"admin_events",
 	"directory_runs",
 	"general_catalog",
+	"ci_class_definitions",
 	"calendars",
 	"calendar_hours",
 	"calendar_free_days",

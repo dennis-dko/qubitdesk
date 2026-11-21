@@ -7750,6 +7750,107 @@ function wireGeneralCatalog() {
   $('#catalog-cancel').addEventListener('click', resetGeneralCatalogForm);
 }
 
+// ------------------------------------------------------- class definitions
+
+/** The classes of configuration items, with the version each definition stands at. */
+let ciClasses = [];
+
+/**
+ * Fills the class definitions' card for whoever may write one: the classes to
+ * choose from, keeping the one chosen, and the versions of its definition.
+ */
+async function loadClassDefinitions() {
+  if (!can('catalog:write')) return;
+
+  ciClasses = (await api('/cmdb/classes'))?.items ?? [];
+
+  const form = $('#form-classdef');
+  const chosen = form.elements.classId.value;
+
+  fillSelect(form.elements.classId, ciClasses
+    .map((entry) => ({ value: String(entry.id), label: catalogValueTitle(entry.name) }))
+    .sort((a, b) => a.label.localeCompare(b.label)), { labelKey: 'label', valueKey: 'value' });
+
+  if (ciClasses.some((entry) => String(entry.id) === chosen)) form.elements.classId.value = chosen;
+
+  await loadClassDefinitionVersions();
+}
+
+/**
+ * Draws the versions of the chosen class's definition, and puts the standing
+ * one in the box - unless somebody is writing in it, whose words a reload must
+ * not take.
+ */
+async function loadClassDefinitionVersions() {
+  const form = $('#form-classdef');
+  const id = form.elements.classId.value;
+  const versions = id ? (await api(`/cmdb/classes/${id}/definitions`))?.items ?? [] : [];
+
+  if (!beingEdited(form)) {
+    form.elements.attributes.value = versions.length ? JSON.stringify(versions[0].attributes, null, 2) : '';
+  }
+
+  redrawable('classDefinitionVersion', () => {
+    $('#classdef-version').textContent = versions.length
+      ? fillIn(t('classdef.standing', 'Version {0} stands now.'), [versions[0].version])
+      : t('classdef.none', 'This class has no definition yet.');
+  });
+
+  fillTable($('#table-classdef-versions tbody'), versions.map((version) => el('tr', {},
+    el('td', { class: 'num', text: String(version.version) }),
+    el('td', { text: fmtMoment(version.createdAt) }),
+    el('td', { class: 'num', text: String(countClassAttributes(version.attributes)) }),
+  )), 3, t('classdef.noVersions', 'No version yet.'));
+}
+
+/** How many attributes a definition holds, those below others included. */
+function countClassAttributes(attributes) {
+  return (attributes ?? []).reduce((count, attribute) => count + 1 + countClassAttributes(attribute.sub), 0);
+}
+
+/**
+ * Sends the box as the class's next version. What is not JSON, or not a list,
+ * is said here; whether it is a definition an item can be written under is the
+ * server's to answer.
+ */
+function saveClassDefinition(form) {
+  let attributes;
+
+  try {
+    attributes = JSON.parse(form.elements.attributes.value);
+  } catch {
+    toast(t('classdef.notJSON', 'The definition is not JSON.'), 'error');
+
+    return;
+  }
+
+  if (!Array.isArray(attributes)) {
+    toast(t('classdef.notAList', 'The definition is a list of attributes.'), 'error');
+
+    return;
+  }
+
+  const id = form.elements.classId.value;
+
+  saveForm(form,
+    () => api(`/cmdb/classes/${id}/definitions`, { method: 'POST', body: JSON.stringify({ attributes }) }),
+    t('msg.classDefinitionSaved', 'Kept as a new version'),
+    loadClassDefinitions);
+}
+
+/** Wires the class definitions' card. */
+function wireClassDefinitions() {
+  const form = $('#form-classdef');
+
+  form.elements.classId.addEventListener('change', () => {
+    // Another class is another document: what was being written was the last
+    // one's, and stays only as long as nobody chooses away from it.
+    delete form.dataset.editing;
+    loadClassDefinitionVersions().catch((err) => toastFailure(err));
+  });
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveClassDefinition(e.target); });
+}
+
 // ------------------------------------------------------------------ portal
 
 /** The ticket open on the portal's screen, or null. */
@@ -10657,6 +10758,7 @@ const CHANGE_SENTENCES = {
   'roles.imported': () => t('change.rolesImported', 'Imported roles from a spreadsheet'),
   'catalog.created': () => t('change.catalogCreated', 'Added {0} to the general catalog'),
   'catalog.updated': () => t('change.catalogUpdated', 'Changed {0} in the general catalog'),
+  'classDefinition.created': () => t('change.classDefinitionCreated', 'Wrote a new definition of the class {0}'),
   'queue.created': () => t('change.queueCreated', 'Created the queue {0}'),
   'queue.updated': () => t('change.queueUpdated', 'Changed the queue {0}'),
   'queue.deleted': () => t('change.queueDeleted', 'Deleted the queue {0}'),
@@ -10716,7 +10818,12 @@ const CHANGE_SENTENCES = {
 
 /** One change as a sentence: what was done, to whom, and the value it kept. */
 function describeChange(entry) {
-  const target = entry.target ? (entry.target.name || entry.detail || `#${entry.target.id}`) : '';
+  // A class is named by its identifier, which the screen writes in the
+  // reader's words wherever else it shows one.
+  const named = entry.action.startsWith('classDefinition.') ? catalogValueTitle : (name) => name;
+  const target = entry.target
+    ? ((entry.target.name && named(entry.target.name)) || entry.detail || `#${entry.target.id}`)
+    : '';
   const detail = {
     'user.role': () => roleTitle(entry.detail),
     'settings.maintenance': () => (entry.detail === 'true'
@@ -11993,6 +12100,9 @@ function forgetTheLastAccount() {
   closePortalTicket();
   generalCatalogClasses = [];
   resetGeneralCatalogForm();
+  ciClasses = [];
+  $('#form-classdef').reset();
+  $('#table-classdef-versions tbody').replaceChildren();
   closePublishedFAQ('portal');
   $('#form-portal-faq').reset();
   $('#portal-faq-list').replaceChildren();
@@ -12864,6 +12974,15 @@ const TOUR_STEPS = [
     text: () => t('tour.catalog.text',
       'The general catalog: the classes a configuration item can be of, where in its life one is and how it is '
       + 'doing, and the lists its details pick from. A value nobody should pick any more is retired, never deleted.'),
+  },
+  {
+    target: '#classdef-card',
+    view: 'assets',
+    permission: 'catalog:write',
+    title: () => t('tour.classdef.title', 'What an item holds'),
+    text: () => t('tour.classdef.text',
+      'Each class\'s definition: the attributes an item of it holds, written as one document. A change is kept as '
+      + 'a new version, so an item written before it is still read the way it was written.'),
   },
   {
     target: '#macro-card',
@@ -17407,6 +17526,7 @@ async function refreshAll() {
   await loadTicketSetup();
   await loadCustomers();
   await loadGeneralCatalog();
+  await loadClassDefinitions();
   await loadPortal();
   await loadFAQ();
   await loadTickets();
@@ -17482,6 +17602,7 @@ function wireForms() {
   wirePortal();
   wirePublishedFAQ();
   wireGeneralCatalog();
+  wireClassDefinitions();
   wireSysConfig();
   wireCalendars();
   wireSla();

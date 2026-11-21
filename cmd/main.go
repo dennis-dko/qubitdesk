@@ -581,7 +581,11 @@ func main() {
 	// such an account is given no role that administers, from either side.
 	contactRepo := sqldb.NewContactRepository(db, cfg.Dialect)
 	adminEventRepo := sqldb.NewAdminEventRepository(db, cfg.Dialect)
-	adminLog := appservice.NewAdminLogService(adminEventRepo, userRepo, roleRepo, contactRepo)
+	// The general catalog names the classes a definition belongs to, there as on
+	// the Assets screen.
+	generalCatalogRepo := sqldb.NewGeneralCatalogRepository(db, cfg.Dialect)
+	adminLog := appservice.NewAdminLogService(adminEventRepo, userRepo, roleRepo, contactRepo).
+		WithCatalog(generalCatalogRepo)
 	recovery := appservice.NewRecoveryService(userRepo, passkeyRepo, sessionRepo, adminEventRepo)
 
 	auth := appservice.NewAuthService(userRepo, roleRepo)
@@ -1165,7 +1169,9 @@ func main() {
 			sqldb.NewFAQArticleRepository(db, cfg.Dialect), userRepo), authorizer),
 		Portal: rest.NewPortalHandler(tickets, authorizer),
 		GeneralCatalog: rest.NewGeneralCatalogHandler(
-			appservice.NewGeneralCatalogApplicationService(sqldb.NewGeneralCatalogRepository(db, cfg.Dialect)), authorizer),
+			appservice.NewGeneralCatalogApplicationService(generalCatalogRepo), authorizer),
+		ClassDefinitions: rest.NewClassDefinitionHandler(appservice.NewClassDefinitionApplicationService(
+			generalCatalogRepo, sqldb.NewClassDefinitionRepository(db, cfg.Dialect)), authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves

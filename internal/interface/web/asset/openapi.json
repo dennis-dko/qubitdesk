@@ -5343,6 +5343,86 @@
         }
       }
     },
+    "/cmdb/classes": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List the classes of configuration items",
+        "description": "Every value of the general catalog's ITSM::ConfigItem::Class, retired ones included, each with the `version` its definition stands at - 0 where it has none yet.",
+        "responses": {
+          "200": {
+            "description": "The classes"
+          },
+          "401": {
+            "description": "Not signed in"
+          }
+        }
+      }
+    },
+    "/cmdb/classes/{id}/definitions": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Read the versions of a class's definition",
+        "description": "Every version of what an item of the class holds, the newest first: its `attributes` as KIX18 writes them - each with a `key`, a `name`, a `type` (Section, Text, TextArea, Date, DateTime, GeneralCatalog, CIClassReference, Contact, Organisation), how often it occurs (`countMin`, `countMax`, `countDefault`), whether a value given may be empty (`required`), and its `sub` attributes.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The class, a value of the general catalog's ITSM::ConfigItem::Class"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The versions"
+          },
+          "401": {
+            "description": "Not signed in"
+          },
+          "404": {
+            "description": "No such class"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Write a class's next definition",
+        "description": "Needs catalog:write. `attributes` is the whole definition, kept as the class's next version: a version is never changed, because an item is read under the one it was written with. Refused whole where an item could not be written under it - a key used twice among its siblings, a type nobody knows, counts out of order, a GeneralCatalog attribute naming no list of the catalog in `catalog`, a CIClassReference naming no class in `classes` - and where it says what the version standing now says.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The class, a value of the general catalog's ITSM::ConfigItem::Class"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The new version"
+          },
+          "400": {
+            "description": "A definition no item could be written under, or one saying nothing new"
+          },
+          "403": {
+            "description": "Not permitted"
+          },
+          "404": {
+            "description": "No such class"
+          }
+        }
+      }
+    },
     "/general-catalog/classes": {
       "get": {
         "tags": [

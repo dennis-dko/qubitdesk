@@ -1439,7 +1439,8 @@
     </section>
 
     <!-- The configuration management database, as KIX18 keeps it. So far its
-         general catalog: the lists the configuration items pick from. -->
+         general catalog - the lists the configuration items pick from - and
+         what an item of each class holds. -->
     <section id="view-assets" class="view" hidden>
       <div class="card" id="catalog-card" data-perm="catalog:write">
         <h2 data-i18n="gencatalog.title">General catalog</h2>
@@ -1479,6 +1480,37 @@
             <button type="button" class="link" id="catalog-cancel" data-i18n="action.cancelEdit" hidden>cancel editing</button>
           </div>
         </form>
+      </div>
+
+      <!-- What an item of each class holds, written as KIX18 writes it: the
+           definition as one document, here JSON, checked whole by the server.
+           A save is a new version, never a change of the standing one, which is
+           why the form has no id to correct. -->
+      <div class="card" id="classdef-card" data-perm="catalog:write">
+        <h2 data-i18n="classdef.title">Class definitions</h2>
+        <p class="muted" data-i18n="classdef.hint">What a configuration item of each class holds: a list of attributes, each with a key, a name, a type and how often it occurs, a section holding others. A change is kept as a new version, and an item stays readable under the version it was written with.</p>
+        <form method="post" id="form-classdef" class="form">
+          <div class="grid">
+            <label data-i18n="classdef.class">Class<select name="classId" data-not-an-edit></select></label>
+          </div>
+          <p class="muted" id="classdef-version"></p>
+          <label class="wide" data-i18n="classdef.definition">Definition (JSON)<textarea name="attributes" rows="18" spellcheck="false" maxlength="500000" required></textarea></label>
+          <div class="row">
+            <button type="submit" id="classdef-submit" data-i18n="classdef.save">Keep as a new version</button>
+          </div>
+        </form>
+        <div class="table-wrap">
+          <table id="table-classdef-versions">
+            <thead>
+              <tr>
+                <th class="num" data-i18n="classdef.version">Version</th>
+                <th data-i18n="classdef.written">Written</th>
+                <th class="num" data-i18n="classdef.attributes">Attributes</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </section>
 

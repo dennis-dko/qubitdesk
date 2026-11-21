@@ -25,6 +25,7 @@ type AdminLogService struct {
 	users    repository.UserRepository
 	roles    repository.RoleRepository
 	contacts repository.ContactRepository
+	catalog  repository.GeneralCatalogRepository
 	now      func() time.Time
 }
 
@@ -33,6 +34,14 @@ type AdminLogService struct {
 func NewAdminLogService(events repository.AdminEventRepository, users repository.UserRepository,
 	roles repository.RoleRepository, contacts repository.ContactRepository) *AdminLogService {
 	return &AdminLogService{events: events, users: users, roles: roles, contacts: contacts, now: time.Now}
+}
+
+// WithCatalog names the classes of configuration items a definition was written
+// for, from the general catalog they are kept in.
+func (s *AdminLogService) WithCatalog(catalog repository.GeneralCatalogRepository) *AdminLogService {
+	s.catalog = catalog
+
+	return s
 }
 
 // AdminLogEntry is a change as it is shown: its ids, and the names they carry now,
@@ -64,7 +73,7 @@ func (s *AdminLogService) Page(ctx context.Context, beforeID uint, limit int) ([
 		events = events[:limit]
 	}
 
-	names := namer{users: s.users, roles: s.roles, contacts: s.contacts, known: map[string]string{}}
+	names := namer{users: s.users, roles: s.roles, contacts: s.contacts, catalog: s.catalog, known: map[string]string{}}
 	entries := make([]AdminLogEntry, 0, len(events))
 
 	for _, event := range events {
@@ -82,6 +91,8 @@ func (s *AdminLogService) Page(ctx context.Context, beforeID uint, limit int) ([
 			entry.TargetName, err = names.role(ctx, event.TargetID)
 		case strings.HasPrefix(event.Action, "contact."):
 			entry.TargetName, err = names.contact(ctx, event.TargetID)
+		case strings.HasPrefix(event.Action, "classDefinition."):
+			entry.TargetName, err = names.catalogItem(ctx, event.TargetID)
 		}
 
 		if err != nil {
@@ -99,7 +110,25 @@ type namer struct {
 	users    repository.UserRepository
 	roles    repository.RoleRepository
 	contacts repository.ContactRepository
+	catalog  repository.GeneralCatalogRepository
 	known    map[string]string
+}
+
+// catalogItem names a value of the general catalog - the class a definition
+// was written for - and nothing where the log was given no catalog to ask.
+func (n namer) catalogItem(ctx context.Context, id uint) (string, error) {
+	if n.catalog == nil {
+		return "", nil
+	}
+
+	return n.read("catalogitem", id, func() (string, error) {
+		item, err := n.catalog.GetByID(ctx, id)
+		if err != nil {
+			return "", err
+		}
+
+		return item.Name, nil
+	})
 }
 
 func (n namer) user(ctx context.Context, id uint) (string, error) {

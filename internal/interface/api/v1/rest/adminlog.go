@@ -47,6 +47,7 @@ var administrativeChanges = []struct {
 	{http.MethodPost, "/api/v1/roles/import", "roles.imported", ""},
 	{http.MethodPost, "/api/v1/general-catalog", "catalog.created", "name"},
 	{http.MethodPut, "/api/v1/general-catalog/{id}", "catalog.updated", "name"},
+	{http.MethodPost, "/api/v1/cmdb/classes/{id}/definitions", "classDefinition.created", ""},
 	{http.MethodPost, "/api/v1/queues", "queue.created", "name"},
 	{http.MethodPut, "/api/v1/queues/{id}", "queue.updated", "name"},
 	{http.MethodDelete, "/api/v1/queues/{id}", "queue.deleted", ""},

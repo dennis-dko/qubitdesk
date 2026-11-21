@@ -1,7 +1,9 @@
 package migration
 
 import (
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"gofr.dev/pkg/gofr/migration"
 
@@ -201,6 +203,11 @@ func All(dialect string) map[int64]migration.Migrate {
 		// pick from, as KIX18 ships them.
 		20261118010000: {UP: func(d migration.Datasource) error { return createGeneralCatalog(d, dialect) }},
 		20261118010100: {UP: func(d migration.Datasource) error { return seedGeneralCatalog(d, dialect) }},
+
+		// What a configuration item of each class holds, versioned, as KIX18
+		// ships the definitions of its classes.
+		20261121010000: {UP: func(d migration.Datasource) error { return createClassDefinitions(d, dialect) }},
+		20261121010100: {UP: func(d migration.Datasource) error { return seedClassDefinitions(d, dialect) }},
 	}
 }
 
@@ -1310,6 +1317,278 @@ func createFAQArticles(d migration.Datasource, dialect string) error {
 		updated_by INT
 	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect), timestamp(dialect), boolean(dialect),
 		trueLiteral(dialect)))
+}
+
+// createClassDefinitions keeps the versions of each configuration item class's
+// definition: the attributes an item of the class holds, as JSON, a row a
+// version. A version is never changed, because an item is read under the one
+// it was written with; the pair of class and version is therefore unique.
+//
+// created_by is an id without a key, read as a name when shown, so that the
+// versions an erased account wrote remain - and 0 for the shipped ones.
+func createClassDefinitions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ci_class_definitions (
+		%[1]s,
+		class_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		version INT NOT NULL,
+		attributes %[3]s NOT NULL,
+		created_at %[4]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0,
+		UNIQUE (class_id, version)
+	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect), timestamp(dialect)))
+}
+
+// seedAttribute is one attribute of a shipped definition, written with the
+// JSON names the definitions are kept under. A type of the migration's own,
+// so that what was seeded stays what it was whatever the model becomes.
+type seedAttribute struct {
+	Key          string          `json:"key"`
+	Name         string          `json:"name"`
+	Type         string          `json:"type"`
+	CountMin     int             `json:"countMin"`
+	CountMax     int             `json:"countMax"`
+	CountDefault int             `json:"countDefault"`
+	Required     bool            `json:"required,omitempty"`
+	Searchable   bool            `json:"searchable,omitempty"`
+	MaxLength    int             `json:"maxLength,omitempty"`
+	Catalog      string          `json:"catalog,omitempty"`
+	Classes      []string        `json:"classes,omitempty"`
+	Sub          []seedAttribute `json:"sub,omitempty"`
+}
+
+// counted gives an attribute KIX18's counts: at least, at most, and where a new
+// item begins.
+func (a seedAttribute) counted(least, most, begin int) seedAttribute {
+	a.CountMin, a.CountMax, a.CountDefault = least, most, begin
+
+	return a
+}
+
+// required marks a value given as one that may not be empty.
+func (a seedAttribute) required() seedAttribute {
+	a.Required = true
+
+	return a
+}
+
+// with gives an attribute its sub-attributes.
+func (a seedAttribute) with(sub ...seedAttribute) seedAttribute {
+	a.Sub = sub
+
+	return a
+}
+
+// seedSection is a heading over the attributes given, occurring once. Like
+// every shipped attribute below it occurs once in an item unless counted says
+// otherwise, and the others are searchable, as KIX18 marks them, unless quiet
+// is said.
+func seedSection(key, name string, sub ...seedAttribute) seedAttribute {
+	return seedAttribute{Key: key, Name: name, Type: "Section", CountMin: 1, CountMax: 1, CountDefault: 1, Sub: sub}
+}
+
+// seedOf is an attribute of the type given.
+func seedOf(kind, key, name string) seedAttribute {
+	return seedAttribute{Key: key, Name: name, Type: kind, CountMin: 1, CountMax: 1, CountDefault: 1, Searchable: true}
+}
+
+// seedText is a text of up to the length given.
+func seedText(key, name string, length int) seedAttribute {
+	a := seedOf("Text", key, name)
+	a.MaxLength = length
+
+	return a
+}
+
+// seedCatalog picks a value of the general catalog class given.
+func seedCatalog(key, name, class string) seedAttribute {
+	a := seedOf("GeneralCatalog", key, name)
+	a.Catalog = class
+
+	return a
+}
+
+// seedReference points at an item of one of the classes given.
+func seedReference(key, name string, classes ...string) seedAttribute {
+	a := seedOf("CIClassReference", key, name)
+	a.Classes = classes
+
+	return a
+}
+
+// quiet leaves an attribute out of a search for items.
+func quiet(a seedAttribute) seedAttribute {
+	a.Searchable = false
+
+	return a
+}
+
+// seedClassDefinitions gives each shipped class the definition KIX18 ships it
+// with, as version 1 - read from kix-backend's scripts/database/
+// kix-initial_insert.xml. Two things are left out: the Attachment attributes,
+// until an item can hold files, and the patterns KIX18 checks some texts
+// against, which nothing here reads yet. A class an installation adds has no
+// definition until somebody writes one.
+func seedClassDefinitions(d migration.Datasource, dialect string) error {
+	note := seedOf("TextArea", "Note", "Note").counted(0, 1, 0).required()
+	owner := seedSection("SectionOwner", "Owner",
+		seedOf("Organisation", "OwnerOrganisation", "Owner organisation"),
+		seedOf("Contact", "OwnerContact", "Owner contact").counted(0, 25, 1),
+	)
+	warranty := seedSection("SectionWarranty", "Warranty",
+		seedOf("Date", "WarrantyExpirationDate", "Warranty expiration date"),
+		seedOf("Date", "FirstUsageDate", "First usage date").required(),
+	)
+	network := func(interfaceName string, begin int) seedAttribute {
+		return seedSection("SectionNetwork", "Network",
+			seedText("FQDN", "FQDN", 100).counted(1, 8, 1),
+			quiet(seedText("NIC", interfaceName, 100)).counted(0, 10, begin).required().with(
+				seedCatalog("IPoverDHCP", "IP over DHCP", "ITSM::ConfigItem::YesNo").required(),
+				seedText("IPAddress", "IP address", 40).counted(0, 20, 0).required(),
+				seedReference("Network", "Network", "network").counted(0, 1, 0),
+			),
+		)
+	}
+	contacts := seedSection("SectionContacts", "Contacts",
+		seedText("ContactRole", "Contact role", 255).counted(0, 25, 1).required().with(
+			seedOf("Contact", "Contact", "Contact"),
+		),
+	)
+	address := func(countryRequired bool) seedAttribute {
+		country := seedText("Country", "Country", 255).counted(0, 1, 0)
+		if countryRequired {
+			country = country.required()
+		}
+
+		return seedSection("SectionAddress", "Address",
+			seedText("Street", "Street", 255),
+			seedText("Street2", "Street 2", 255).counted(0, 1, 0),
+			seedText("City", "City", 255),
+			seedText("ZIP", "ZIP", 255),
+			seedText("Region", "Region", 255).counted(0, 1, 0),
+			country,
+		)
+	}
+
+	definitions := map[string][]seedAttribute{
+		"computer": {
+			seedSection("SectionGeneral", "General",
+				seedCatalog("Type", "Type", "ITSM::ConfigItem::Computer::Type"),
+				seedText("Vendor", "Vendor", 50),
+				seedText("Model", "Model", 50),
+				seedReference("Location", "Location", "location", "building", "room"),
+				seedOf("TextArea", "Description", "Description").counted(0, 1, 0),
+				note,
+			),
+			owner,
+			network("Network interface", 0),
+			seedSection("SectionHardware", "Hardware",
+				seedText("SerialNumber", "Serial number", 100),
+				quiet(seedText("CPU", "CPU", 100)).counted(0, 16, 1),
+				quiet(seedText("RAM", "RAM", 100)).counted(1, 8, 1),
+				quiet(seedText("HardDisk", "Hard disk", 100)).counted(1, 8, 1).with(
+					quiet(seedText("Capacity", "Capacity", 10)),
+				),
+				// KIX18 writes CountMin twice here, 0 and then 1, beside a default of 0;
+				// read as a hash the 1 wins and the default lies below it, which no
+				// item could begin with. The 0 is what the default says was meant.
+				quiet(seedText("GraphicAdapter", "Graphic adapter", 100)).counted(0, 1, 0),
+				quiet(seedOf("TextArea", "OtherEquipment", "Other equipment")).counted(0, 1, 0).required(),
+			),
+			seedSection("SectionSoftware", "Software",
+				quiet(seedText("OperatingSystem", "Operating system", 100)),
+				seedReference("InstalledSoftware", "Installed software", "software").counted(0, 25, 1),
+			),
+			warranty,
+		},
+		"hardware": {
+			seedSection("SectionGeneral", "General",
+				seedCatalog("Type", "Type", "ITSM::ConfigItem::Hardware::Type"),
+				seedText("Vendor", "Vendor", 50),
+				seedText("Model", "Model", 50),
+				seedReference("Location", "Location", "location", "building", "room"),
+				seedOf("TextArea", "Description", "Description").counted(0, 1, 0),
+				note,
+			),
+			owner,
+			network("Network adapter", 1),
+			seedSection("SectionHardware", "Hardware",
+				seedText("SerialNumber", "Serial number", 100),
+				quiet(seedText("FirmwareVersion", "Firmware version", 100)).counted(0, 1, 1).required(),
+			),
+			warranty,
+		},
+		"location": {
+			seedSection("SectionGeneral", "General",
+				seedText("GLN", "GLN", 13),
+				note,
+			),
+			address(true),
+			contacts,
+		},
+		"building": {
+			seedSection("SectionGeneral", "General",
+				seedReference("ParentLocation", "Location", "location").counted(0, 1, 0).required(),
+				seedText("GLN", "GLN", 13),
+				note,
+			),
+			address(false).counted(0, 1, 0),
+			contacts,
+		},
+		"room": {
+			seedSection("SectionGeneral", "General",
+				seedReference("ParentLocation", "Building", "building").counted(0, 1, 0).required(),
+				seedText("RoomType", "Room type", 50),
+				seedText("Floor", "Floor", 50),
+				seedText("RoomLabel", "Room label", 50),
+				note,
+			),
+			contacts.counted(0, 1, 0),
+		},
+		"network": {
+			seedCatalog("Type", "Type", "ITSM::ConfigItem::Network::Type"),
+			seedOf("TextArea", "Description", "Description"),
+			seedText("NetworkAddress", "Network address", 20).counted(0, 100, 1).required().with(
+				quiet(seedText("SubnetMask", "Subnet mask", 20)).counted(0, 1, 0).required(),
+				quiet(seedText("Gateway", "Gateway", 20)).counted(0, 10, 0).required(),
+			),
+			note,
+		},
+		"software": {
+			seedSection("SectionGeneral", "General",
+				seedCatalog("Type", "Type", "ITSM::ConfigItem::Software::Type"),
+				seedText("Vendor", "Vendor", 50),
+				seedText("Product", "Product", 50).with(
+					seedText("Version", "Version", 50).counted(0, 1, 0),
+				),
+				seedOf("TextArea", "Description", "Description").counted(0, 1, 0),
+			),
+			owner,
+			seedSection("SectionLicence", "Licence",
+				seedCatalog("LicenceType", "Licence type", "ITSM::ConfigItem::Software::LicenceType"),
+				seedText("LicenceKey", "Licence key", 50).counted(0, 20, 0).required().with(
+					quiet(seedText("Quantity", "Quantity", 20)).counted(0, 1, 0).required(),
+					quiet(seedOf("Date", "ExpirationDate", "Expiration date")).counted(0, 1, 0).required(),
+				),
+			),
+			note,
+		},
+	}
+
+	insert := sqldb.Rebind(dialect, "INSERT INTO ci_class_definitions (class_id, version, attributes, created_at) "+
+		"SELECT id, 1, ?, ? FROM general_catalog WHERE catalog_class = 'ITSM::ConfigItem::Class' AND name = ?")
+
+	for _, class := range []string{"computer", "hardware", "location", "building", "room", "network", "software"} {
+		encoded, err := json.Marshal(definitions[class])
+		if err != nil {
+			return fmt.Errorf("writing the %s definition: %w", class, err)
+		}
+
+		if _, err := d.SQL.Exec(insert, string(encoded), time.Now().UTC(), class); err != nil {
+			return fmt.Errorf("seeding the %s definition: %w", class, err)
+		}
+	}
+
+	return nil
 }
 
 // createIndex adds one index, as a migration of its own - see All for why it is
