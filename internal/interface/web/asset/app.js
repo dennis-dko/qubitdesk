@@ -7515,6 +7515,12 @@ const CATALOG_CLASS_TITLES = {
   'ITSM::ConfigItem::Network::Type': 'Network types',
   'ITSM::ConfigItem::Software::Type': 'Software types',
   'ITSM::ConfigItem::Software::LicenceType': 'Licence types',
+  'ITSM::ChangeManagement::Category': 'Change categories',
+  'ITSM::ChangeManagement::Impact': 'Change impacts',
+  'ITSM::ChangeManagement::Priority': 'Change priorities',
+  'ITSM::ChangeManagement::Change::State': 'Change states',
+  'ITSM::ChangeManagement::WorkOrder::State': 'Work order states',
+  'ITSM::ChangeManagement::WorkOrder::Type': 'Work order types',
 };
 
 /** The values of the general catalog that ship, by the identifier they are kept under. */
@@ -7593,6 +7599,30 @@ const SHIPPED_CATALOG_TITLES = {
   freeware: 'freeware',
   unlimited: 'unlimited',
   'open-source': 'open source',
+  '1-very-low': '1 very low',
+  '2-low': '2 low',
+  '3-normal': '3 normal',
+  '4-high': '4 high',
+  '5-very-high': '5 very high',
+  'requested': 'requested',
+  'pending-approval': 'pending approval',
+  'rejected': 'rejected',
+  'approved': 'approved',
+  'in-progress': 'in progress',
+  'pending-pir': 'pending PIR',
+  'successful': 'successful',
+  'failed': 'failed',
+  'canceled': 'canceled',
+  'retracted': 'retracted',
+  'created': 'created',
+  'accepted': 'accepted',
+  'ready': 'ready',
+  'closed': 'closed',
+  'approval': 'approval',
+  'workorder': 'work order',
+  'backout': 'backout',
+  'decision': 'decision',
+  'pir': 'PIR',
 };
 
 /** What a deployment or an incident state means to the code, in the reader's words. */

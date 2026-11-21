@@ -52,7 +52,7 @@ func TestTheGeneralCatalogIsKeptOverHTTP(t *testing.T) {
 
 	agent.must(agent.api(http.MethodGet, "/general-catalog/classes", nil), http.StatusOK).Data(t, &classes)
 
-	if len(classes.Items) != 10 {
+	if len(classes.Items) != 16 {
 		t.Errorf("the catalog ships the classes %+v; want ten", classes.Items)
 	}
 

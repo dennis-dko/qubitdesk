@@ -219,7 +219,67 @@ func All(dialect string) map[int64]migration.Migrate {
 		20261121020300: {UP: func(d migration.Datasource) error {
 			return createIndex(d, "idx_config_item_versions_item", "config_item_versions", "item_id")
 		}},
+
+		// The lists a change and its work orders pick from, as OTRS::ITSM ships
+		// its change management.
+		20261121030000: {UP: func(d migration.Datasource) error { return seedChangeCatalog(d, dialect) }},
 	}
+}
+
+// seedChangeCatalog adds the lists change management picks from to the general
+// catalog, as OTRS::ITSM's ITSMChangeManagement.sopm ships them, in its order:
+// a change's category, impact and priority on one scale, its states and its
+// work orders' states and types. Under identifiers the interface translates,
+// as every shipped value; the scale keeps OTRS's number in front, which is what
+// keeps it in order wherever values are sorted by name. Which state may follow
+// which is behaviour, kept beside the changes rather than here.
+func seedChangeCatalog(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect, "INSERT INTO general_catalog (catalog_class, name, functionality) VALUES (?, ?, '')")
+
+	for _, item := range []struct{ class, name string }{
+		{"ITSM::ChangeManagement::Category", "1-very-low"},
+		{"ITSM::ChangeManagement::Category", "2-low"},
+		{"ITSM::ChangeManagement::Category", "3-normal"},
+		{"ITSM::ChangeManagement::Category", "4-high"},
+		{"ITSM::ChangeManagement::Category", "5-very-high"},
+		{"ITSM::ChangeManagement::Impact", "1-very-low"},
+		{"ITSM::ChangeManagement::Impact", "2-low"},
+		{"ITSM::ChangeManagement::Impact", "3-normal"},
+		{"ITSM::ChangeManagement::Impact", "4-high"},
+		{"ITSM::ChangeManagement::Impact", "5-very-high"},
+		{"ITSM::ChangeManagement::Priority", "1-very-low"},
+		{"ITSM::ChangeManagement::Priority", "2-low"},
+		{"ITSM::ChangeManagement::Priority", "3-normal"},
+		{"ITSM::ChangeManagement::Priority", "4-high"},
+		{"ITSM::ChangeManagement::Priority", "5-very-high"},
+		{"ITSM::ChangeManagement::Change::State", "requested"},
+		{"ITSM::ChangeManagement::Change::State", "pending-approval"},
+		{"ITSM::ChangeManagement::Change::State", "rejected"},
+		{"ITSM::ChangeManagement::Change::State", "approved"},
+		{"ITSM::ChangeManagement::Change::State", "in-progress"},
+		{"ITSM::ChangeManagement::Change::State", "pending-pir"},
+		{"ITSM::ChangeManagement::Change::State", "successful"},
+		{"ITSM::ChangeManagement::Change::State", "failed"},
+		{"ITSM::ChangeManagement::Change::State", "canceled"},
+		{"ITSM::ChangeManagement::Change::State", "retracted"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "created"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "accepted"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "ready"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "in-progress"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "closed"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "canceled"},
+		{"ITSM::ChangeManagement::WorkOrder::Type", "approval"},
+		{"ITSM::ChangeManagement::WorkOrder::Type", "workorder"},
+		{"ITSM::ChangeManagement::WorkOrder::Type", "backout"},
+		{"ITSM::ChangeManagement::WorkOrder::Type", "decision"},
+		{"ITSM::ChangeManagement::WorkOrder::Type", "pir"},
+	} {
+		if _, err := d.SQL.Exec(insert, item.class, item.name); err != nil {
+			return fmt.Errorf("seeding the change catalog's %s %s: %w", item.class, item.name, err)
+		}
+	}
+
+	return nil
 }
 
 // createGeneralCatalog keeps the general catalog, KIX18's general_catalog with

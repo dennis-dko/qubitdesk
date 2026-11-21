@@ -24,14 +24,26 @@ func shippedPriorities(t *testing.T) map[string]struct{} {
 }
 
 // shippedCatalogValues reads the values of the general catalog that ship, as
-// ticketStates reads the states.
+// ticketStates reads the states: the configuration items' lists, and change
+// management's, which a seed of its own adds without a functionality.
 func shippedCatalogValues(t *testing.T) map[string]struct{} {
-	return seededNames(t, "seedGeneralCatalog", `\{"[^"]+", "([a-z-]+)", "[a-z]*"\}`)
+	return both(seededNames(t, "seedGeneralCatalog", `\{"[^"]+", "([a-z-]+)", "[a-z]*"\}`),
+		seededNames(t, "seedChangeCatalog", `\{"[^"]+", "([a-z0-9-]+)"\}`))
 }
 
 // shippedCatalogClasses reads the classes of the general catalog that ship.
 func shippedCatalogClasses(t *testing.T) map[string]struct{} {
-	return seededNames(t, "seedGeneralCatalog", `\{"([^"]+)", "[a-z-]+", "[a-z]*"\}`)
+	return both(seededNames(t, "seedGeneralCatalog", `\{"([^"]+)", "[a-z-]+", "[a-z]*"\}`),
+		seededNames(t, "seedChangeCatalog", `\{"([^"]+)", "[a-z0-9-]+"\}`))
+}
+
+// both is the names of two seeds together.
+func both(a, b map[string]struct{}) map[string]struct{} {
+	for name := range b {
+		a[name] = struct{}{}
+	}
+
+	return a
 }
 
 // shippedTicketTypes reads the ticket types that ship, as ticketStates reads the
