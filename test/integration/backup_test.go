@@ -271,20 +271,38 @@ func TestABackupIsRestoredThroughTheInstallerOfANewInstallation(t *testing.T) {
 	back := restored.newClient()
 	back.signIn("wera@example.com", "another-password-1")
 
-	var tickets ticketList
-
-	back.must(back.api(http.MethodGet, "/tickets", nil), http.StatusOK).Data(t, &tickets)
-
-	if tickets.TotalCount != 1 || tickets.Items[0].Title != "Before the restore" ||
-		tickets.Items[0].AccountedMinutes != 15 {
-		t.Fatalf("after the restore Wera finds %+v, want her ticket with its 15 minutes\n%s", tickets, c.app.Log())
-	}
+	restoredTicketHasItsMinutes(t, back, c.app.Log)
 
 	again := restored.newClient()
 	again.signIn(adminEmail, "a-much-better-password")
 
 	if card := readBackupCard(t, again); card.Keep != 3 {
 		t.Errorf("the restored installation keeps %d backups, want the 3 its plan said", card.Keep)
+	}
+}
+
+// restoredTicketHasItsMinutes asks for the ticket Wera opened before the backup
+// was made, and the minutes she noted on it. Through the ticket itself, because
+// a listing answers no minutes: they are read with one ticket, as a reader
+// opens it.
+func restoredTicketHasItsMinutes(t *testing.T, back *client, log func() string) {
+	t.Helper()
+
+	var tickets ticketList
+
+	back.must(back.api(http.MethodGet, "/tickets", nil), http.StatusOK).Data(t, &tickets)
+
+	if tickets.TotalCount != 1 || tickets.Items[0].Title != "Before the restore" {
+		t.Fatalf("after the restore Wera finds %+v, want her ticket\n%s", tickets, log())
+	}
+
+	var ticket ticketResponse
+
+	back.must(back.api(http.MethodGet, ticketPath(tickets.Items[0].ID), nil), http.StatusOK).Data(t, &ticket)
+
+	if ticket.AccountedMinutes != 15 {
+		t.Fatalf("after the restore her ticket has %d minutes noted, want the 15 she noted before\n%s",
+			ticket.AccountedMinutes, log())
 	}
 }
 
@@ -564,15 +582,7 @@ func TestABackupMovesBetweenSQLiteAndTheSuitesDatabase(t *testing.T) {
 			back := (&app{App: c.app, t: t}).newClient()
 			back.signIn("wera@example.com", "another-password-1")
 
-			var tickets ticketList
-
-			back.must(back.api(http.MethodGet, "/tickets", nil), http.StatusOK).Data(t, &tickets)
-
-			if tickets.TotalCount != 1 || tickets.Items[0].Title != "Before the restore" ||
-				tickets.Items[0].AccountedMinutes != 15 {
-				t.Fatalf("after the restore Wera finds %+v, want her ticket with its 15 minutes\n%s",
-					tickets, c.app.Log())
-			}
+			restoredTicketHasItsMinutes(t, back, c.app.Log)
 
 			// And she opens another: the ids a restore wrote are taken, so a database
 			// that counts its own - PostgreSQL's sequences - has to count on from them.
