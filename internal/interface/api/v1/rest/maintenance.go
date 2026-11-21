@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // MaintenanceState reports whether the installation is out of service, and can

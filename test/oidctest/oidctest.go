@@ -20,7 +20,7 @@ import (
 
 // ClientID and ClientSecret are what the provider knows the application as.
 const (
-	ClientID     = "go-ticket-system"
+	ClientID     = "qubitdesk"
 	ClientSecret = "oidctest-client-secret"
 )
 

@@ -5,10 +5,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // openIDRoundLifetime is how long a round may spend at the provider: a password

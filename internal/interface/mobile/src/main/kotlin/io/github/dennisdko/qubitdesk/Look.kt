@@ -1,4 +1,4 @@
-package io.github.dennisdko.goticketsystem
+package io.github.dennisdko.qubitdesk
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image

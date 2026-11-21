@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // numbered lists the ids of the tickets found, so a failure says which.

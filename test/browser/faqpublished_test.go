@@ -9,7 +9,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // The knowledge base is read from outside the staff: somebody on the sign-in

@@ -138,13 +138,13 @@ func TestAdministeringTheInstanceRefusesWhatCannotBeStored(t *testing.T) {
 
 	checkRefusals(t, admin, []badRequest{
 		{"a database dialect nobody has", http.MethodPut, "/settings/datasource",
-			map[string]any{"dialect": "oracle", "name": "gts"}},
+			map[string]any{"dialect": "oracle", "name": "qubitdesk"}},
 		{"a SQLite connection with no file", http.MethodPut, "/settings/datasource",
 			map[string]any{"dialect": "sqlite", "name": ""}},
 		{"a PostgreSQL connection with no host", http.MethodPut, "/settings/datasource",
-			map[string]any{"dialect": "postgres", "name": "gts", "user": "gts"}},
+			map[string]any{"dialect": "postgres", "name": "qubitdesk", "user": "qubitdesk"}},
 		{"a database port that is a word", http.MethodPut, "/settings/datasource",
-			map[string]any{"dialect": "postgres", "name": "gts", "host": "db", "user": "u", "port": "prod"}},
+			map[string]any{"dialect": "postgres", "name": "qubitdesk", "host": "db", "user": "u", "port": "prod"}},
 		{"a directory enabled with no host", http.MethodPut, "/settings/ldap",
 			map[string]any{"enabled": true, "baseDn": "dc=example,dc=com",
 				"userFilter": "(uid=%s)", "port": 389, "defaultRole": "agent"}},

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // The navigation has its own line, centred, and nothing lies on top of anything.

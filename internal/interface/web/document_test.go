@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/interface/web"
+	"github.com/dennis-dko/qubitdesk/internal/interface/web"
 )
 
 // The page arrives already carrying the instance's own name.
 //
-// It used to arrive with "Go-Ticket-System" and a script that corrected it once
+// It used to arrive with "QubitDesk" and a script that corrected it once
 // /branding had answered, so every reload showed a name nobody chose for as long
 // as that request took. Reported twice, and both times the fix was on the wrong
 // side of the round trip: there is no arrangement of client code that wins a race
@@ -26,7 +26,7 @@ func TestTheDocumentCarriesTheConfiguredTitle(t *testing.T) {
 		t.Errorf("the page does not name the instance: %.200s", head(res.Body.String()))
 	}
 
-	if strings.Contains(res.Body.String(), "<title>Go-Ticket-System</title>") {
+	if strings.Contains(res.Body.String(), "<title>QubitDesk</title>") {
 		t.Error("the shipped title is still in the document somebody is sent")
 	}
 }
@@ -57,12 +57,12 @@ func TestAConfiguredTitleCannotCloseItsOwnTag(t *testing.T) {
 func TestAnEmptyTitleFallsBackToTheShippedOne(t *testing.T) {
 	server := brandedServer(web.Branding{Title: "   "})
 
-	if !strings.Contains(fetch(t, server, "/").Body.String(), "<title>Go-Ticket-System</title>") {
+	if !strings.Contains(fetch(t, server, "/").Body.String(), "<title>QubitDesk</title>") {
 		t.Error("an instance that has named itself nothing has no name at all")
 	}
 }
 
-// The page declares Go-Ticket-System's mark as it ships, whatever the installation is
+// The page declares QubitDesk's mark as it ships, whatever the installation is
 // called.
 //
 // These are index.html's own two links, served as written. The SVG and the .ico

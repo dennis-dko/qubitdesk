@@ -10,7 +10,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // signIn fills the form and submits it, the way a person does.
@@ -45,7 +45,7 @@ func (p *page) settleWizard() {
 		(async () => {
 			const csrf = document.cookie.split(';')
 				.map(c => c.trim())
-				.find(c => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const post = (path, body) => fetch(path, {
 				method: body === undefined ? 'POST' : 'PUT',
@@ -239,7 +239,7 @@ func (p *page) markTourSeen() {
 		(async () => {
 			const csrf = document.cookie.split(';')
 				.map(c => c.trim())
-				.find(c => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const res = await fetch('/api/v1/me/tour', {
 				method: 'PUT',
@@ -468,13 +468,13 @@ func TestASessionTheServerNoLongerAcceptsTakesTheScreenWithIt(t *testing.T) {
 	p.waitForFilled("#datasource-active")
 
 	p.run("type something", chromedp.SendKeys(
-		`#form-datasource [name="name"]`, "gts_live", chromedp.ByQuery))
+		`#form-datasource [name="name"]`, "qubitdesk_live", chromedp.ByQuery))
 
 	// The session ends underneath the page, which the page has no way of knowing.
 	p.run("end the session behind its back", chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map((c) => c.trim())
-				.find((c) => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+				.find((c) => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			await fetch('/api/v1/auth/logout', {
 				method: 'POST',
@@ -503,7 +503,7 @@ func TestASessionTheServerNoLongerAcceptsTakesTheScreenWithIt(t *testing.T) {
 
 	p.run("look behind it", chromedp.Evaluate(`
 		JSON.stringify({
-			drafts: Object.keys(sessionStorage).filter((k) => k.startsWith('gts.draft.')).length,
+			drafts: Object.keys(sessionStorage).filter((k) => k.startsWith('qubitdesk.draft.')).length,
 			account: Boolean(me.user),
 		})`, &left))
 

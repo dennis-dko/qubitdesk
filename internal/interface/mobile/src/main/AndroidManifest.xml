@@ -25,7 +25,7 @@
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rule"
         android:icon="@mipmap/ic_launcher"
-        android:label="Go-Ticket-System"
+        android:label="QubitDesk"
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         tools:ignore="DataExtractionRules">
@@ -51,7 +51,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:host="connect" android:scheme="go-ticket-system" />
+                <data android:host="connect" android:scheme="qubitdesk" />
             </intent-filter>
         </activity>
 

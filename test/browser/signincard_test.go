@@ -20,7 +20,7 @@ func TestTheSignInCardWelcomesByTheInstallationsName(t *testing.T) {
 	p := open(t)
 	p.readyAdmin()
 
-	// Titled "Ticketsystem". Go-Ticket-System's mark stands in the band beside
+	// Titled "Ticketsystem". QubitDesk's mark stands in the band beside
 	// the words whatever the logo is, so none is needed here.
 	p.storeBranding(t, "")
 
@@ -31,7 +31,7 @@ func TestTheSignInCardWelcomesByTheInstallationsName(t *testing.T) {
 
 	p.waitEvaluates("the heading of the sign-in card",
 		`document.querySelector('#login-screen h2')?.textContent.trim() ?? ''`,
-		"Welcome to Go-Ticket-System | Ticketsystem")
+		"Welcome to QubitDesk | Ticketsystem")
 
 	// The mark stands before the words, in the same band.
 	var placed struct {

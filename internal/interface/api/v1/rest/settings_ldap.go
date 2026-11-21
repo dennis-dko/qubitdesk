@@ -3,8 +3,8 @@ package rest
 import (
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // ldapAdmin is the subset of the LDAP client this handler drives, kept as an

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // A schedule names the minutes it says, in the zone of the moment it is asked

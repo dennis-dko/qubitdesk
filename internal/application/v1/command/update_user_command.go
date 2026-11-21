@@ -1,6 +1,6 @@
 package command
 
-import "github.com/dennis-dko/go-ticket-system/internal/application/v1/common"
+import "github.com/dennis-dko/qubitdesk/internal/application/v1/common"
 
 // UpdateUserCommand command to update existing user
 type UpdateUserCommand struct {

@@ -23,8 +23,8 @@ import (
 	"github.com/lib/pq"
 	_ "modernc.org/sqlite"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // DatasourceFile is where the administered database connection is stored.
@@ -458,7 +458,7 @@ func driverDSN(ds Datasource) (driver, dsn string, err error) {
 // compared with what went in.
 //
 // Measured, and the reason this exists: with no password a PostgreSQL connection
-// reads "password= dbname=gts", the driver takes "dbname=gts" for the password,
+// reads "password= dbname=qubitdesk", the driver takes "dbname=qubitdesk" for the password,
 // and the server opens the database named after the account. Against a server
 // that asks for no password the probe and GoFr both succeeded - and the
 // application created its tables in "postgres" while its log named the database

@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // ConfigItemRepository keeps the configuration items in config_items and their

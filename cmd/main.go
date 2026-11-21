@@ -25,27 +25,27 @@ import (
 	gofrmigration "gofr.dev/pkg/gofr/migration"
 	"modernc.org/sqlite"
 
-	appservice "github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	domainservice "github.com/dennis-dko/go-ticket-system/internal/domain/service"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/announce"
-	appconfig "github.com/dennis-dko/go-ticket-system/internal/infrastructure/config"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/directory"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/imageupdate"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/kerberos"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/logsink"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/openid"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/migration"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/selfupdate"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/tlsserver"
-	v1 "github.com/dennis-dko/go-ticket-system/internal/interface/api/v1"
-	"github.com/dennis-dko/go-ticket-system/internal/interface/api/v1/rest"
-	"github.com/dennis-dko/go-ticket-system/internal/interface/installer"
-	"github.com/dennis-dko/go-ticket-system/internal/interface/web"
-	"github.com/dennis-dko/go-ticket-system/internal/support/backup"
-	"github.com/dennis-dko/go-ticket-system/internal/support/hosting"
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	appservice "github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	domainservice "github.com/dennis-dko/qubitdesk/internal/domain/service"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/announce"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/directory"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/imageupdate"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/kerberos"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/logsink"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/openid"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/migration"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/selfupdate"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/tlsserver"
+	v1 "github.com/dennis-dko/qubitdesk/internal/interface/api/v1"
+	"github.com/dennis-dko/qubitdesk/internal/interface/api/v1/rest"
+	"github.com/dennis-dko/qubitdesk/internal/interface/installer"
+	"github.com/dennis-dko/qubitdesk/internal/interface/web"
+	"github.com/dennis-dko/qubitdesk/internal/support/backup"
+	"github.com/dennis-dko/qubitdesk/internal/support/hosting"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=...".
@@ -516,7 +516,7 @@ func main() {
 	if misread != nil {
 		app.Logger().Warnf("database: %v", misread)
 	}
-	app.Logger().Infof("Go-Ticket-System %s starting (dialect=%s)", version, cfg.Dialect)
+	app.Logger().Infof("QubitDesk %s starting (dialect=%s)", version, cfg.Dialect)
 
 	db := app.GetSQL()
 
@@ -750,7 +750,7 @@ func main() {
 	// What this installation is called in a language, wherever the server names
 	// it itself: the prompt a passkey device shows and an authenticator's entry.
 	//
-	// Without the settings it is still Go-Ticket-System, which is what it is
+	// Without the settings it is still QubitDesk, which is what it is
 	// called whatever they say.
 	instanceNameIn := func(ctx context.Context, language string) string {
 		branding, err := settingsService.Branding(ctx)
@@ -1126,7 +1126,7 @@ func main() {
 			// Present only where the deployment added the overlay that runs it;
 			// see deploy/compose.update.yaml for what that grants and why the
 			// application is not the thing granted it.
-			WithImageUpdater(imageupdate.New(os.Getenv("GTS_UPDATE_REQUESTS"))).
+			WithImageUpdater(imageupdate.New(os.Getenv("QUBITDESK_UPDATE_REQUESTS"))).
 			WithConnection(ds),
 		Backups:  rest.NewBackupHandler(backups, authorizer),
 		Holidays: rest.NewHolidayHandler(settingsService, authorizer),
@@ -1336,7 +1336,7 @@ func sayingWhy(all map[int64]gofrmigration.Migrate, console io.Writer) map[int64
 // Declaring is not publishing, which is worth knowing before writing an alert
 // against one of these. The registration creates the instrument; the exporter
 // emits a series only once it has a value, so a fresh installation that has had
-// no refused sign-in publishes no gts_signin_failures_total at all rather than
+// no refused sign-in publishes no qubitdesk_signin_failures_total at all rather than
 // publishing it as zero.
 //
 // So "nothing has gone wrong yet" and "this metric does not exist" are the same

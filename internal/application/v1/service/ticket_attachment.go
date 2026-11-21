@@ -4,8 +4,8 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // AddAttachment keeps a file with an article of a ticket the caller works on.

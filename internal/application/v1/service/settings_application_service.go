@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
-	"github.com/dennis-dko/go-ticket-system/internal/support/imaging"
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/imaging"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // maxLogoBytes caps the inline logo. It is stored as a data URI in the
@@ -58,7 +58,7 @@ func NewSettingsService(
 
 // Branding returns the instance labelling as it is stored.
 //
-// Nothing is filled in for a title nobody wrote: the name is Go-Ticket-System whatever
+// Nothing is filled in for a title nobody wrote: the name is QubitDesk whatever
 // is stored, and an empty title is an installation that adds nothing to it. It
 // used to be APP_NAME, which named installations after the process they ran in.
 func (s *SettingsService) Branding(ctx context.Context) (model.Branding, error) {

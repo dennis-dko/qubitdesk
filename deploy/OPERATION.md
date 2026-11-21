@@ -31,7 +31,7 @@ private interface, firewall it, or switch it off under *Settings*.
 | --- | --- | --- | --- |
 | **A** Compose | `docker compose up -d` | PostgreSQL, in the stack | `127.0.0.1:8000` |
 | **B** Compose + TLS | `docker compose -f compose.yaml -f compose.tls.yaml up -d` | PostgreSQL, in the stack | `:80` and `:443` |
-| **C** Single binary | `./go-ticket-system-web` | your choice, asked on first start | `:8000` |
+| **C** Single binary | `./qubitdesk-web` | your choice, asked on first start | `:8000` |
 | **D** Bare container | `docker run …` | asked on first start | `:8000` |
 
 A is the normal answer. B if nothing else terminates TLS. C for a small
@@ -80,7 +80,7 @@ Pin the version rather than following `latest`, so a restart cannot become an
 unplanned upgrade:
 
 ```bash
-GTS_VERSION=v1.2.3
+QUBITDESK_VERSION=v1.2.3
 ```
 
 ## B · Compose with TLS
@@ -118,16 +118,16 @@ out. Two certificates for one name means one renewal that quietly stops working.
 
 ## C · Single binary
 
-Download `go-ticket-system-web` for your platform from the release, check it
+Download `qubitdesk-web` for your platform from the release, check it
 against `SHA256SUMS`, and run it.
 
 ```bash
-mkdir -p /opt/gts/configs
-cd /opt/gts
+mkdir -p /opt/qubitdesk/configs
+cd /opt/qubitdesk
 cp /path/to/.env.binary.example configs/.env
 $EDITOR configs/.env
 chmod 600 configs/.env
-./go-ticket-system-web
+./qubitdesk-web
 ```
 
 **The working directory matters.** It is what `configs/` is resolved against, so
@@ -142,8 +142,8 @@ download against `SHA256SUMS`, then either press through the dialog or clear the
 download mark first:
 
 ```powershell
-Get-FileHash .\go-ticket-system-web_v1.2.3_windows_amd64.exe -Algorithm SHA256
-Unblock-File .\go-ticket-system-web_v1.2.3_windows_amd64.exe
+Get-FileHash .\qubitdesk-web_v1.2.3_windows_amd64.exe -Algorithm SHA256
+Unblock-File .\qubitdesk-web_v1.2.3_windows_amd64.exe
 ```
 
 Rolling this out to more than a handful of machines is the point at which a
@@ -156,16 +156,16 @@ A systemd unit that gets that right:
 
 ```ini
 [Unit]
-Description=Go-Ticket-System
+Description=QubitDesk
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=gts
-Group=gts
-WorkingDirectory=/opt/gts
-ExecStart=/opt/gts/go-ticket-system-web
+User=qubitdesk
+Group=qubitdesk
+WorkingDirectory=/opt/qubitdesk
+ExecStart=/opt/qubitdesk/qubitdesk-web
 Restart=on-failure
 RestartSec=5s
 
@@ -178,7 +178,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/gts
+ReadWritePaths=/opt/qubitdesk
 
 # Only needed when this process terminates TLS itself. Without it an
 # unprivileged user cannot bind 443 or 80 - see below, because the way that
@@ -199,7 +199,7 @@ the certificate cache — all under its working directory and nowhere else.
 Two things to know before you switch `TLS_ENABLED=true` on a host.
 
 **Uncomment the two capability lines.** A container gets low ports for free; a
-host does not. As written, the unit runs as `gts` with `NoNewPrivileges=true`, so
+host does not. As written, the unit runs as `qubitdesk` with `NoNewPrivileges=true`, so
 binding 443 and 80 fails with "permission denied".
 
 In the unit, and not with `setcap` on the binary. An update from the interface
@@ -232,8 +232,8 @@ still the tidier arrangement and nothing here argues against it.
 ## D · Bare container
 
 ```bash
-docker run -d -p 8000:8000 -v gts-data:/data --stop-timeout 45 \
-  ghcr.io/dennis-dko/go-ticket-system:v1.2.3
+docker run -d -p 8000:8000 -v qubitdesk-data:/data --stop-timeout 45 \
+  ghcr.io/dennis-dko/qubitdesk:v1.2.3
 ```
 
 With no `DB_DIALECT` this serves its **installer** and waits — that is on
@@ -250,7 +250,7 @@ the two together.
 The image bakes in exactly one variable:
 
 ```ini
-DB_NAME=/data/go-ticket-system
+DB_NAME=/data/qubitdesk
 ```
 
 That is the path already filled in if you pick SQLite in the installer, which is
@@ -325,9 +325,9 @@ because every built-in fallback was already identical to the line that was
 removed; what changed is that there is now one place per value instead of two,
 and the file's copy was always the losing one.
 
-**`APP_NAME` names nothing on screen.** Every installation is called Go-Ticket-System.
+**`APP_NAME` names nothing on screen.** Every installation is called QubitDesk.
 What is written under *Settings → Appearance* is added to that name after a bar,
-as in *Go-Ticket-System | htp.net*. That full name appears in the header, the browser tab,
+as in *QubitDesk | htp.net*. That full name appears in the header, the browser tab,
 an authenticator app, a passkey prompt, the foot of an exported document and a
 subscribed calendar. The browser tab can be given a shorter addition of its own.
 `APP_NAME` belongs to the framework: traces are recorded under it, and
@@ -434,8 +434,8 @@ already have:
 
 ```bash
 TLS_ENABLED=true
-TLS_CERT_FILE=/etc/gts/fullchain.pem
-TLS_KEY_FILE=/etc/gts/privkey.pem
+TLS_CERT_FILE=/etc/qubitdesk/fullchain.pem
+TLS_KEY_FILE=/etc/qubitdesk/privkey.pem
 ```
 
 Nothing is requested from anybody: no domain, no challenge, no authority, so
@@ -605,19 +605,19 @@ holding it for the rest of its life to use it once.
 
 ```sql
 -- PostgreSQL
-CREATE DATABASE "go-ticket-system";
-CREATE USER gts WITH PASSWORD 'choose-something';
-GRANT ALL PRIVILEGES ON DATABASE "go-ticket-system" TO gts;
+CREATE DATABASE "qubitdesk";
+CREATE USER qubitdesk WITH PASSWORD 'choose-something';
+GRANT ALL PRIVILEGES ON DATABASE "qubitdesk" TO qubitdesk;
 -- PostgreSQL 15 and later also need the schema itself:
-\connect "go-ticket-system"
-GRANT ALL ON SCHEMA public TO gts;
+\connect "qubitdesk"
+GRANT ALL ON SCHEMA public TO qubitdesk;
 ```
 
 ```sql
 -- MySQL / MariaDB
-CREATE DATABASE `go-ticket-system` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'gts'@'%' IDENTIFIED BY 'choose-something';
-GRANT ALL PRIVILEGES ON `go-ticket-system`.* TO 'gts'@'%';
+CREATE DATABASE `qubitdesk` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'qubitdesk'@'%' IDENTIFIED BY 'choose-something';
+GRANT ALL PRIVILEGES ON `qubitdesk`.* TO 'qubitdesk'@'%';
 ```
 
 `utf8mb4` matters on MySQL: names, ticket titles and the notice on the sign-in
@@ -716,13 +716,13 @@ command on the server, where the application runs:
 
 ```bash
 # A · B
-docker compose exec app /app/go-ticket-system-web recover
+docker compose exec app /app/qubitdesk-web recover
 
 # C - from the directory the service starts in, as the user it runs as
-cd /opt/gts && sudo -u go-ticket-system ./go-ticket-system-web recover
+cd /opt/qubitdesk && sudo -u qubitdesk ./qubitdesk-web recover
 
 # D
-docker exec <container> /app/go-ticket-system-web recover
+docker exec <container> /app/qubitdesk-web recover
 ```
 
 It prints a new password for `admin@local`, once. Signing in with it asks for a
@@ -767,7 +767,7 @@ the grounds that a changed host is a change to the same connection — which
 describes what the card *says* and answers the wrong question, because the
 connection is opened once while the application starts. Moving the database to
 another host is exactly as pending as moving it to another dialect, and it now
-reads as one line: `postgres app@db:5432/gts` → `postgres app@db2:5432/gts`. A default port and an omitted one are the same connection here as they
+reads as one line: `postgres app@db:5432/qubitdesk` → `postgres app@db2:5432/qubitdesk`. A default port and an omitted one are the same connection here as they
 are in fact, so spelling out `5432` is not reported as a change.
 
 A changed password appears as *Database password* with nothing beside it. The
@@ -795,7 +795,7 @@ equivalent would leave a window with no application running. The card says so.
 
 ## If the tab icon does not appear
 
-The tab shows Go-Ticket-System's mark whatever logo is configured: the page declares
+The tab shows QubitDesk's mark whatever logo is configured: the page declares
 `/favicon.svg`, with `/favicon.ico` beside it for whatever asks for that by name.
 A configured logo is drawn at the left of the bar after signing in, and nowhere
 else.
@@ -829,7 +829,7 @@ Two caveats that decide whether your alerting is worth anything:
   `version` field — that is the application and nothing else.
 
 A metric is published only once it has a value. An installation that has had no
-refused sign-in publishes no `gts_signin_failures_total` at all, rather than
+refused sign-in publishes no `qubitdesk_signin_failures_total` at all, rather than
 publishing zero. Treat an absent series as absent — `absent()` — not as a healthy
 zero.
 
@@ -1054,7 +1054,7 @@ a restart.
 - **C · single binary:** `KERBEROS_KEYTAB` in the environment file — the
   keytab's path, readable by the service's user.
 - **D · bare container:** mount it and name it:
-  `-v /etc/go-ticket-system/http.keytab:/run/secrets/http.keytab:ro -e KERBEROS_KEYTAB=/run/secrets/http.keytab`.
+  `-v /etc/qubitdesk/http.keytab:/run/secrets/http.keytab:ro -e KERBEROS_KEYTAB=/run/secrets/http.keytab`.
 
 `KERBEROS_SERVICE_PRINCIPAL` is only needed when the keytab holds keys for more
 than one service: it names the one to use, `HTTP/tickets.example.com`, with or
@@ -1166,7 +1166,7 @@ that difference is the whole of it.
 | | What the card offers |
 | --- | --- |
 | **C** Single binary | A button. It downloads the release's binary for this platform, checks it against the `SHA256SUMS` published beside it, and puts it where the running file is. |
-| **A/B/D** Container | No button. The card says a newer version exists, which command updates the image - `docker compose pull && docker compose up -d` - and that adding `compose.update.yaml` lets it do that from here. Under it, it names what that command does not take as it stands: overlays given with `-f`, as in B, which both commands need again unless `COMPOSE_FILE` in `.env` lists them; a version pinned in `GTS_VERSION`, which has to be raised first; and a container started with `docker run`, as in D, which is pulled, removed and started again with the same options. |
+| **A/B/D** Container | No button. The card says a newer version exists, which command updates the image - `docker compose pull && docker compose up -d` - and that adding `compose.update.yaml` lets it do that from here. Under it, it names what that command does not take as it stands: overlays given with `-f`, as in B, which both commands need again unless `COMPOSE_FILE` in `.env` lists them; a version pinned in `QUBITDESK_VERSION`, which has to be raised first; and a container started with `docker run`, as in D, which is pulled, removed and started again with the same options. |
 | **A/B/D** Container **with `compose.update.yaml`** | A button that pulls a new image, recreates the container from it, and removes the image it replaced. Nothing is left behind. |
 
 **Why a container without the overlay gets no button.** A binary swapped inside
@@ -1242,8 +1242,8 @@ recreate failed. Either way the restart announcement is taken back on every scre
 and the card says which it was - for a failure, in the updater's own words.
 
 **Nothing newer is what a pinned version finds.** The updater pulls the tag the
-compose file names. Where `GTS_VERSION` names a version that tag does not move,
-so every press finds the image already running: change `GTS_VERSION` and recreate by
+compose file names. Where `QUBITDESK_VERSION` names a version that tag does not move,
+so every press finds the image already running: change `QUBITDESK_VERSION` and recreate by
 hand instead, or leave it unset to follow `latest`.
 
 **Nothing is written into place unverified.** The download is hashed while it is
@@ -1302,14 +1302,14 @@ application not coming back.
 
 ### The file keeps its name
 
-A release is published as `go-ticket-system-web_v1.2.3_windows_amd64.exe`, so
+A release is published as `qubitdesk-web_v1.2.3_windows_amd64.exe`, so
 a manual download says which version it is in its own name. An update installed
 from the interface does not rename anything: the new version is written to the
 path the running one already occupies, whatever that path is called.
 
 A version from before the binary was called `-web` cannot update itself from
 the interface to one that is: it asks the release for
-`go-ticket-system_v1.2.3_windows_amd64.exe`, and releases no longer carry that
+`qubitdesk_v1.2.3_windows_amd64.exe`, and releases no longer carry that
 name. Replace it by hand once - stop it, put the new file where the old one
 was, under the name the old one had, start it - and from then on it updates
 itself again.
@@ -1322,7 +1322,7 @@ application offline and leaves no obvious reason why.
 Which version a file is stays answerable three ways:
 
 ```bash
-./go-ticket-system-web --version
+./qubitdesk-web --version
 ```
 
 On Windows, right-click → *Properties* → *Details*: the published binaries carry
@@ -1332,7 +1332,7 @@ being asked. And the footer of the interface names it beside the platform.
 ### Going back
 
 The version being replaced is kept, on both platforms, beside the binary as
-`go-ticket-system-web.old`. It stays there until the *next* update, which removes it
+`qubitdesk-web.old`. It stays there until the *next* update, which removes it
 as its first act - so there is always exactly one version to go back to, and
 never two.
 
@@ -1342,12 +1342,12 @@ taken, or a certificate it cannot read. At that point there is no interface to
 press anything in, which is why the way back is a flag rather than a button:
 
 ```bash
-./go-ticket-system-web --rollback
+./qubitdesk-web --rollback
 # the previous version is back in place; start it again
 ```
 
 It moves two files: the version that would not serve becomes
-`go-ticket-system-web.failed`, kept so it can be looked at, and `.old` takes its
+`qubitdesk-web.failed`, kept so it can be looked at, and `.old` takes its
 name back. No database, no configuration, nothing else touched. Start it as you
 normally would.
 
@@ -1431,7 +1431,7 @@ together, and somewhere other than the server whose backups they open.
 
 **Where they are kept.** `BACKUP_DIR`: `backups` beside `configs/` for a binary,
 `/data/backups` on the `app-data` volume under Compose. Each file is named for
-the moment it was made, in UTC - `gts-20261119-030000.gtsbak`. That folder
+the moment it was made, in UTC - `qubitdesk-20261119-030000.qdbak`. That folder
 is on the server the backups are of, so copy it off the server, or download the
 files: a backup that burns with the disk it describes is not one.
 
@@ -1450,7 +1450,7 @@ A backup is restored through the **installer**, into an **empty** database of
 any dialect - one made on SQLite restores into PostgreSQL, and the other way
 round:
 
-1. Start Go-Ticket-System so that it serves its installer, with the `SECRET_KEY` this
+1. Start QubitDesk so that it serves its installer, with the `SECRET_KEY` this
    installation is to keep - the one the backup's installation had, another, or
    none. A binary or a bare container serves the installer when no database is
    configured (see *First start*). Compose configures one itself, so run the
@@ -1465,7 +1465,7 @@ round:
 2. Choose the database, choose *Restore a backup into it*, choose the file and type
    its `BACKUP_PASSPHRASE`. The installer reads it whole there and then, so a
    wrong passphrase, a file that is not a backup, one cut short on its way and
-   one made by a newer version of Go-Ticket-System are said on that page - the restore
+   one made by a newer version of QubitDesk are said on that page - the restore
    itself runs after the installer has handed over, where a refusal can only end
    the process.
 
@@ -1501,17 +1501,17 @@ instance timezone, the directory configuration *including its bind password*,
 telemetry and the operational limits. A server-side dump is the backup.
 
 ```bash
-docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | gzip > gts-$(date +%F).sql.gz
+docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | gzip > qubitdesk-$(date +%F).sql.gz
 ```
 
 **SQLite** — the file is `<DB_NAME>.db`, with a trailing `.db` in `DB_NAME`
-trimmed first. In the image that is `/data/go-ticket-system.db` on the `/data`
+trimmed first. In the image that is `/data/qubitdesk.db` on the `/data`
 volume; for a binary it is relative to the working directory. The application
 runs SQLite in write-ahead logging mode, so a copy taken while the process runs
 must include the `-wal` and `-shm` sidecars, or use SQLite's own backup:
 
 ```bash
-sqlite3 /data/go-ticket-system.db ".backup '/backup/gts-$(date +%F).db'"
+sqlite3 /data/qubitdesk.db ".backup '/backup/qubitdesk-$(date +%F).db'"
 ```
 
 **Two paths matter whatever the dialect:**
@@ -1530,10 +1530,10 @@ start-up, and they run forward only.
 
 ```bash
 # A · B
-GTS_VERSION=v1.3.0 docker compose up -d      # after a backup
+QUBITDESK_VERSION=v1.3.0 docker compose up -d      # after a backup
 
 # C
-systemctl stop gts && cp go-ticket-system-web_v1.3.0_linux_amd64 /opt/gts/go-ticket-system-web && systemctl start gts
+systemctl stop qubitdesk && cp qubitdesk-web_v1.3.0_linux_amd64 /opt/qubitdesk/qubitdesk-web && systemctl start qubitdesk
 ```
 
 The schema migrates itself on the way up. There is no separate command, and

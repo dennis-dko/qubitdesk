@@ -17,7 +17,7 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // interactionTimeout bounds one test. Generous, because a cold browser start
@@ -379,7 +379,7 @@ func (p *page) jsBroken() bool {
 	// If app.js failed to parse or threw during init, the functions it defines
 	// are not there.
 	p.run("check that the script initialised",
-		chromedp.Evaluate(`typeof window.gtsTheme === 'object'`, &ok))
+		chromedp.Evaluate(`typeof window.qubitDeskTheme === 'object'`, &ok))
 
 	return !ok
 }

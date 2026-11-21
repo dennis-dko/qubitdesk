@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // A migration that fails says so where whoever runs the installation will look.

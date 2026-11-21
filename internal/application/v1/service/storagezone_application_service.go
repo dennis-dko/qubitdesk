@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
 )
 
 // StorageZoneService answers one question at start-up on a database that keeps a

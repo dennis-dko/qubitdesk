@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/interface/web"
-	"github.com/dennis-dko/go-ticket-system/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/interface/web"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // A language's dictionary is handed to the page as the binary carries it, at an

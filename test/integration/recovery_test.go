@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // enableTOTP turns a second factor on for whoever c is signed in as.

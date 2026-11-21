@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
 )
 
 // These settings reach GoFr through the process environment, which is the only

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/spreadsheet"
+	"github.com/dennis-dko/qubitdesk/internal/support/spreadsheet"
 )
 
 // Accounts and roles go in and out as a spreadsheet too, each from its own screen.

@@ -1,4 +1,4 @@
-package io.github.dennisdko.goticketsystem
+package io.github.dennisdko.qubitdesk
 
 import java.math.BigDecimal
 import java.math.RoundingMode

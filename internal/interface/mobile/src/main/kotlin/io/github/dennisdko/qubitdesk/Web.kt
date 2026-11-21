@@ -1,4 +1,4 @@
-package io.github.dennisdko.goticketsystem
+package io.github.dennisdko.qubitdesk
 
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
@@ -196,7 +196,7 @@ private class Files(private val onSave: (String, ByteArray) -> Unit) {
 }
 
 /** filesInterface is the name the page reaches [Files] by, which res/raw/keep_download.js calls. */
-private const val filesInterface = "GoTicketSystemFiles"
+private const val filesInterface = "QubitDeskFiles"
 
 /**
  * Session is how the page tells the app that its session ended without its
@@ -211,7 +211,7 @@ private class Session(private val ended: () -> Unit) {
 }
 
 /** sessionInterface is the name the page reaches [Session] by, which app.js tells when its session has ended. */
-private const val sessionInterface = "GoTicketSystemSession"
+private const val sessionInterface = "QubitDeskSession"
 
 /** signsOut says whether a request is the web interface signing out of the installation the app shows. */
 fun signsOut(address: String, url: String): Boolean =

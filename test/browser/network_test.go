@@ -14,8 +14,8 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/test/harness"
-	"github.com/dennis-dko/go-ticket-system/test/tempdir"
+	"github.com/dennis-dko/qubitdesk/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/tempdir"
 )
 
 // A browser this suite starts asks no resolver about any name but localhost.

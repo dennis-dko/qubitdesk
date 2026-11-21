@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/imaging"
+	"github.com/dennis-dko/qubitdesk/internal/support/imaging"
 )
 
 // icoSizes are the frames Windows asks for.

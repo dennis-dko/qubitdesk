@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // The time between answers is counted as OTRS counts it: from the agent's last

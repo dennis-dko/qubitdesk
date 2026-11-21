@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	appconfig "github.com/dennis-dko/go-ticket-system/internal/infrastructure/config"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
-	"github.com/dennis-dko/go-ticket-system/internal/support/i18n"
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 //go:embed asset/install.html

@@ -1,4 +1,4 @@
-package io.github.dennisdko.goticketsystem
+package io.github.dennisdko.qubitdesk
 
 import android.app.Application
 import android.content.pm.PackageInstaller

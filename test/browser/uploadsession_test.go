@@ -10,7 +10,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/spreadsheet"
+	"github.com/dennis-dko/qubitdesk/internal/support/spreadsheet"
 )
 
 // A session that has ended takes the screen with it, uploads included.

@@ -3,8 +3,8 @@ package rest
 import (
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	appconfig "github.com/dennis-dko/go-ticket-system/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
 )
 
 // TelemetryResponse carries the administered metrics and tracing settings

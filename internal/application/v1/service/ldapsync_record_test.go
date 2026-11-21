@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
 )
 
 // A run that removed somebody leaves a record of it that no log level can switch

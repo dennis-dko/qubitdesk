@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // Every kind of thing that happens to a ticket is shown as a sentence, and the

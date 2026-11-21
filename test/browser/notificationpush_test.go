@@ -56,7 +56,7 @@ func TestALateNotificationIsShownWhileItIsUnread(t *testing.T) {
 	p.awaitJSON(`(async () => (await api('/me/notifications')).items[0].id)()`, &id)
 
 	about := strconv.FormatUint(uint64(id), 10)
-	tag := "gts-notification-" + about
+	tag := "qubitdesk-notification-" + about
 	late := time.Now().UTC().Add(-30 * time.Minute).Format(time.RFC3339)
 	push := p.pusher()
 

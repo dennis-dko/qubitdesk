@@ -115,9 +115,9 @@ and never comes near either number.
 Every user can issue their own tokens under **My account**:
 
 ```bash
-curl -H "Authorization: Bearer gts_xxxxx" https://your-host/api/v1/me
+curl -H "Authorization: Bearer qubitdesk_xxxxx" https://your-host/api/v1/me
 # or
-curl -H "X-API-Token: gts_xxxxx" https://your-host/api/v1/me
+curl -H "X-API-Token: qubitdesk_xxxxx" https://your-host/api/v1/me
 ```
 
 A token carries **no rights of its own**. Every request is evaluated against

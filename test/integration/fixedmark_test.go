@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/imaging"
+	"github.com/dennis-dko/qubitdesk/internal/support/imaging"
 )
 
-// aLogo is a one-pixel PNG: an uploaded logo that is plainly not Go-Ticket-System's mark.
+// aLogo is a one-pixel PNG: an uploaded logo that is plainly not QubitDesk's mark.
 const aLogo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 
-// The tab and the installed app show Go-Ticket-System's mark, whatever logo an
+// The tab and the installed app show QubitDesk's mark, whatever logo an
 // installation has uploaded.
 //
 // An uploaded logo used to become the tab's icon and the installed app's: the
@@ -25,7 +25,7 @@ const aLogo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcS
 // and nowhere else. So with a logo saved, the document still names favicon.svg,
 // and the app's icon at the size a home screen asks for is the mark as
 // imaging.Mark draws it, byte for byte.
-func TestTheTabAndTheAppKeepGoTicketSystemsMarkWhateverTheLogo(t *testing.T) {
+func TestTheTabAndTheAppKeepQubitDesksMarkWhateverTheLogo(t *testing.T) {
 	t.Parallel()
 
 	a := start(t)
@@ -39,7 +39,7 @@ func TestTheTabAndTheAppKeepGoTicketSystemsMarkWhateverTheLogo(t *testing.T) {
 	if !strings.Contains(page, `<link rel="icon" type="image/svg+xml" href="/favicon.svg">`) ||
 		strings.Contains(page, `href="/favicon?`) {
 		at := strings.Index(page, `rel="icon"`)
-		t.Errorf("with a logo saved, the tab is not pointed at Go-Ticket-System's mark: %.200s", page[max(0, at-20):])
+		t.Errorf("with a logo saved, the tab is not pointed at QubitDesk's mark: %.200s", page[max(0, at-20):])
 	}
 
 	var manifest struct {
@@ -69,7 +69,7 @@ func TestTheTabAndTheAppKeepGoTicketSystemsMarkWhateverTheLogo(t *testing.T) {
 		served = true
 
 		if body := admin.must(admin.do(http.MethodGet, icon.Src, nil), http.StatusOK).Body; !bytes.Equal(body, mark) {
-			t.Errorf("with a logo saved, the installed app's icon at 192 is not Go-Ticket-System's mark (%d bytes)", len(body))
+			t.Errorf("with a logo saved, the installed app's icon at 192 is not QubitDesk's mark (%d bytes)", len(body))
 		}
 	}
 

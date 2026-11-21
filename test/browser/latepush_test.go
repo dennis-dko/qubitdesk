@@ -41,9 +41,9 @@ func TestANotificationPushedLateIsShownOnlyWhileItCanBeConfirmed(t *testing.T) {
 	onTime := time.Now().UTC().Format(time.RFC3339)
 	late := time.Now().UTC().Add(-30 * time.Minute).Format(time.RFC3339)
 
-	push.until("on time", "gts-ticket-42", "on time", onTime, "42")
-	push.once("late, about something nothing here can ask about", "gts-ticket-42", "late", late, "42")
-	p.waitForNoNotification("gts-ticket-42", "a late notification nothing could confirm")
+	push.until("on time", "qubitdesk-ticket-42", "on time", onTime, "42")
+	push.once("late, about something nothing here can ask about", "qubitdesk-ticket-42", "late", late, "42")
+	p.waitForNoNotification("qubitdesk-ticket-42", "a late notification nothing could confirm")
 }
 
 // pusher delivers pushes to the page's service worker, as the browser's own tools

@@ -18,11 +18,11 @@
 # either of those arrangements. It sets nothing on the application: tracing is
 # switched on under Settings, not here.
 
-name: go-ticket-system
+name: qubitdesk
 
 services:
   app:
-    image: ${GTS_IMAGE:-ghcr.io/dennis-dko/go-ticket-system}:${GTS_VERSION:-latest}
+    image: ${QUBITDESK_IMAGE:-ghcr.io/dennis-dko/qubitdesk}:${QUBITDESK_VERSION:-latest}
     restart: unless-stopped
     # Longer than the application takes to stop: it waits for requests in flight
     # for SHUTDOWN_GRACE_PERIOD, 30s by default, and then up to ten seconds for
@@ -47,7 +47,7 @@ services:
       # between the two containers is not crossing anything hostile.
       DB_SSL_MODE: disable
 
-      APP_NAME: ${APP_NAME:-Go-Ticket-System}
+      APP_NAME: ${APP_NAME:-QubitDesk}
 
       # Encrypts the second factors, the directory password, a sign-in provider's
       # client secret and the push key in the database.

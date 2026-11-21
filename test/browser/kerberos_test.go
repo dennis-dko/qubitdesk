@@ -17,9 +17,9 @@ import (
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
-	"github.com/dennis-dko/go-ticket-system/test/kerberostest"
-	"github.com/dennis-dko/go-ticket-system/test/tempdir"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/test/kerberostest"
+	"github.com/dennis-dko/qubitdesk/test/tempdir"
 )
 
 // Signing in with the browser's Kerberos ticket, as the sign-in screen does it.
@@ -31,7 +31,7 @@ import (
 // the browser's business, and what the page does with the answer is this file's.
 //
 // Three of the four need the seeded directory, because a ticket's owner is looked
-// up there, and skip without GTS_TEST_LDAP. CI runs them in the job that starts
+// up there, and skip without QUBITDESK_TEST_LDAP. CI runs them in the job that starts
 // one, and fails that job when they skip.
 
 // kerberosSecret derives the test keytab's key, and seals every ticket here.
@@ -43,19 +43,19 @@ const kerberosSecret = "the-service-secret"
 func ticketsReady(t *testing.T) *page {
 	t.Helper()
 
-	address := os.Getenv("GTS_TEST_LDAP")
+	address := os.Getenv("QUBITDESK_TEST_LDAP")
 	if address == "" {
-		t.Skip("GTS_TEST_LDAP is not set; start test/docker-compose.yml's ldap profile to run this")
+		t.Skip("QUBITDESK_TEST_LDAP is not set; start test/docker-compose.yml's ldap profile to run this")
 	}
 
 	host, rawPort, err := net.SplitHostPort(address)
 	if err != nil {
-		t.Fatalf("GTS_TEST_LDAP must be host:port, got %q: %v", address, err)
+		t.Fatalf("QUBITDESK_TEST_LDAP must be host:port, got %q: %v", address, err)
 	}
 
 	port, err := strconv.Atoi(rawPort)
 	if err != nil {
-		t.Fatalf("GTS_TEST_LDAP has a port that is not a number: %q", rawPort)
+		t.Fatalf("QUBITDESK_TEST_LDAP has a port that is not a number: %q", rawPort)
 	}
 
 	p := openWith(t, "KERBEROS_KEYTAB="+kerberostest.KeytabFile(t, tempdir.New(t), kerberosSecret))
@@ -67,7 +67,7 @@ func ticketsReady(t *testing.T) *page {
 	p.run("point the installation at the seeded directory", chromedp.Evaluate(fmt.Sprintf(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const r = await fetch('/api/v1/settings/ldap', {
 				method: 'PUT',
@@ -75,7 +75,7 @@ func ticketsReady(t *testing.T) *page {
 				headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
 				body: JSON.stringify({
 					enabled: true, host: %q, port: %d, startTls: false, useTls: false,
-					bindDn: 'cn=admin,dc=example,dc=com', bindPassword: 'gts-test-password',
+					bindDn: 'cn=admin,dc=example,dc=com', bindPassword: 'qubitdesk-test-password',
 					baseDn: 'dc=example,dc=com', userFilter: '(|(uid=%%s)(mail=%%s))',
 					nameAttribute: 'cn', emailAttribute: 'mail', idAttribute: 'entryUUID',
 					defaultRole: 'agent',
@@ -323,7 +323,7 @@ func TestWithoutATicketThePageIsLeftAtTheForm(t *testing.T) {
 	var held bool
 
 	p.run("read what the tab remembers", chromedp.Evaluate(
-		`sessionStorage.getItem('gts.kerberos.heldBack') === '1'`, &held))
+		`sessionStorage.getItem('qubitdesk.kerberos.heldBack') === '1'`, &held))
 
 	if !held {
 		t.Error("a ticket the browser could not present will be tried again at every reload")

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 func (r *TicketRepository) PendingDue(_ context.Context, stateIDs []uint, now time.Time) ([]*model.Ticket, error) {

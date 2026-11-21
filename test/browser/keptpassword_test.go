@@ -47,8 +47,8 @@ func TestTheDatabasePasswordIsShownFilledAndNeverHeld(t *testing.T) {
 				return Promise.resolve({
 					dialect: '', name: '', host: '', port: '', user: '', sslMode: '',
 					hasPassword: false, stored: false, active: 'postgres',
-					running: { dialect: 'postgres', name: 'gts', host: 'db', port: '5432',
-						user: 'gts', sslMode: 'disable' },
+					running: { dialect: 'postgres', name: 'qubitdesk', host: 'db', port: '5432',
+						user: 'qubitdesk', sslMode: 'disable' },
 					runningHasPassword: true,
 				});
 			}
@@ -101,8 +101,8 @@ func TestTheDatabasePasswordIsShownFilledAndNeverHeld(t *testing.T) {
 	read("read the card")
 
 	want := map[string]string{
-		"dialect": "postgres", "name": "gts", "host": "db", "port": "5432",
-		"user": "gts", "sslMode": "disable",
+		"dialect": "postgres", "name": "qubitdesk", "host": "db", "port": "5432",
+		"user": "qubitdesk", "sslMode": "disable",
 	}
 
 	for name, value := range want {

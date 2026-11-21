@@ -1,4 +1,4 @@
-package io.github.dennisdko.goticketsystem
+package io.github.dennisdko.qubitdesk
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

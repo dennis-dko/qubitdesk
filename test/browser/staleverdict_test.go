@@ -10,7 +10,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/spreadsheet"
+	"github.com/dennis-dko/qubitdesk/internal/support/spreadsheet"
 )
 
 // Choosing another file takes the last file's verdict off the screen for good.

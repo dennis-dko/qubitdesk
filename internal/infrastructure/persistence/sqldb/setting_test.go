@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
 )
 
 // A key stored as nothing is told apart from a key not stored, and deleting a

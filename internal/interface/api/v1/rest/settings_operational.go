@@ -3,7 +3,7 @@ package rest
 import (
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // OperationalResponse carries the administered limits together with what the

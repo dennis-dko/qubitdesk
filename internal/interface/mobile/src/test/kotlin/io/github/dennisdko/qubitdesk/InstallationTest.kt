@@ -1,4 +1,4 @@
-package io.github.dennisdko.goticketsystem
+package io.github.dennisdko.qubitdesk
 
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
@@ -39,11 +39,11 @@ class InstallationTest {
     @Test
     fun aTokenTakenBackIsToldApartFromOtherRefusals() {
         answering(401) { address ->
-            assertThrows(TokenRefused::class.java) { runBlocking { Installation(address, english).handOver("gts_gone") } }
+            assertThrows(TokenRefused::class.java) { runBlocking { Installation(address, english).handOver("qubitdesk_gone") } }
         }
 
         answering(500) { address ->
-            val opening = assertThrows(Refused::class.java) { runBlocking { Installation(address, english).handOver("gts_kept") } }
+            val opening = assertThrows(Refused::class.java) { runBlocking { Installation(address, english).handOver("qubitdesk_kept") } }
 
             assertFalse("a failing installation is taken for a token taken back", opening is TokenRefused)
         }
@@ -71,18 +71,18 @@ class InstallationTest {
         }
     }
 
-    // A token's session comes back under the name Go-Ticket-System gives it, and an
+    // A token's session comes back under the name QubitDesk gives it, and an
     // answer without it is not this application's.
     @Test
     fun aSessionIsTakenUnderItsName() {
-        openingWith("gts_session") { address ->
-            val cookies = runBlocking { Installation(address, english).handOver("gts_abc123") }
+        openingWith("qubitdesk_session") { address ->
+            val cookies = runBlocking { Installation(address, english).handOver("qubitdesk_abc123") }
 
-            assertTrue("the session was not taken", cookies.any { it.startsWith("gts_session=") })
+            assertTrue("the session was not taken", cookies.any { it.startsWith("qubitdesk_session=") })
         }
 
         openingWith(null) { address ->
-            assertThrows(Refused::class.java) { runBlocking { Installation(address, english).handOver("gts_abc123") } }
+            assertThrows(Refused::class.java) { runBlocking { Installation(address, english).handOver("qubitdesk_abc123") } }
         }
     }
 }

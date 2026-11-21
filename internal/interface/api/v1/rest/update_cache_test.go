@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/announce"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/selfupdate"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/announce"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/selfupdate"
 )
 
 // The release feed is asked rarely, and a refusal does not erase what it said.

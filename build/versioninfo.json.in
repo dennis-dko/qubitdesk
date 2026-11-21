@@ -15,10 +15,10 @@
   "StringFileInfo": {
     "CompanyName": "Dennis Köhler",
     "FileDescription": "Project time tracking: REST API and web interface in one file",
-    "InternalName": "go-ticket-system-web",
+    "InternalName": "qubitdesk-web",
     "LegalCopyright": "Copyright (c) 2025-2026 Dennis Köhler. MIT licence.",
-    "OriginalFilename": "go-ticket-system-web.exe",
-    "ProductName": "Go-Ticket-System",
+    "OriginalFilename": "qubitdesk-web.exe",
+    "ProductName": "QubitDesk",
     "FileVersion": "0.0.0.0",
     "ProductVersion": "0.0.0.0"
   },

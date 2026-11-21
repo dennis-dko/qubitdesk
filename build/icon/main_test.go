@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/imaging"
+	"github.com/dennis-dko/qubitdesk/internal/support/imaging"
 )
 
 // The two icons kept in the tree show the mark as it is drawn now.

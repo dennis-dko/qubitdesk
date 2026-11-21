@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/chromedp/chromedp"
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // Nothing is left covering the sign-in screen when the session ends.

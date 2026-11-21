@@ -78,7 +78,7 @@ func (p *page) drawUpdate(state string) updateCard {
 // The command is the one for Compose with its overlays listed in COMPOSE_FILE,
 // and the guide itself describes three deployments it does not take: overlays
 // given with -f, which it would leave out, a version pinned in
-// GTS_VERSION, which it would pull again, and a container started with
+// QUBITDESK_VERSION, which it would pull again, and a container started with
 // docker run. The card names all three, and only where it names the command.
 func TestAContainerWithoutTheUpdaterIsToldHowToUpdateByHand(t *testing.T) {
 	t.Parallel()
@@ -111,7 +111,7 @@ func TestAContainerWithoutTheUpdaterIsToldHowToUpdateByHand(t *testing.T) {
 			}
 		}
 
-		for _, name := range []string{"-f", "COMPOSE_FILE", "GTS_VERSION", "docker run", "docker pull"} {
+		for _, name := range []string{"-f", "COMPOSE_FILE", "QUBITDESK_VERSION", "docker run", "docker pull"} {
 			if !strings.Contains(card.ByHand, name) {
 				t.Errorf("%s: the card does not say where the command alone is not enough - %q is missing:\n\t%s",
 					language, name, card.ByHand)

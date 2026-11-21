@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/application/v1/command"
-	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/command"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // A ticket opened in a queue that names a service level is owed its first answer

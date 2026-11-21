@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // A run the deletion limit refuses shows a share that is above the limit.

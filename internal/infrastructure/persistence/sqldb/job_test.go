@@ -5,9 +5,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // A job reads back with its criteria, its macros in order - one twice - and its

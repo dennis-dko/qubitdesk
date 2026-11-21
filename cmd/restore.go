@@ -9,10 +9,10 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/migration"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/go-ticket-system/internal/support/backup"
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/migration"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/support/backup"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // newestSchema is the newest migration this binary carries, which the installer

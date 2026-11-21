@@ -244,7 +244,7 @@ func TestSendPostsWhatAPushServiceAsksFor(t *testing.T) {
 	defer service.Close()
 
 	sub := Subscription{Endpoint: service.URL + "/push/abc", P256dh: receiverPublic, Auth: receiverSecret, Origin: "https://tickets.example.com"}
-	message := Message{Title: "A customer answered", Body: "Ticket 2026111000042", Tag: "gts-ticket-42",
+	message := Message{Title: "A customer answered", Body: "Ticket 2026111000042", Tag: "qubitdesk-ticket-42",
 		At: "2026-11-10T09:15:00Z", About: "2026-11-10T07:15:00Z"}
 
 	if err := keys.Send(t.Context(), service.Client(), sub, message, time.Minute); err != nil {

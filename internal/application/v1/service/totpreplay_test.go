@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // A second-factor code opens one sign-in, not every sign-in in its window.

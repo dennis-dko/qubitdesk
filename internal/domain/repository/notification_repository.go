@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // NotificationRepository keeps what each agent was told about a ticket.

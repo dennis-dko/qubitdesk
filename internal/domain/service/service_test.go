@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/service"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/memory"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/domain/service"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/memory"
 )
 
 // Moving an account between roles has one real refusal in it, and the refusal

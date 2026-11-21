@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // A macro keeps its steps in the order they were given and their parameters as

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // SecretsService answers one question at start-up: is the configured key the key
@@ -34,7 +34,7 @@ func NewSecretsService(
 // compared when the check is read back: the cipher authenticates what it opens,
 // so a check that opens was written with this key, and one written by an earlier
 // version goes on saying what that version wrote.
-const theKeyIsRight = "go-ticket-system"
+const theKeyIsRight = "qubitdesk"
 
 // Verify reports whether the configured key is the one this installation's data
 // was written with, and records it the first time.

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // accountExport is what an account's export reads: a statement for every table

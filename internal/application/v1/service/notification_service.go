@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
-	"github.com/dennis-dko/go-ticket-system/internal/support/i18n"
-	"github.com/dennis-dko/go-ticket-system/internal/support/webpush"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/support/webpush"
 )
 
 // NotificationService sends the notifications: when something happens to a
@@ -48,7 +48,7 @@ const pushedAtOnce = 500
 
 // notificationTag starts the tag a pushed notification carries, which the
 // service worker reads to know whom to ask whether it still holds.
-const notificationTag = "gts-notification-"
+const notificationTag = "qubitdesk-notification-"
 
 // NotificationSources are what a notification is worked out from: the
 // notifications set up, the ones sent, the ticket and the roles that decide who

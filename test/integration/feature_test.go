@@ -110,7 +110,7 @@ func TestOperationalLimitsApplyWithoutARestart(t *testing.T) {
 	admin.must(admin.api(http.MethodPut, "/settings/operational",
 		map[string]any{"rateLimit": 5, "rateLimitWindowSeconds": 60}), http.StatusOK)
 
-	script := a.newClient().withHeader("Authorization", "Bearer gts_issued-to-nobody")
+	script := a.newClient().withHeader("Authorization", "Bearer qubitdesk_issued-to-nobody")
 
 	// In force without a restart: a burst past five is refused within seconds.
 	limited := eventually(func() bool {

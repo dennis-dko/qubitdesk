@@ -9,27 +9,39 @@ import (
 	"testing"
 )
 
-// formerName matches what the time recording this was cloned from was called
-// until 2026-11-12, however it is written - the three words joined by a hyphen,
-// an underscore, a space or nothing, in any case - and the three-letter
-// abbreviation its cookies, token prefixes, variables and sealed secrets
-// carried, as a word of its own: not after a letter or a digit, nor after the +
-// or / that would make it the inside of a hash. Both are spelled so that this
-// file does not match them.
-var formerName = regexp.MustCompile(`(?i)go[-_ ]?time[-_ ]?recording|(^|[^a-z0-9+/])g[t]r`)
+// formerName matches both names this project had before it was QubitDesk,
+// however they are written: the time recording's it was cloned from, until
+// 2026-11-12, and its own first one, until 2026-11-21 - each three words joined
+// by a hyphen, an underscore, a space or nothing, in any case - and the
+// three-letter abbreviation each carried in its cookies, token prefixes,
+// variables and sealed secrets. The abbreviation counts as a word of its own
+// after anything but a letter or a digit, glued to a word where no + or /
+// before it could make it the inside of a hash, and anywhere in the words it
+// was glued to - a calendar key, a backup, a theme - which are too long to
+// turn up inside a hash. A word of its own after a slash is a path, a host or
+// a connection string, and the first sweep of the second rename left exactly
+// those behind, and a calendar key after a slash, because it skipped them as
+// the earlier version of this pattern did. All of it is spelled so that this
+// file does not match it.
+var formerName = regexp.MustCompile(`(?i)go[-_ ]?time[-_ ]?recording|go[-_ ]?tick[e]t[-_ ]?system|` +
+	`(^|[^a-z0-9])g[t][rs]([^a-z0-9]|$)|(^|[^a-z0-9+/])g[t][rs]|g[t][rs](cal|bak|theme|backup)`)
 
-// oldNameKeptOnPurpose are the files that may still use the former name, each
+// oldNameKeptOnPurpose are the files that may still use a former name, each
 // with its reason. A row whose file has stopped using it fails as well, so the
-// list cannot go on excusing what is no longer there. None does: the ticket
-// system was renamed before any release of it, so no database, cookie or token
-// of it ever carried the former name for something to convert.
-var oldNameKeptOnPurpose = map[string]string{}
+// list cannot go on excusing what is no longer there. No code is on it: both
+// renames came before any release, so no database, cookie or token ever carried
+// a former name for something to convert.
+var oldNameKeptOnPurpose = map[string]string{
+	"doc/audit-ledger.md": "it quotes what a file said on the day it was read, and a record is not rewritten",
+}
 
-// The clone was given its own name on 2026-11-12, before anything else changed.
-// The time recording's own rename looked for the spellings it thought of, and
-// one got past it there: its Android app's download keeper marked every page it
-// prepared with the former name in camel case, which nothing reported, because
-// nothing reads that mark but the script that sets it. So every spelling is
+// The clone was given its own name on 2026-11-12, before anything else changed,
+// and the one it carries now on 2026-11-21. Each rename looked for the
+// spellings somebody thought of, and each let one past: the time recording's
+// left its former name in camel case in the Android app's download keeper,
+// which nothing reported because nothing reads that mark but the script that
+// sets it, and the second left the abbreviation in every path, host and
+// connection string, where it follows a slash. So every spelling of both is
 // looked for here at once, in every text file git keeps.
 func TestNothingStillCarriesTheFormerName(t *testing.T) {
 	// safe.directory, because in the Linux container the suite runs in here the

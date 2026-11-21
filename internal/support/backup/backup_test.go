@@ -41,7 +41,7 @@ func open(file []byte, passphrase string) (string, error) {
 // What is sealed opens again with the same passphrase, and nothing of it can be
 // read in the file itself.
 func TestABackupOpensWithItsPassphrase(t *testing.T) {
-	const content = `{"format":"gts-backup"}` + "\n" + `[1,"Wera","wera@example.com"]`
+	const content = `{"format":"qubitdesk-backup"}` + "\n" + `[1,"Wera","wera@example.com"]`
 
 	file := seal(t, content)
 
@@ -146,7 +146,7 @@ func TestReadingPastTheBoundIsAnError(t *testing.T) {
 // name that climbs out of it is never one of them.
 func TestOnlyABackupsOwnNameIsValid(t *testing.T) {
 	made := Name(time.Date(2026, 11, 19, 21, 30, 5, 0, time.FixedZone("CET", 3600)))
-	if made != "gts-20261119-203005.gtsbak" {
+	if made != "qubitdesk-20261119-203005.qdbak" {
 		t.Errorf("a backup made at 21:30:05 CET is named %q, want it named in UTC", made)
 	}
 
@@ -155,9 +155,9 @@ func TestOnlyABackupsOwnNameIsValid(t *testing.T) {
 	}
 
 	for _, name := range []string{
-		"", "../gts-20261119-203005.gtsbak", "gts-20261119-203005.gtsbak/../x",
-		"gts-20261119-203005.gtsbak.exe", `..\gts-20261119-203005.gtsbak`,
-		"gts-2026111-203005.gtsbak", "datasource.json",
+		"", "../qubitdesk-20261119-203005.qdbak", "qubitdesk-20261119-203005.qdbak/../x",
+		"qubitdesk-20261119-203005.qdbak.exe", `..\qubitdesk-20261119-203005.qdbak`,
+		"qubitdesk-2026111-203005.qdbak", "datasource.json",
 	} {
 		if ValidName(name) {
 			t.Errorf("%q is valid", name)

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // A copy of the database must not be a copy of everybody's second factor.

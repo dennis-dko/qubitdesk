@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // skippedOnRestore are settings a restore leaves as the new installation has
@@ -30,14 +30,14 @@ var (
 
 	// ErrNewerSchema says the backup comes from a schema this release does not
 	// have yet.
-	ErrNewerSchema = errors.New("the backup comes from a newer version of Go-Ticket-System; restore it with that version or a later one")
+	ErrNewerSchema = errors.New("the backup comes from a newer version of QubitDesk; restore it with that version or a later one")
 
 	// ErrCutShort says the backup ends before its end.
 	ErrCutShort = errors.New("the backup ends before its last line; it was cut short")
 )
 
 // ErrNotABackupHeader says the first line of what was opened is not a backup's.
-var ErrNotABackupHeader = errors.New("the file opened, and what it holds is not a Go-Ticket-System backup")
+var ErrNotABackupHeader = errors.New("the file opened, and what it holds is not a QubitDesk backup")
 
 // readHeader reads a backup's first line, and refuses one that is not a backup
 // this release reads or one from a schema newer than schema, the newest

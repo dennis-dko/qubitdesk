@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
 )
 
 // A fresh installation lets locks run out in new and open, as KIX18 ships it,

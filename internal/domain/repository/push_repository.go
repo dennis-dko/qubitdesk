@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // PushSubscriptionRepository keeps the browsers people asked for notifications

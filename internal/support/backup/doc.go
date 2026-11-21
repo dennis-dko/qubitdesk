@@ -1,4 +1,4 @@
-// Package backup is the file a Go-Ticket-System backup travels in: compressed, and then
+// Package backup is the file a QubitDesk backup travels in: compressed, and then
 // encrypted with a passphrase the server holds and the file does not.
 //
 // What is inside is the business of whoever writes it - the database's rows, read

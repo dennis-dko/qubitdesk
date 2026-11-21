@@ -5,10 +5,10 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
-	"github.com/dennis-dko/go-ticket-system/internal/support/qrcode"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/qrcode"
 )
 
 // AuthHandler serves sign-in, sign-out and two-factor enrolment.

@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
 )
 
 // SetupService reports what a fresh installation still has to settle.

@@ -1,4 +1,4 @@
-package io.github.dennisdko.goticketsystem
+package io.github.dennisdko.qubitdesk
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -18,7 +18,7 @@ class WebTest {
         assertTrue(belongsTo("http://192.168.1.20:8000", "http://192.168.1.20:8000/#settings"))
         assertTrue(belongsTo(home, "https://TICKETS.example.com/"))
 
-        assertFalse(belongsTo(home, "https://github.com/dennis-dko/go-ticket-system"))
+        assertFalse(belongsTo(home, "https://github.com/dennis-dko/qubitdesk"))
         assertFalse(belongsTo(home, "http://tickets.example.com/"))
         assertFalse(belongsTo(home, "https://tickets.example.com:8443/"))
         assertFalse(belongsTo(home, "https://tickets.example.com.evil.example/"))
@@ -40,11 +40,11 @@ class WebTest {
     // the one the installation compares the header against.
     @Test
     fun theSignOutCarriesTheTokenOfTheCookieBesideIt() {
-        val held = "x_gts_csrf=other; gts_session=s3ss10n; gts_csrf=c5rf"
+        val held = "x_qubitdesk_csrf=other; qubitdesk_session=s3ss10n; qubitdesk_csrf=c5rf"
 
-        assertEquals("c5rf", cookieValue(held, "gts_csrf"))
-        assertEquals("s3ss10n", cookieValue(held, "gts_session"))
-        assertEquals(null, cookieValue("gts_session=s3ss10n", "gts_csrf"))
+        assertEquals("c5rf", cookieValue(held, "qubitdesk_csrf"))
+        assertEquals("s3ss10n", cookieValue(held, "qubitdesk_session"))
+        assertEquals(null, cookieValue("qubitdesk_session=s3ss10n", "qubitdesk_csrf"))
     }
 
     // A file is saved under the page's name for it, and never under one that

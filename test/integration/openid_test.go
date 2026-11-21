@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/test/oidctest"
+	"github.com/dennis-dko/qubitdesk/test/oidctest"
 )
 
 type openIDSettings struct {
@@ -195,7 +195,7 @@ func TestAProviderOverPlainHTTPIsRefused(t *testing.T) {
 	_, admin, _ := startWithWorker(t)
 
 	refused := admin.api(http.MethodPut, "/settings/openid", map[string]any{
-		"enabled": true, "issuer": "http://id.example.com/realms/acme", "clientId": "gts",
+		"enabled": true, "issuer": "http://id.example.com/realms/acme", "clientId": "qubitdesk",
 	})
 
 	if refused.Status != http.StatusBadRequest || !strings.Contains(string(refused.Body), "openidNeedsHttps") {

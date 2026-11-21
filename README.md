@@ -1,4 +1,4 @@
-<h1 align="center"><img src="internal/interface/web/asset/favicon.svg" alt="" width="72" align="absmiddle"> Go-Ticket-System</h1>
+<h1 align="center"><img src="internal/interface/web/asset/favicon.svg" alt="" width="72" align="absmiddle"> QubitDesk</h1>
 
 <p align="center">
   <b>Project time tracking in a single self-contained binary.</b><br>
@@ -7,10 +7,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/dennis-dko/go-ticket-system/actions/workflows/ci.yml"><img src="https://github.com/dennis-dko/go-ticket-system/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/dennis-dko/go-ticket-system/releases/latest"><img src="https://img.shields.io/github/v/release/dennis-dko/go-ticket-system?label=release" alt="Latest release"></a>
-  <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/dennis-dko/go-ticket-system" alt="Go version"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/dennis-dko/go-ticket-system" alt="MIT licence"></a>
+  <a href="https://github.com/dennis-dko/qubitdesk/actions/workflows/ci.yml"><img src="https://github.com/dennis-dko/qubitdesk/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/dennis-dko/qubitdesk/releases/latest"><img src="https://img.shields.io/github/v/release/dennis-dko/qubitdesk?label=release" alt="Latest release"></a>
+  <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/dennis-dko/qubitdesk" alt="Go version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/dennis-dko/qubitdesk" alt="MIT licence"></a>
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
   <img src="doc/image/calendar.png" alt="The calendar: a month of booked hours, with two days of leave, a day off sick and a public holiday marked">
 </picture>
 
-## Why Go-Ticket-System
+## Why QubitDesk
 
 - 📦 **One file to run.** The interface, the API, the schema migrations and the
   timezone database are compiled into one binary — for Linux, Windows and macOS,
@@ -146,7 +146,7 @@ flowchart TB
     scripts(["Scripts and tools<br/>personal API token"])
     calendars(["Calendar apps<br/>iCalendar subscription"])
 
-    subgraph binary["go-ticket-system-web — one binary"]
+    subgraph binary["qubitdesk-web — one binary"]
         installer["Installer<br/>until a database exists"]
         ui["Web interface<br/>embedded"]
         api["REST API<br/>/api/v1 · /api-docs"]
@@ -189,7 +189,7 @@ The first start, when nothing is configured yet:
 ```mermaid
 sequenceDiagram
     actor You
-    participant App as Go-Ticket-System
+    participant App as QubitDesk
     participant DB as Database
     You->>App: start it, with no database configured
     App-->>You: installer on :8000, setup token in the log
@@ -208,13 +208,13 @@ cp .env.example .env    # DB_PASSWORD is required
 docker compose up -d
 ```
 
-**As a single binary** — download `go-ticket-system-web` for your platform
-from the [latest release](https://github.com/dennis-dko/go-ticket-system/releases/latest)
+**As a single binary** — download `qubitdesk-web` for your platform
+from the [latest release](https://github.com/dennis-dko/qubitdesk/releases/latest)
 and start it. It is the whole installation.
 
 ```bash
-chmod +x go-ticket-system-web_*_linux_amd64
-./go-ticket-system-web_*_linux_amd64
+chmod +x qubitdesk-web_*_linux_amd64
+./qubitdesk-web_*_linux_amd64
 ```
 
 Then open <http://localhost:8000>. Without a database the binary serves the
@@ -281,15 +281,15 @@ Two things stay in a browser: passkeys and signing in through your organisation,
 which are set up there.
 
 **It belongs to the release it was built with.** Download
-`go-ticket-system-mobile_<version>.apk` from the
-[release](https://github.com/dennis-dko/go-ticket-system/releases) the
+`qubitdesk-mobile_<version>.apk` from the
+[release](https://github.com/dennis-dko/qubitdesk/releases) the
 installation runs - **My account → Install the Android app** shows it as a code
 the phone's camera downloads it from - and open it on the phone; Android asks once whether the
 browser or file manager it was opened from may install apps. Every release is
 signed with the same key, so the next one installs over it - and the app offers
 it itself: at every start it asks the installation which release it runs, and
 once that is newer than the app, a press downloads that release's app and hands
-it to Android, which asks once whether Go-Ticket-System may install apps and
+it to Android, which asks once whether QubitDesk may install apps and
 asks to confirm each update. An installation whose certificate comes from an authority
 of its own needs that authority installed on the phone, as the phone's browser
 does.

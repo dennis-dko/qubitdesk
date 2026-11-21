@@ -5,8 +5,8 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	appconfig "github.com/dennis-dko/go-ticket-system/internal/infrastructure/config"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // DatasourceRequest is the administered database connection.

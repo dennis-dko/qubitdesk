@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // The metrics endpoint and the trace exporter are the two settings this

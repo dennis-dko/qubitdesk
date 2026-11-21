@@ -35,7 +35,7 @@ func TestATableWithOrdinaryDataFitsItsCard(t *testing.T) {
 
 	p.run("create two accounts", chromedp.Evaluate(`(async () => {
 		const csrf = document.cookie.split(';').map(c => c.trim())
-			.find(c => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+			.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 		const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf };
 		const out = [];
 
@@ -120,7 +120,7 @@ func TestATableWithOrdinaryDataFitsItsCard(t *testing.T) {
 
 	p.run("make a token with a long label", chromedp.Evaluate(`(async () => {
 		const csrf = document.cookie.split(';').map(c => c.trim())
-			.find(c => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+			.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 		await fetch('/api/v1/me/tokens', { method: 'POST', credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
@@ -163,7 +163,7 @@ func TestOnAPhoneATableKeepsItsActionsInSight(t *testing.T) {
 
 	p.run("create an account with a long name", chromedp.Evaluate(`(async () => {
 		const csrf = document.cookie.split(';').map(c => c.trim())
-			.find(c => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+			.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 		const r = await fetch('/api/v1/users', { method: 'POST', credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
 			body: JSON.stringify({ name: '`+long+`', email: 'lang@example.com', role: 'agent', password: 'a-long-enough-password' }) });

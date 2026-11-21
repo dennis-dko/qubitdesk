@@ -5,10 +5,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dennis-dko/go-ticket-system/internal/application/v1/command"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/command"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // TicketCatalogService administers what an installation sorts its tickets by:

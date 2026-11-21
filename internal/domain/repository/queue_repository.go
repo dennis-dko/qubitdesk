@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // QueueRepository keeps the queues and which role reaches each. A queue and its

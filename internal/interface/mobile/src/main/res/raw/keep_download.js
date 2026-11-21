@@ -6,8 +6,8 @@
 // when its link is made, and a click on such a link hands it to the app, which
 // asks where to save it.
 (function () {
-  if (window.goTicketSystemKeepsDownloads) return;
-  window.goTicketSystemKeepsDownloads = true;
+  if (window.qubitDeskKeepsDownloads) return;
+  window.qubitDeskKeepsDownloads = true;
 
   const blobs = new Map();
   const create = URL.createObjectURL;
@@ -30,7 +30,7 @@
     const name = this.download;
     const reader = new FileReader();
 
-    reader.onload = () => GoTicketSystemFiles.save(String(reader.result).split(',')[1] || '', name);
+    reader.onload = () => QubitDeskFiles.save(String(reader.result).split(',')[1] || '', name);
     reader.readAsDataURL(blob);
   };
 })();

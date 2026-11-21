@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 func TestMain(m *testing.M) {
@@ -254,7 +254,7 @@ func post(t *testing.T, b *browser, path, body string, method ...string) {
 
 	answer := b.evalString(fmt.Sprintf(`(async () => {
 		const csrf = document.cookie.split(';').map(c => c.trim())
-			.find(c => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+			.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 		const r = await fetch(%q, {
 			method: %q,

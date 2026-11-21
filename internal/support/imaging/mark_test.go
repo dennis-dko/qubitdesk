@@ -5,7 +5,7 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/imaging"
+	"github.com/dennis-dko/qubitdesk/internal/support/imaging"
 )
 
 // The mark is drawn at the size asked for, and is the mark: an hourglass in

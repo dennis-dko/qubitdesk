@@ -14,4 +14,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "go-ticket-system-mobile"
+rootProject.name = "qubitdesk-mobile"

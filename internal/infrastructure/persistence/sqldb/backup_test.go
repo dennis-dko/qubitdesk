@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/migration"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/migration"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
 )
 
 // newestMigration is the schema the test databases are at.
@@ -275,7 +275,7 @@ func TestABackupIsReadWholeBeforeItIsRestored(t *testing.T) {
 	original, _ := filled(t)
 
 	if _, err := original.Exec("INSERT INTO settings (key_name, value, updated_at) VALUES (?, ?, ?)",
-		model.SettingSecretKeyCheck, "gts.v1:as-it-was-kept", time.Now()); err != nil {
+		model.SettingSecretKeyCheck, "qubitdesk.v1:as-it-was-kept", time.Now()); err != nil {
 		t.Fatalf("keeping a key check: %v", err)
 	}
 
@@ -283,7 +283,7 @@ func TestABackupIsReadWholeBeforeItIsRestored(t *testing.T) {
 
 	contents, err := sqldb.InspectBackup(strings.NewReader(backup), newestMigration())
 	if err != nil || contents.Tables != len(sqldb.BackupTables) || contents.Rows == 0 ||
-		contents.KeyCheck != "gts.v1:as-it-was-kept" {
+		contents.KeyCheck != "qubitdesk.v1:as-it-was-kept" {
 		t.Fatalf("the whole backup reads as %+v (%v), want every table, its rows and the key check", contents, err)
 	}
 

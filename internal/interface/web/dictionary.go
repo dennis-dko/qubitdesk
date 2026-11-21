@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // dictionaryPath is where the page fetches a language's dictionary, followed by

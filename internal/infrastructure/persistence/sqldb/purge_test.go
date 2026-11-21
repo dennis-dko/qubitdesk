@@ -10,9 +10,9 @@ import (
 
 	gofrmigration "gofr.dev/pkg/gofr/migration"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/migration"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/migration"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
 
 	_ "modernc.org/sqlite"
 )
@@ -174,7 +174,7 @@ func TestPurgeUserRemovesWhatIsTheAccountsAndReleasesWhatIsNot(t *testing.T) {
 	}
 
 	if _, err := sqldb.NewAPITokenRepository(db, sqldb.DialectSQLite).Save(ctx, &model.APIToken{
-		UserID: leaving.ID, Name: "ci", TokenHash: "hash", Prefix: "gts_x", CreatedAt: time.Now(),
+		UserID: leaving.ID, Name: "ci", TokenHash: "hash", Prefix: "qubitdesk_x", CreatedAt: time.Now(),
 	}); err != nil {
 		t.Fatalf("create token: %v", err)
 	}

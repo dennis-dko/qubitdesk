@@ -39,7 +39,7 @@ func TestTheRestartWaitRecognisesTheInstaller(t *testing.T) {
 
 		const network = window.fetch;
 		window.fetch = (url, options) => String(url).endsWith('/install/state')
-			? Promise.resolve(new Response(JSON.stringify({ appName: 'Go-Ticket-System' }),
+			? Promise.resolve(new Response(JSON.stringify({ appName: 'QubitDesk' }),
 				{ headers: { 'Content-Type': 'application/json' } }))
 			: network(url, options);
 

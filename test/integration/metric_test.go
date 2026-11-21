@@ -52,7 +52,7 @@ func TestAMetricIsPublishedOnlyOnceItHasAValue(t *testing.T) {
 
 	a := start(t)
 
-	if scraped := scrape(t, a); declares(scraped, "gts_signin_failures_total") {
+	if scraped := scrape(t, a); declares(scraped, "qubitdesk_signin_failures_total") {
 		t.Error("a counter with no value is published after all - which would be better, " +
 			"and means the comment in registerBusinessMetrics is now wrong")
 	}
@@ -63,7 +63,7 @@ func TestAMetricIsPublishedOnlyOnceItHasAValue(t *testing.T) {
 	})
 
 	if !eventually(func() bool {
-		return declares(scrape(t, a), "gts_signin_failures_total")
+		return declares(scrape(t, a), "qubitdesk_signin_failures_total")
 	}) {
 		t.Error("the counter is still absent after the event it counts")
 	}
@@ -88,7 +88,7 @@ func TestARefusedSignInIsCountedWithItsReason(t *testing.T) {
 		return strings.Contains(scrape(t, a), `reason="credentials"`)
 	}) {
 		t.Errorf("a refused sign-in was not counted under its reason:\n%s",
-			metricLines(scrape(t, a), "gts_signin"))
+			metricLines(scrape(t, a), "qubitdesk_signin"))
 	}
 }
 

@@ -75,7 +75,7 @@ nothing sets the variable.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `APP_NAME` | `Go-Ticket-System` | the name GoFr records traces under and answers `/.well-known/health` with; nothing on screen |
+| `APP_NAME` | `QubitDesk` | the name GoFr records traces under and answers `/.well-known/health` with; nothing on screen |
 | `HTTP_PORT` | `8000` | API and web interface |
 | `METRICS_PORT` | `2121` | Prometheus endpoint; `0` switches it off |
 | `DB_DIALECT` | – | `sqlite`, `postgres` or `mysql`. **Empty serves the installer** |

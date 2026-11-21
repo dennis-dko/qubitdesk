@@ -96,7 +96,7 @@ var LeftOutOfBackups = map[string]string{
 // backupFormat names the content of a backup, so a file of other JSON lines is
 // refused rather than half read.
 const (
-	backupFormat  = "gts-backup"
+	backupFormat  = "qubitdesk-backup"
 	backupVersion = 1
 )
 

@@ -1,6 +1,6 @@
 # Getting started
 
-Installing Go-Ticket-System, what its first start looks like, and what the
+Installing QubitDesk, what its first start looks like, and what the
 first sign-in asks for. Running it on a server is the subject of
 [`deploy/OPERATION.md`](../deploy/OPERATION.md).
 
@@ -37,7 +37,7 @@ so a wrong passphrase or a file cut short is said there; the
 It asks for a token, printed to the log when the process starts:
 
 ```text
-no database is configured, so Go-Ticket-System is serving its installer instead
+no database is configured, so QubitDesk is serving its installer instead
 open http://localhost:8000 to choose one - the application will not start until you do
 setup token: 782106f2d715eaebba8e1c4b93f0a2d1
 ```
@@ -82,7 +82,7 @@ stops working the moment a real password is chosen.
 That account **cannot be deleted**, cannot be moved to a role without
 administration rights, and is never authenticated against a directory — so an
 installation can never lock itself out, and nobody who controls the directory
-can take it over. Should its password be lost, `go-ticket-system-web recover` on the
+can take it over. Should its password be lost, `qubitdesk-web recover` on the
 server prints a new one, once; see [A way back in](security.md#a-way-back-in).
 
 Until the initial password is replaced the server refuses the ordinary API,
@@ -177,14 +177,14 @@ the mark off the file first — Windows attaches it to anything downloaded from 
 internet:
 
 ```powershell
-Unblock-File .\go-ticket-system-web_v1.2.3_windows_amd64.exe
+Unblock-File .\qubitdesk-web_v1.2.3_windows_amd64.exe
 ```
 
 Check the download against the release's `SHA256SUMS` before doing either. That
 is the part that actually tells you the file is the one that was published:
 
 ```powershell
-Get-FileHash .\go-ticket-system-web_v1.2.3_windows_amd64.exe -Algorithm SHA256
+Get-FileHash .\qubitdesk-web_v1.2.3_windows_amd64.exe -Algorithm SHA256
 ```
 
 **Properly, for everybody.** A code signing certificate, which costs money every

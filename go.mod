@@ -1,4 +1,4 @@
-module github.com/dennis-dko/go-ticket-system
+module github.com/dennis-dko/qubitdesk
 
 go 1.27.4
 

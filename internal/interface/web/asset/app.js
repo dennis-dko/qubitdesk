@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Single-page UI for the Go-Ticket-System API.
+ * Single-page UI for the QubitDesk API.
  *
  * Plain DOM APIs on purpose: the assets are embedded in the Go binary, so
  * keeping the UI build-step-free means `go build` is the only build there is.
@@ -266,7 +266,7 @@ function refusalFrom(res, body) {
     // token is still good, and asks for a new token where it was taken back. Not
     // on signing out, which the app sees in the requests and answers by
     // disconnecting - told then too, it would sign straight back in.
-    window.GoTicketSystemSession?.ended();
+    window.QubitDeskSession?.ended();
   }
 
   return err;
@@ -359,7 +359,7 @@ async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers ?? {}) };
 
   if (!SAFE_METHODS.has(method)) {
-    headers['X-CSRF-Token'] = readCookie('gts_csrf');
+    headers['X-CSRF-Token'] = readCookie('qubitdesk_csrf');
   }
 
   // A request this page makes by itself - a check on a timer - says so, and the
@@ -2817,7 +2817,7 @@ function directoryRoleChoices() {
  * typed it and this application does not leave one person's half-written work on
  * screen for the next.
  */
-const DRAFT_PREFIX = 'gts.draft.';
+const DRAFT_PREFIX = 'qubitdesk.draft.';
 
 /**
  * Where one account's drafts are kept, apart from anybody else's.
@@ -2865,7 +2865,7 @@ function draftableFields(form) {
  * first: a form holding <input name="id"> answers form.id with that input. Two
  * forms did - the role's, and a time entry's in the time recording this was cloned
  * from - so both wrote their draft under
- * the key "gts.draft.[object HTMLInputElement]", which is one key for two forms.
+ * the key "qubitdesk.draft.[object HTMLInputElement]", which is one key for two forms.
  * They overwrote each other, and on the way back in the first of them restored
  * whatever the other had left, then wrote its own emptiness over the top.
  *
@@ -3121,12 +3121,12 @@ function restoreDrafts() {
  * Both are always filled now:
  *
  *   middle  the application's own mark, beside the title, always
- *   left    the uploaded logo, or a chip with Go-Ticket-System's G where there is none
+ *   left    the uploaded logo, or a chip with QubitDesk's Q where there is none
  *
  * The chip carried the first letter of the configured title while that title
- * was the installation's whole name. Every installation is called Go-Ticket-System now
+ * was the installation's whole name. Every installation is called QubitDesk now
  * and the title only follows it, so the first letter of the title was a letter
- * of the addition - an H beside Go-Ticket-System | htp.net - and the chip carries the
+ * of the addition - an H beside QubitDesk | htp.net - and the chip carries the
  * name's own initial instead. It still never reads as a picture that failed to
  * load, which is what a generic glyph would.
  */
@@ -3923,7 +3923,7 @@ function t(key, fallback) {
  * kept behind this - see adoptBrowserDefaults.
  */
 function adoptionMarker(userID) {
-  return `gts.adopted.${userID}`;
+  return `qubitdesk.adopted.${userID}`;
 }
 
 /**
@@ -8911,7 +8911,7 @@ async function uploadAttachment(ticketID, articleID, file, area = 'tickets') {
   const res = await reach(`${API}/${area}/${ticketID}/articles/${articleID}/attachments`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'X-CSRF-Token': readCookie('gts_csrf') },
+    headers: { 'X-CSRF-Token': readCookie('qubitdesk_csrf') },
     body: form,
   });
 
@@ -10163,7 +10163,7 @@ function drawWelcome(title) {
  * is added to it after a bar and never takes its place; the server writes the
  * same rule in model.Named, and the two have to agree.
  */
-const BRAND = 'Go-Ticket-System';
+const BRAND = 'QubitDesk';
 
 /** What an installation is called with the addition written beside the brand. */
 function named(addition) {
@@ -10191,7 +10191,7 @@ function drawBranding(branding) {
   // chose. The tab's name resolved rather than both fields, since the tab is the
   // only thing that reads it.
   try {
-    localStorage.setItem('gts.branding', JSON.stringify({
+    localStorage.setItem('qubitdesk.branding', JSON.stringify({
       title: tabTitle,
     }));
   } catch {
@@ -10206,7 +10206,7 @@ function drawBranding(branding) {
 
   // The one place an installation's logo is drawn: the left of the bar, once
   // somebody has signed in. The sign-in screen and the browser tab carry
-  // Go-Ticket-System's own mark whatever is uploaded - decided by the maintainer on
+  // QubitDesk's own mark whatever is uploaded - decided by the maintainer on
   // 2026-11-18 - and the button beside the title carries it as well.
   //
   // It is the installation's slot, so with no logo it does not fall back to our
@@ -10883,7 +10883,7 @@ let pendingLogo = '';
  * Shows the chosen image at the size the bar will give it, before saving.
  *
  * The left of the bar is the one place the logo is drawn - the sign-in screen
- * and the browser tab carry Go-Ticket-System's own mark - and it draws the banner-sized
+ * and the browser tab carry QubitDesk's own mark - and it draws the banner-sized
  * copy, so the preview shows the part chosen for the banner.
  */
 function setLogoPreview(dataURI) {
@@ -11005,7 +11005,7 @@ function wireAdmin() {
 
     // No reload after it, though there was one for as long as the logo was the
     // tab's icon: every engine takes that from the document it was given, so a
-    // changed logo meant a new document. The tab keeps Go-Ticket-System's mark now, and
+    // changed logo meant a new document. The tab keeps QubitDesk's mark now, and
     // the one place the logo is drawn is redrawn by loadBranding like everything
     // else on the page.
     saveForm(e.target, async () => {
@@ -11853,7 +11853,7 @@ let kerberosOffered = false;
  * sign-in that works clears it. sessionStorage, so it is this tab's and ends
  * with it.
  */
-const KERBEROS_HELD_BACK_KEY = 'gts.kerberos.heldBack';
+const KERBEROS_HELD_BACK_KEY = 'qubitdesk.kerberos.heldBack';
 
 /** Whether the page may try the ticket before anybody asks it to. */
 function mayTryKerberosUnasked() {
@@ -12798,9 +12798,9 @@ const TOUR_STEPS = [
     permission: 'settings:manage',
     title: () => t('tour.branding.title', 'What this installation looks like'),
     text: () => t('tour.branding.text',
-      'What follows Go-Ticket-System, banner, logo and footer. The logo stands at the left of '
+      'What follows QubitDesk, banner, logo and footer. The logo stands at the left of '
       + "the header once somebody has signed in; the browser tab and the sign-in screen always "
-      + "show Go-Ticket-System's own."),
+      + "show QubitDesk's own."),
   },
   {
     target: '#form-push',
@@ -13410,7 +13410,7 @@ async function greetAfterSignIn() {
 function greetedThisVisit() {
   if (!me.user) return true;
 
-  const key = `gts_greeted_${me.user.id}`;
+  const key = `qubitdesk_greeted_${me.user.id}`;
 
   try {
     if (sessionStorage.getItem(key)) return true;
@@ -13588,8 +13588,8 @@ const SETUP_STEPS = {
   branding: {
     title: () => t('setup.branding.title', 'Add to the name'),
     text: () => t('setup.branding.text',
-      'Every installation is called Go-Ticket-System. What you write here follows it after a bar, '
-      + 'as in Go-Ticket-System | htp.net, in the header and the browser tab. Optional, but it is '
+      'Every installation is called QubitDesk. What you write here follows it after a bar, '
+      + 'as in QubitDesk | htp.net, in the header and the browser tab. Optional, but it is '
       + 'what tells a test instance apart from the real one at a glance.'),
     // One field per language, rather than one field.
     //
@@ -13600,7 +13600,7 @@ const SETUP_STEPS = {
     // texts on the appearance screen are not, which is why that one has a
     // switcher instead.
     fields: () => BRANDING_LANGUAGES.map((language) => el('label', {
-      text: `${t('setup.instanceName', 'After “Go-Ticket-System |”')} — ${languageName(language)}`,
+      text: `${t('setup.instanceName', 'After “QubitDesk |”')} — ${languageName(language)}`,
     }, el('input', { type: 'text', name: `title.${language}`, maxlength: '80' }))),
     submit: async (values) => {
       const written = {};
@@ -14127,7 +14127,7 @@ function renderUpdate(state) {
   if (state.imageOutcome === 'none') {
     image.textContent = t('update.imageNothingNewer',
       'The last image update found nothing newer than the image this runs, so '
-      + 'nothing was changed. Where GTS_VERSION names a version, the image follows '
+      + 'nothing was changed. Where QUBITDESK_VERSION names a version, the image follows '
       + 'that setting rather than this card.');
   } else if (state.imageOutcome) {
     showRefusal(image, {
@@ -14355,7 +14355,7 @@ async function theVersionChanged() {
 }
 
 /** Where a message waits out a reload. */
-const AFTER_RELOAD_KEY = 'gts_after_reload';
+const AFTER_RELOAD_KEY = 'qubitdesk_after_reload';
 
 /**
  * Keeps one sentence for the document that comes next.
@@ -15411,7 +15411,7 @@ function buildSheetCard(spec) {
       + `?lang=${encodeURIComponent(activeLanguage())}`, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'X-CSRF-Token': readCookie('gts_csrf') },
+      headers: { 'X-CSRF-Token': readCookie('qubitdesk_csrf') },
       body: form,
     });
 
@@ -15587,7 +15587,7 @@ function wireInstall() {
   // Inside the Android app there is nothing left to offer: it is the app the card
   // is about. The app is known by the bridge it registers for saving files, which
   // its WebView puts on the window before any script of the page runs.
-  if ('GoTicketSystemFiles' in window) {
+  if ('QubitDeskFiles' in window) {
     const card = $('#install-card');
     if (card) card.hidden = true;
   }
@@ -16122,7 +16122,7 @@ function passkeysWithheldBecause() {
       + 'in through the directory: the one place that can end its sign-in.');
   }
 
-  if ('GoTicketSystemFiles' in window) {
+  if ('QubitDeskFiles' in window) {
     return t('passkey.elsewhereApp', 'The app signs in with the token it was connected with, and '
       + 'needs no passkey. Passkeys are set up and used in a browser.');
   }
@@ -16958,7 +16958,7 @@ const THEME_RECHECK_MS = 60_000;
  * cleared on the way out, so the next person starts from the clock.
  */
 function setThemePreference(preference) {
-  const theme = window.gtsTheme;
+  const theme = window.qubitDeskTheme;
 
   document.documentElement.dataset.themePreference = preference;
   document.documentElement.dataset.theme = theme.resolve(preference);
@@ -17012,7 +17012,7 @@ function applyAccountTheme() {
 /** Wires the appearance picker and keeps "automatic" honest as the day passes. */
 function wireTheme() {
   const picker = $('#theme-picker');
-  const theme = window.gtsTheme;
+  const theme = window.qubitDeskTheme;
 
   picker.value = theme.stored();
   picker.addEventListener('change', (e) => setThemeForAccount(e.target.value));
@@ -17171,7 +17171,7 @@ function showScreenTab(view, key, { focus = false } = {}) {
   }
 
   try {
-    sessionStorage.setItem(`gts.tab.${view.id}`, key);
+    sessionStorage.setItem(`qubitdesk.tab.${view.id}`, key);
   } catch {
     // Private browsing refuses storage; the screen then opens on its first tab.
   }
@@ -17203,7 +17203,7 @@ function rememberedScreenTab(view) {
   let key = null;
 
   try {
-    key = sessionStorage.getItem(`gts.tab.${view.id}`);
+    key = sessionStorage.getItem(`qubitdesk.tab.${view.id}`);
   } catch {
     return null;
   }
@@ -17369,7 +17369,7 @@ function rememberedView() {
   if (!me.user) return '';
 
   try {
-    return localStorage.getItem(`gts_view_${me.user.id}`) ?? '';
+    return localStorage.getItem(`qubitdesk_view_${me.user.id}`) ?? '';
   } catch {
     return '';
   }
@@ -17386,7 +17386,7 @@ function rememberView(name) {
   if (name === 'welcome') return;
 
   try {
-    localStorage.setItem(`gts_view_${me.user.id}`, name);
+    localStorage.setItem(`qubitdesk_view_${me.user.id}`, name);
   } catch {
     // Nothing to do about a storage that will not take it.
   }

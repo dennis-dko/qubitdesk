@@ -19,7 +19,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // A customer opens a ticket in the portal and follows it there: given the
@@ -215,7 +215,7 @@ func adminCall(t *testing.T, client *http.Client, base, method, path string, bod
 
 	if parsed, err := url.Parse(base); err == nil {
 		for _, cookie := range client.Jar.Cookies(parsed) {
-			if cookie.Name == "gts_csrf" {
+			if cookie.Name == "qubitdesk_csrf" {
 				req.Header.Set("X-CSRF-Token", cookie.Value)
 			}
 		}

@@ -10,14 +10,14 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// The sign-in screen and the tab keep Go-Ticket-System's mark whatever logo is saved.
+// The sign-in screen and the tab keep QubitDesk's mark whatever logo is saved.
 //
 // The logo was drawn on the sign-in card and became the tab's icon, until the
 // maintainer decided that both belong to the application: the logo stands at the
 // left of the bar once somebody has signed in, and nowhere else. Whether the
 // sign-in card really shows the mark is a question only a browser answers - the
 // card is filled in by the script, from the branding it fetched.
-func TestTheSignInScreenKeepsGoTicketSystemsMarkWhateverTheLogo(t *testing.T) {
+func TestTheSignInScreenKeepsQubitDesksMarkWhateverTheLogo(t *testing.T) {
 	t.Parallel()
 
 	p := open(t)
@@ -41,7 +41,7 @@ func TestTheSignInScreenKeepsGoTicketSystemsMarkWhateverTheLogo(t *testing.T) {
 		chromedp.WaitVisible("#form-login", chromedp.ByID))
 
 	if !p.visible("#login-mark") {
-		t.Error("the sign-in card does not show Go-Ticket-System's mark")
+		t.Error("the sign-in card does not show QubitDesk's mark")
 	}
 
 	var shown struct {
@@ -56,12 +56,12 @@ func TestTheSignInScreenKeepsGoTicketSystemsMarkWhateverTheLogo(t *testing.T) {
 	})`, &shown)
 
 	if shown.Pictures != 0 {
-		t.Errorf("the sign-in screen draws %d uploaded pictures; it carries Go-Ticket-System's mark only",
+		t.Errorf("the sign-in screen draws %d uploaded pictures; it carries QubitDesk's mark only",
 			shown.Pictures)
 	}
 
 	if shown.Icon != "/favicon.svg" {
-		t.Errorf("the tab is pointed at %q rather than at Go-Ticket-System's mark", shown.Icon)
+		t.Errorf("the tab is pointed at %q rather than at QubitDesk's mark", shown.Icon)
 	}
 }
 
@@ -75,7 +75,7 @@ func (p *page) storeBranding(t *testing.T, logo string) {
 	p.run("store the branding", chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const r = await fetch('/api/v1/settings/branding', {
 				method: 'PUT',
@@ -256,7 +256,7 @@ func TestTheLogoSlotsStayEmptyUntilALogoIsConfigured(t *testing.T) {
 //
 // A save used to reload the page, because no engine takes a new tab icon from a
 // link swapped in afterwards - and the reload landed at the top of a long screen,
-// away from what had just been changed. The tab keeps Go-Ticket-System's mark now, so
+// away from what had just been changed. The tab keeps QubitDesk's mark now, so
 // there is nothing left that only a new document can show.
 func TestSavingTheLogoRedrawsTheBarWithoutAReload(t *testing.T) {
 	t.Parallel()

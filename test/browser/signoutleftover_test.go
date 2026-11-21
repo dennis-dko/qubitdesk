@@ -14,7 +14,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/spreadsheet"
+	"github.com/dennis-dko/qubitdesk/internal/support/spreadsheet"
 )
 
 // An import checked by one account leaves nothing behind for the next.

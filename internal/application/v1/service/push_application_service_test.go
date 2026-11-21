@@ -6,10 +6,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/memory"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
-	"github.com/dennis-dko/go-ticket-system/internal/support/webpush"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/memory"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/webpush"
 )
 
 // pushed records what was sent, and answers with answer.
@@ -38,7 +38,7 @@ var aBrowser = webpush.Subscription{
 
 // aMessage is something to push: what it says matters to none of these cases,
 // only whether it leaves.
-var aMessage = webpush.Message{Title: "A ticket was answered", Body: "Printer on fire", Tag: "gts-ticket-12"}
+var aMessage = webpush.Message{Title: "A ticket was answered", Body: "Printer on fire", Tag: "qubitdesk-ticket-12"}
 
 type pushFixture struct {
 	push   *service.PushService

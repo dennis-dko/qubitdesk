@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
 )
 
 // ConfigItemRepository keeps the configuration items and their versions in

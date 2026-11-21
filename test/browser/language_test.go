@@ -10,7 +10,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/internal/support/spreadsheet"
+	"github.com/dennis-dko/qubitdesk/internal/support/spreadsheet"
 )
 
 // The language switcher decides, and the browser decides when it has not.
@@ -345,7 +345,7 @@ func TestWhatSomebodyTypedSurvivesChoosingALanguage(t *testing.T) {
 	// are how the page knows somebody is part way through - which is the whole
 	// distinction being tested.
 	typed := map[string]string{
-		"host": "db.example.invalid", "name": "gts_live", "user": "gts_admin",
+		"host": "db.example.invalid", "name": "qubitdesk_live", "user": "qubitdesk_admin",
 	}
 
 	// Emptied first, the way a person empties a box - with the input event that
@@ -557,7 +557,7 @@ func TestALanguageAdoptionThatWasMissedIsTriedAgain(t *testing.T) {
 
 			try {
 				// Both of the conditions the old arrangement gave up on.
-				localStorage.setItem('gts.adopted.' + me.user.id, '1');
+				localStorage.setItem('qubitdesk.adopted.' + me.user.id, '1');
 				me.user.language = '';
 
 				await adoptBrowserDefaults();

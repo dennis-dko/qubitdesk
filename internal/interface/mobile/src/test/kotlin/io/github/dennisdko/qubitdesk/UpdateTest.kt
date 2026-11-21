@@ -1,4 +1,4 @@
-package io.github.dennisdko.goticketsystem
+package io.github.dennisdko.qubitdesk
 
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
@@ -21,7 +21,7 @@ class UpdateTest {
         download?.let { put("download", it) }
     }
 
-    private val apk = "https://github.com/dennis-dko/go-ticket-system/releases/download/v0.4.24/go-ticket-system-mobile_v0.4.24.apk"
+    private val apk = "https://github.com/dennis-dko/qubitdesk/releases/download/v0.4.24/qubitdesk-mobile_v0.4.24.apk"
 
     // A release is its three numbers and nothing else, compared as numbers: the
     // tenth patch comes after the ninth, which a comparison of the words would
@@ -76,9 +76,9 @@ class UpdateTest {
 
         try {
             val address = "http://127.0.0.1:${server.address.port}"
-            val answered = runBlocking { Installation(address, english).android("gts_mine") }
+            val answered = runBlocking { Installation(address, english).android("qubitdesk_mine") }
 
-            assertEquals("Bearer gts_mine", asked)
+            assertEquals("Bearer qubitdesk_mine", asked)
             assertEquals(Offer("v0.4.24", apk), offerFor("v0.4.20", answered))
         } finally {
             server.stop(0)

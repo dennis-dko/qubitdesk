@@ -12,7 +12,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // A configured text may carry a date that stays current and a link that works.
@@ -128,7 +128,7 @@ func (p *page) setBrandingText(t *testing.T, field, value string) {
 	p.run("store "+field, chromedp.Evaluate(fmt.Sprintf(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('gts_csrf='))?.slice('gts_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const r = await fetch('/api/v1/settings/branding', {
 				method: 'PUT',
@@ -235,7 +235,7 @@ func TestALanguageWithNoTextsFallsBackRatherThanEmptying(t *testing.T) {
 	}
 }
 
-// The wizard asks in both languages for what the installation adds to Go-Ticket-System.
+// The wizard asks in both languages for what the installation adds to QubitDesk.
 //
 // It is the first thing an administrator meets and the one step that exists to
 // name the installation - so a company working in two languages should not have
@@ -282,25 +282,25 @@ func TestTheWizardTakesTheTitleInBothLanguages(t *testing.T) {
 
 	// Stored, told apart by language, and added to the name rather than put in
 	// its place: the reader is on English here.
-	p.waitForText("#app-title", "Go-Ticket-System | Beispiel Ltd")
+	p.waitForText("#app-title", "QubitDesk | Beispiel Ltd")
 
 	p.chooseLanguage("de")
 
-	p.waitForText("#app-title", "Go-Ticket-System | Beispiel GmbH")
+	p.waitForText("#app-title", "QubitDesk | Beispiel GmbH")
 }
 
-// The tab can add something of its own to Go-Ticket-System, separately from the header.
+// The tab can add something of its own to QubitDesk, separately from the header.
 //
 // They were one field, which holds until the header's addition is too long for
 // a tab: a browser gives a tab a couple of dozen characters and somebody has
-// six of them open, so "Go-Ticket-System | Beispiel GmbH & Co. KG" reads as
-// "Go-Ticket-System | Beispie…" in every one of them.
+// six of them open, so "QubitDesk | Beispiel GmbH & Co. KG" reads as
+// "QubitDesk | Beispie…" in every one of them.
 func TestTheBrowserTabCanBeNamedSeparately(t *testing.T) {
 	t.Parallel()
 
 	const (
-		header = "Go-Ticket-System | Beispiel GmbH & Co. KG"
-		tab    = "Go-Ticket-System | Beispiel"
+		header = "QubitDesk | Beispiel GmbH & Co. KG"
+		tab    = "QubitDesk | Beispiel"
 	)
 
 	p := open(t)

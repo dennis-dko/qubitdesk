@@ -28,18 +28,18 @@ import "context"
 const (
 	// MetricSignInFailures counts refused sign-ins, labelled "reason" with a
 	// fixed handful of values.
-	MetricSignInFailures = "gts_signin_failures_total"
+	MetricSignInFailures = "qubitdesk_signin_failures_total"
 
 	// MetricDirectoryAccounts counts what a synchronisation did, labelled
 	// "action" with "created" or "deleted".
-	MetricDirectoryAccounts = "gts_directory_accounts_total"
+	MetricDirectoryAccounts = "qubitdesk_directory_accounts_total"
 
 	// MetricDirectoryRuns counts what each scheduled synchronisation came to,
 	// labelled "outcome" with one of the DirectoryRun values.
-	MetricDirectoryRuns = "gts_directory_scheduled_runs_total"
+	MetricDirectoryRuns = "qubitdesk_directory_scheduled_runs_total"
 	// MetricTicketsOpened counts the tickets opened, labelled "channel" with how
 	// each arrived: a closed set, the model's channels.
-	MetricTicketsOpened = "gts_tickets_opened_total"
+	MetricTicketsOpened = "qubitdesk_tickets_opened_total"
 )
 
 // What a scheduled synchronisation came to. A closed set, because it is a label.

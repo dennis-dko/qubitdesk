@@ -19,7 +19,7 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/go-ticket-system/test/tempdir"
+	"github.com/dennis-dko/qubitdesk/test/tempdir"
 )
 
 // TestABrowserLeavesNoProfileBehind closes a browser while something still

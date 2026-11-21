@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // aSealer is a sealer with a key of its own.
@@ -61,7 +61,7 @@ func TestAKeyCheckThatOpensWithTheKeyPasses(t *testing.T) {
 
 // A key check another key wrote is refused, before anything serves.
 func TestAKeyCheckAnotherKeyWroteIsRefused(t *testing.T) {
-	stored, err := aSealer(t).Seal("go-ticket-system")
+	stored, err := aSealer(t).Seal("qubitdesk")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestAKeyCheckAnotherKeyWroteIsRefused(t *testing.T) {
 // A key check that is not sealed proves nothing about the key and is refused:
 // Open hands such a value back as it is, so without this any key would pass.
 func TestAKeyCheckThatIsNotSealedIsRefused(t *testing.T) {
-	if err := checked(t, aSealer(t), "go-ticket-system"); err == nil {
+	if err := checked(t, aSealer(t), "qubitdesk"); err == nil {
 		t.Error("a check that was never sealed passed, so any key would have")
 	}
 }

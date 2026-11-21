@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/application/v1/command"
-	"github.com/dennis-dko/go-ticket-system/internal/application/v1/service"
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/memory"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
-	"github.com/dennis-dko/go-ticket-system/internal/support/webpush"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/command"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/memory"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/webpush"
 )
 
 // notifying is the ticket fixture with the notifications wired in as main wires
@@ -339,7 +339,7 @@ func TestWhatAnAgentIsToldIsPushedOnce(t *testing.T) {
 
 	mine, _, _ := n.notifications.Mine(ctx, &service.Principal{User: n.bob})
 	id := strconv.FormatUint(uint64(mine[0].ID), 10)
-	want := webpush.Message{Title: "New: Printer", Body: "Opened.", Tag: "gts-notification-" + id,
+	want := webpush.Message{Title: "New: Printer", Body: "Opened.", Tag: "qubitdesk-notification-" + id,
 		At: n.clock.Format(time.RFC3339), About: id}
 
 	if got := pusher.pushed[n.bob.ID]; len(got) != 1 || got[0] != want {

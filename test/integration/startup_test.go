@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // An instance that cannot start is seen to have stopped, as soon as it stops.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/go-ticket-system/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
 )
 
 // Every table the migration chain leaves is in a backup, or named as left out

@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/repository"
-	"github.com/dennis-dko/go-ticket-system/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // AccountExportService hands somebody everything held about their account - the
@@ -61,7 +61,7 @@ func (s *AccountExportService) Export(ctx context.Context, userID uint) ([]byte,
 	var archive bytes.Buffer
 
 	packer := zip.NewWriter(&archive)
-	note := exportNote{Application: "Go-Ticket-System", CreatedAt: created, LeftOut: exportLeftOut}
+	note := exportNote{Application: "QubitDesk", CreatedAt: created, LeftOut: exportLeftOut}
 
 	for _, part := range parts {
 		rows := part.Rows

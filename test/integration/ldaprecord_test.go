@@ -129,7 +129,7 @@ func TestAScheduledDirectoryRunRemovesWhoHasLeftAndSaysSo(t *testing.T) {
 	// which calls every run that returned a success.
 	if !eventually(func() bool {
 		for line := range strings.Lines(scrape(t, a)) {
-			if strings.HasPrefix(line, "gts_directory_scheduled_runs_total") &&
+			if strings.HasPrefix(line, "qubitdesk_directory_scheduled_runs_total") &&
 				strings.Contains(line, `outcome="completed"`) {
 				return true
 			}

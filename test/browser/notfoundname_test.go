@@ -27,7 +27,7 @@ func TestANotFoundRefusalNamesWhatWasLookedForInTheReadersWords(t *testing.T) {
 
 	p.run("correct a role that is not there", chromedp.Evaluate(`(async () => {
 		const token = document.cookie.split('; ')
-			.find((c) => c.startsWith('gts_csrf=')).split('=')[1];
+			.find((c) => c.startsWith('qubitdesk_csrf=')).split('=')[1];
 		const res = await fetch('/api/v1/roles/999999', {
 			method: 'PUT',
 			credentials: 'same-origin',

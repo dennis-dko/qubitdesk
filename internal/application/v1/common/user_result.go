@@ -1,6 +1,6 @@
 package common
 
-import "github.com/dennis-dko/go-ticket-system/internal/domain/model"
+import "github.com/dennis-dko/qubitdesk/internal/domain/model"
 
 // UserResult result model. It deliberately carries no password material, so a
 // hash cannot leak by being passed outwards.

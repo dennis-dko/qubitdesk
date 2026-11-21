@@ -13,7 +13,7 @@
  * what a ticket says, where it stands: all of it is asked fresh or not shown,
  * because a state from an hour ago shown as if it were now is worse than none.
  */
-const SHELL = 'gts-shell-v1';
+const SHELL = 'qubitdesk-shell-v1';
 
 /** What a page needs to draw itself at all, kept from the first visit. */
 const ESSENTIALS = ['/', '/app.js', '/app.css', '/theme.js', '/favicon.svg'];
@@ -70,7 +70,7 @@ const PUSHED_FRESH = 5 * 60 * 1000;
 const ASKED_AGAIN = {
   // What an agent was told about a ticket, which holds while they have not read
   // it: once read, on this screen or another, it is news no longer.
-  'gts-notification-': [
+  'qubitdesk-notification-': [
     (about) => `/api/v1/me/notifications/${encodeURIComponent(about)}`,
     (notification) => Boolean(notification) && !notification.readAt,
   ],

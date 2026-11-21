@@ -1,6 +1,6 @@
 package command
 
-import "github.com/dennis-dko/go-ticket-system/internal/domain/model"
+import "github.com/dennis-dko/qubitdesk/internal/domain/model"
 
 // CalendarCommand creates or changes a calendar. On a change an absent field
 // stays as it was, and hours or free days that are sent replace the ones the

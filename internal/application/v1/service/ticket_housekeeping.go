@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dennis-dko/go-ticket-system/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // Housekeep does what a ticket is owed without anybody asking, KIX18's daemon
