@@ -119,6 +119,12 @@ func (s *ConfigItemApplicationService) Names(ctx context.Context) (map[uint]stri
 	return names, nil
 }
 
+// Definition is the definition a class has now, which a new version of an item
+// of it is written under.
+func (s *ConfigItemApplicationService) Definition(ctx context.Context, classID uint) (*model.ClassDefinition, error) {
+	return s.definitions.Current(ctx, classID)
+}
+
 // Get is an item and the version it stands at.
 func (s *ConfigItemApplicationService) Get(ctx context.Context, id uint) (*ConfigItemWithVersion, error) {
 	item, err := s.items.GetByID(ctx, id)

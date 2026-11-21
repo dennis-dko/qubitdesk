@@ -788,8 +788,13 @@ func main() {
 	templates := appservice.NewResponseTemplateApplicationService(templateRepo, tickets, automationRefs)
 	faq := appservice.NewFAQApplicationService(sqldb.NewFAQCategoryRepository(db, cfg.Dialect),
 		sqldb.NewFAQArticleRepository(db, cfg.Dialect), userRepo)
+	configItems := appservice.NewConfigItemApplicationService(sqldb.NewConfigItemRepository(db, cfg.Dialect),
+		appservice.ConfigItemSources{
+			Definitions: classDefinitionRepo, Catalog: generalCatalogRepo, Contacts: contactRepo,
+			Organisations: customerRepos.Organisations, Users: userRepo,
+		})
 	demo := appservice.NewDemoService(userRepo, auth, tickets, catalogRepos, queues, levels, customers, faq,
-		templates)
+		templates).WithInventory(configItems, generalCatalogRepo)
 
 	// The built-in administrator is created after the migrations have run, so
 	// there is always a way in even on a brand new database.
@@ -875,9 +880,9 @@ func main() {
 				ctx.Logger.Warnf("no demo data was added: %s", summary.Skipped)
 			default:
 				ctx.Logger.Infof("added demo data in the built-in administrator's name: %d organisations, "+
-					"%d contacts, %d tickets with %d articles, %d knowledge base articles and %d templates",
-					summary.Organisations, summary.Contacts, summary.Tickets, summary.Articles,
-					summary.FAQArticles, summary.Templates)
+					"%d contacts, %d configuration items, %d tickets with %d articles, %d knowledge base articles "+
+					"and %d templates", summary.Organisations, summary.Contacts, summary.ConfigItems,
+					summary.Tickets, summary.Articles, summary.FAQArticles, summary.Templates)
 			}
 
 			demoWanted = false
@@ -1209,11 +1214,7 @@ func main() {
 			appservice.NewGeneralCatalogApplicationService(generalCatalogRepo), authorizer),
 		ClassDefinitions: rest.NewClassDefinitionHandler(appservice.NewClassDefinitionApplicationService(
 			generalCatalogRepo, classDefinitionRepo), authorizer),
-		ConfigItems: rest.NewConfigItemHandler(appservice.NewConfigItemApplicationService(
-			sqldb.NewConfigItemRepository(db, cfg.Dialect), appservice.ConfigItemSources{
-				Definitions: classDefinitionRepo, Catalog: generalCatalogRepo, Contacts: contactRepo,
-				Organisations: customerRepos.Organisations, Users: userRepo,
-			}), authorizer),
+		ConfigItems: rest.NewConfigItemHandler(configItems, authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves

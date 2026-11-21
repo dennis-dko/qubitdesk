@@ -45,6 +45,19 @@ func TestTheInstallerCanFillTheNewDatabaseWithDemoData(t *testing.T) {
 			titles, c.app.Log())
 	}
 
+	var items listOf[configItem]
+
+	admin.must(admin.api(http.MethodGet, "/cmdb/items", nil), http.StatusOK).Data(t, &items)
+
+	named := map[string]bool{}
+	for _, item := range items.Items {
+		named[item.Name] = true
+	}
+
+	if items.TotalCount != 3 || !named["Laptop von Anna Becker"] {
+		t.Errorf("the administrator finds the items %v, want the demo's three in German\n%s", named, c.app.Log())
+	}
+
 	var published listOf[faqArticleResponse]
 
 	nobody := a.newClient()

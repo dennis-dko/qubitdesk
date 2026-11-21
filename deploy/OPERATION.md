@@ -677,7 +677,8 @@ yourself; then nothing is printed and a provisioning script can drive the page.
 
 **Demo data**, if you choose it on the installer, where a new database starts
 empty, with the demo data or from a backup - one of the three. It is filled
-with three customer organisations and their contacts, eight tickets opened
+with three customer organisations, their contacts and three of their
+configuration items - a shop, a laptop at it and a server - eight tickets opened
 over the last five days with what was said and noted in them, a service level
 the *Service Desk* starts its tickets with - which one of them has already
 missed - four knowledge base articles, one of them public, and two answer
