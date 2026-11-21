@@ -214,6 +214,17 @@ func (s *TicketApplicationService) WithClock(now func() time.Time) *TicketApplic
 	return s
 }
 
+// At is a copy of the service reading the time from now, for writing what
+// happened at moments that have passed - the demo's tickets, opened over the
+// last days. A copy, because WithClock changes the service every request goes
+// through.
+func (s *TicketApplicationService) At(now func() time.Time) *TicketApplicationService {
+	copied := *s
+	copied.now = now
+
+	return &copied
+}
+
 // WithConfig attaches the system configuration. Optional: without it every
 // option the service obeys keeps its default.
 func (s *TicketApplicationService) WithConfig(config ConfigReader) *TicketApplicationService {

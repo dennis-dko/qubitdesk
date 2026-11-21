@@ -29,8 +29,10 @@ The connection is tested before it is accepted, written to
 the same process**. No restart: a container that exited to finish installing
 itself would look like one that crashed.
 
-The installer also asks what the new database starts with: nothing, or a backup
-another installation made, whichever database that one ran on. A backup is read whole on that page,
+The installer also asks what the new database starts with: nothing; demo data -
+customers and their tickets, a service level, a knowledge base and answer
+templates in the built-in administrator's name, to try QubitDesk out with; or a
+backup another installation made, whichever database that one ran on. A backup is read whole on that page,
 so a wrong passphrase or a file cut short is said there; the
 [operations manual](../deploy/OPERATION.md#restoring-a-backup) has the rest.
 

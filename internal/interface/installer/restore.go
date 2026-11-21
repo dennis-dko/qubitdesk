@@ -37,6 +37,11 @@ func (s *server) restoreAsked(r *http.Request, given answer, ds appconfig.Dataso
 		return nil, nil
 	}
 
+	if given.Demo {
+		return nil, apperror.Invalidf("a new database is filled with demo data or from a backup, not both").
+			WithCode("demoOrRestore")
+	}
+
 	s.mu.Lock()
 	restore := s.restore
 	s.mu.Unlock()

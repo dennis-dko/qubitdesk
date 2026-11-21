@@ -277,10 +277,11 @@
       </div>
     </div>
 
-    <!-- What the new database starts with, as one choice: empty, or a backup. A
-         radio group is what says the two exclude each other and lets anybody go
-         from either answer to the other. A backup is put in by the application
-         once it has migrated the database, and only into an empty one, after it
+    <!-- What the new database starts with, as one choice of three: the demo data
+         and a backup exclude each other, and a radio group is what says so and
+         lets anybody go from any answer to any other. Both are answered by the
+         application once it has migrated the database, and only into an empty
+         one: the demo in the built-in administrator's name, a backup after it
          was read here first, so what is wrong with it is said on this page. -->
     <fieldset class="choice">
       <legend data-i18n="db.startWith">What should the new database start with?</legend>
@@ -289,6 +290,17 @@
         <span class="option-text">
           <strong data-i18n="db.empty">Start empty</strong>
           <span class="muted" data-i18n="db.emptyText">Nothing but the built-in administrator and what every installation ships with; accounts, queues and tickets are added in the application.</span>
+        </span>
+      </label>
+      <label class="option">
+        <input type="radio" name="start" id="demo" value="demo">
+        <span class="option-text">
+          <strong data-i18n="db.demo">Fill it with demo data</strong>
+          <span class="muted" data-i18n="db.demoText">
+            Three customers and their contacts, eight tickets with what was said in them, a service level, a
+            knowledge base and two answer templates, in the built-in administrator's name. Only into an empty
+            database, and only for trying QubitDesk out.
+          </span>
         </span>
       </label>
       <label class="option">
@@ -858,7 +870,9 @@
 
       say(t('msg.saving', 'Saving…'));
 
-      await call('/install/save', { restore: $('restore').checked });
+      // The language goes with the question, so demo data is written in the
+      // words this page was read in.
+      await call('/install/save', { demo: $('demo').checked, restore: $('restore').checked, language });
       say(t('msg.saved',
         'Saved. The application is starting — this page will reload when it answers.'), 'good');
       waitForTheApplication();

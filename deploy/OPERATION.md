@@ -675,9 +675,23 @@ installer requires a token. It is generated and printed in the process log at
 start, with the URL to open. For an unattended install set `SETUP_TOKEN`
 yourself; then nothing is printed and a provisioning script can drive the page.
 
-**A backup**, if you choose it on the installer, where a new database starts
-empty or from a backup - one of the two. *Restoring a backup* below says what
-it asks for and what it refuses.
+**Demo data**, if you choose it on the installer, where a new database starts
+empty, with the demo data or from a backup - one of the three. It is filled
+with three customer organisations and their contacts, eight tickets opened
+over the last five days with what was said and noted in them, a service level
+the *Service Desk* starts its tickets with - which one of them has already
+missed - four knowledge base articles, one of them public, and two answer
+templates. All of it is written in the language the installer was read in and
+in the built-in administrator's name, which is the account the browser that
+answered the installer is signed into, so the demo is on screen at once. No
+other account is made for it. It goes only into a database that holds no
+tickets yet: pointed at a database in use, the start says so in the log and
+adds nothing. It is meant for trying QubitDesk out; for an installation people
+will work in, leave it empty, or delete the demo's tickets, customers,
+articles, templates and service level afterwards.
+
+**A backup**, if you choose it instead. *Restoring a backup* below says what it
+asks for and what it refuses.
 
 Two things about an exposed installer. `GET /install/state` needs no token and
 says the instance name and the build version; whatever database prefill the

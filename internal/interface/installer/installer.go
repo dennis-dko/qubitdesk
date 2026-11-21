@@ -94,6 +94,13 @@ type Result struct {
 	// the conditions on that live.
 	Token string
 
+	// Demo asks for the new database to be filled with demo data once the
+	// application has migrated it, written in Language - the language the page
+	// was read in. Whether it is, and into whose name, is the application's to
+	// decide: this screen only carries the question.
+	Demo     bool
+	Language string
+
 	// Restore is a backup to put into the new database once it is migrated, and
 	// RestorePassphrase the passphrase it opens with. The installer has opened it
 	// once already, so a wrong passphrase was said on the screen rather than at
@@ -111,10 +118,15 @@ type Result struct {
 }
 
 // answer is the body the page sends: the connection, and with a save, whether
-// the backup uploaded before is to be put into the new database.
+// the new database is to be filled with demo data and in which language, or to
+// take the backup uploaded before.
 type answer struct {
 	appconfig.Datasource
 
+	Demo     bool   `json:"demo"`
+	Language string `json:"language"`
+
+	// Restore asks for the backup uploaded before to be put into the database.
 	Restore bool `json:"restore"`
 }
 
@@ -122,6 +134,8 @@ type answer struct {
 // written, and what was asked of the new database.
 type handover struct {
 	datasource appconfig.Datasource
+	demo       bool
+	language   string
 	restore    *pendingRestore
 }
 
@@ -214,6 +228,8 @@ func Serve(ctx context.Context, cfg Config) (Result, error) {
 	result := Result{
 		Datasource: accepted.datasource,
 		Token:      cfg.Token,
+		Demo:       accepted.demo,
+		Language:   accepted.language,
 	}
 
 	if restore := accepted.restore; restore != nil {
@@ -487,7 +503,7 @@ func (s *server) save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Cannot block: saved lets exactly one request this far, and done holds one.
-	s.done <- handover{datasource: ds, restore: restore}
+	s.done <- handover{datasource: ds, demo: given.Demo, language: given.Language, restore: restore}
 }
 
 // holdsTheToken reports whether a request carries the setup token.

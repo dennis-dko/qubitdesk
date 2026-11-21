@@ -343,6 +343,14 @@ func main() {
 	// came with it; restored once the migrations have made the tables.
 	var backupToRestore *restoreRequest
 
+	// Whether that same answer asked for demo data, and in which language. Asked
+	// once, of a database that has only just been chosen; a later start never
+	// asks it again.
+	var (
+		demoWanted   bool
+		demoLanguage string
+	)
+
 	if !configured {
 		chosen, err := runInstaller()
 
@@ -367,6 +375,7 @@ func main() {
 
 		ds = chosen.Datasource
 		installerToken = chosen.Token
+		demoWanted, demoLanguage = chosen.Demo, chosen.Language
 		if chosen.Restore != nil {
 			backupToRestore = &restoreRequest{
 				file:           chosen.Restore,
@@ -773,6 +782,15 @@ func main() {
 
 	userDomain := domainservice.NewUserDomainService(userRepo, roleRepo, contactRepo)
 
+	// The services the demo writes through, which the routes below are handed
+	// as well: one of each, so the demo is held to exactly what a request is.
+	levels := appservice.NewSLAApplicationService(levelRepo, calendarRepo)
+	templates := appservice.NewResponseTemplateApplicationService(templateRepo, tickets, automationRefs)
+	faq := appservice.NewFAQApplicationService(sqldb.NewFAQCategoryRepository(db, cfg.Dialect),
+		sqldb.NewFAQArticleRepository(db, cfg.Dialect), userRepo)
+	demo := appservice.NewDemoService(userRepo, auth, tickets, catalogRepos, queues, levels, customers, faq,
+		templates)
+
 	// The built-in administrator is created after the migrations have run, so
 	// there is always a way in even on a brand new database.
 	prepare := func(ctx *gofr.Context) error {
@@ -841,6 +859,28 @@ func main() {
 					"password - anybody who can reach this installation can sign in as it; sign in and change it",
 					appservice.SystemUserEmail)
 			}
+		}
+
+		// The demo, where whoever answered this process's installer asked for it:
+		// after the built-in administrator exists, because it is written in that
+		// account's name, and never a reason to stop - an installation without its
+		// demo is an installation that works.
+		if demoWanted {
+			summary, err := demo.Seed(ctx, demoLanguage)
+
+			switch {
+			case err != nil:
+				ctx.Logger.Errorf("the demo data was added only in part: %v", err)
+			case summary.Skipped != "":
+				ctx.Logger.Warnf("no demo data was added: %s", summary.Skipped)
+			default:
+				ctx.Logger.Infof("added demo data in the built-in administrator's name: %d organisations, "+
+					"%d contacts, %d tickets with %d articles, %d knowledge base articles and %d templates",
+					summary.Organisations, summary.Contacts, summary.Tickets, summary.Articles,
+					summary.FAQArticles, summary.Templates)
+			}
+
+			demoWanted = false
 		}
 
 		// Load the directory settings now that the database is up. A failure
@@ -1153,22 +1193,18 @@ func main() {
 
 		SysConfig: rest.NewSysConfigHandler(sysConfig, authorizer),
 		Calendars: rest.NewCalendarHandler(calendars, authorizer),
-		Levels: rest.NewServiceLevelHandler(
-			appservice.NewSLAApplicationService(levelRepo, calendarRepo),
-			authorizer),
-		Macros: rest.NewMacroHandler(appservice.NewMacroApplicationService(macroRepo, automationRefs), authorizer),
-		Plans:  rest.NewExecPlanHandler(appservice.NewExecPlanApplicationService(planRepo), authorizer),
+		Levels:    rest.NewServiceLevelHandler(levels, authorizer),
+		Macros:    rest.NewMacroHandler(appservice.NewMacroApplicationService(macroRepo, automationRefs), authorizer),
+		Plans:     rest.NewExecPlanHandler(appservice.NewExecPlanApplicationService(planRepo), authorizer),
 		Jobs: rest.NewJobHandler(
 			appservice.NewJobApplicationService(jobRepo, macroRepo, planRepo, automationRefs), automation, authorizer),
 
 		Notifications: rest.NewNotificationDefinitionHandler(appservice.NewNotificationDefinitionApplicationService(
 			sqldb.NewNotificationDefinitionRepository(db, cfg.Dialect), automationRefs), authorizer),
-		Told: rest.NewNotificationHandler(notifications, authorizer),
-		Templates: rest.NewResponseTemplateHandler(
-			appservice.NewResponseTemplateApplicationService(templateRepo, tickets, automationRefs), authorizer),
-		FAQ: rest.NewFAQHandler(appservice.NewFAQApplicationService(sqldb.NewFAQCategoryRepository(db, cfg.Dialect),
-			sqldb.NewFAQArticleRepository(db, cfg.Dialect), userRepo), authorizer),
-		Portal: rest.NewPortalHandler(tickets, authorizer),
+		Told:      rest.NewNotificationHandler(notifications, authorizer),
+		Templates: rest.NewResponseTemplateHandler(templates, authorizer),
+		FAQ:       rest.NewFAQHandler(faq, authorizer),
+		Portal:    rest.NewPortalHandler(tickets, authorizer),
 		GeneralCatalog: rest.NewGeneralCatalogHandler(
 			appservice.NewGeneralCatalogApplicationService(generalCatalogRepo), authorizer),
 		ClassDefinitions: rest.NewClassDefinitionHandler(appservice.NewClassDefinitionApplicationService(
