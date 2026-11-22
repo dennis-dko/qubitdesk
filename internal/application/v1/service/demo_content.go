@@ -292,6 +292,18 @@ func demoWords() []demoText {
 		words = append(words, item.name)
 	}
 
+	for _, change := range demoChanges {
+		words = append(words, change.title, change.description, change.justification)
+
+		for _, order := range change.orders {
+			words = append(words, order.title, order.instruction)
+
+			if order.report.key != "" {
+				words = append(words, order.report)
+			}
+		}
+	}
+
 	for _, ticket := range demoTickets {
 		words = append(words, ticket.title, ticket.opening)
 

@@ -4,6 +4,7 @@ package integration
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -70,9 +71,33 @@ func TestTheInstallerCanFillTheNewDatabaseWithDemoData(t *testing.T) {
 	admin.must(admin.api(http.MethodGet, "/links?object=ticket&record="+path(certificate), nil),
 		http.StatusOK).Data(t, &linked)
 
-	if len(linked.Items) != 1 || linked.Items[0].Object != "configitem" ||
-		linked.Items[0].Label != "00000003 Webserver von Harbourline" {
-		t.Errorf("the certificate's ticket is linked to %+v, want Harbourline's web server", linked.Items)
+	ends := map[string]string{}
+	for _, link := range linked.Items {
+		ends[link.Object] = link.Label
+	}
+
+	if len(linked.Items) != 2 || ends["configitem"] != "00000003 Webserver von Harbourline" ||
+		!strings.HasSuffix(ends["change"], " Das Zertifikat des Webservers von Harbourline erneuern") {
+		t.Errorf("the certificate's ticket is linked to %+v, want Harbourline's web server and its change",
+			linked.Items)
+	}
+
+	var changes listOf[changeResponse]
+
+	admin.must(admin.api(http.MethodGet, "/changes", nil), http.StatusOK).Data(t, &changes)
+
+	var renewal changeResponse
+
+	for _, change := range changes.Items {
+		if change.Title == "Das Zertifikat des Webservers von Harbourline erneuern" {
+			renewal = change
+		}
+	}
+
+	if changes.TotalCount != 2 || renewal.WorkOrders != 3 || renewal.PlannedStartAt != nil ||
+		renewal.StateID != catalogValue(t, admin, "ITSM::ChangeManagement::Change::State", "in-progress") {
+		t.Errorf("the administrator finds the changes %+v, want the demo's two in German, the renewal in progress "+
+			"with three work orders, one of them unplanned", changes.Items)
 	}
 
 	var published listOf[faqArticleResponse]

@@ -48,6 +48,7 @@ type DemoService struct {
 	faq       *FAQApplicationService
 	templates *ResponseTemplateApplicationService
 	inventory *demoInventory
+	changes   *demoChangeServices
 	now       func() time.Time
 }
 
@@ -82,6 +83,19 @@ func (s *DemoService) WithInventory(
 	return s
 }
 
+// WithChanges attaches what the demo's changes and their work orders are
+// written through and linked with. Optional: without it the demo adds none.
+func (s *DemoService) WithChanges(
+	changes *ChangeApplicationService,
+	workOrders *WorkOrderApplicationService,
+	catalog repository.GeneralCatalogRepository,
+	links *LinkApplicationService,
+) *DemoService {
+	s.changes = &demoChangeServices{changes: changes, workOrders: workOrders, catalog: catalog, links: links}
+
+	return s
+}
+
 // WithClock reads the time from now instead of the wall.
 func (s *DemoService) WithClock(now func() time.Time) *DemoService {
 	s.now = now
@@ -91,7 +105,7 @@ func (s *DemoService) WithClock(now func() time.Time) *DemoService {
 
 // DemoSummary is what a seed added, for the log.
 type DemoSummary struct {
-	Organisations, Contacts, Tickets, Articles, FAQArticles, Templates, ConfigItems int
+	Organisations, Contacts, Tickets, Articles, FAQArticles, Templates, ConfigItems, Changes, WorkOrders int
 
 	// Skipped says why nothing was added, and is empty when the demo went in.
 	Skipped string
@@ -162,7 +176,12 @@ func (s *DemoService) Seed(ctx context.Context, language string) (DemoSummary, e
 		return summary, err
 	}
 
-	return summary, s.seedTickets(ctx, caller, t, desk, contacts, items, &summary)
+	tickets, err := s.seedTickets(ctx, caller, t, desk, contacts, items, &summary)
+	if err != nil {
+		return summary, err
+	}
+
+	return summary, s.seedChanges(ctx, caller, t, tickets, items, &summary)
 }
 
 // desk is the queue the migration ships, which every demo ticket is opened in.
@@ -284,25 +303,26 @@ func (s *DemoService) seedTickets(
 	contacts map[string]*model.Contact,
 	items map[string]uint,
 	summary *DemoSummary,
-) error {
+) (map[string]uint, error) {
 	now := s.now()
 	moment := now
 	back := s.tickets.At(func() time.Time { return moment })
+	opened := map[string]uint{}
 
 	for _, ticket := range demoTickets {
 		kind, err := s.catalog.Types.GetByName(ctx, ticket.kind)
 		if err != nil {
-			return fmt.Errorf("finding the shipped type %s: %w", ticket.kind, err)
+			return nil, fmt.Errorf("finding the shipped type %s: %w", ticket.kind, err)
 		}
 
 		priority, err := s.catalog.Priorities.GetByName(ctx, ticket.priority)
 		if err != nil {
-			return fmt.Errorf("finding the shipped priority %s: %w", ticket.priority, err)
+			return nil, fmt.Errorf("finding the shipped priority %s: %w", ticket.priority, err)
 		}
 
 		state, err := s.catalog.States.GetByName(ctx, ticket.state)
 		if err != nil {
-			return fmt.Errorf("finding the shipped state %s: %w", ticket.state, err)
+			return nil, fmt.Errorf("finding the shipped state %s: %w", ticket.state, err)
 		}
 
 		title := ticket.title.in(t)
@@ -319,10 +339,12 @@ func (s *DemoService) seedTickets(
 
 		moment = now.Add(-ticket.opened)
 
-		opened, err := back.CreateTicket(ctx, caller, open)
+		made, err := back.CreateTicket(ctx, caller, open)
 		if err != nil {
-			return fmt.Errorf("opening the ticket %s: %w", ticket.title.key, err)
+			return nil, fmt.Errorf("opening the ticket %s: %w", ticket.title.key, err)
 		}
+
+		opened[ticket.title.key] = made.ID
 
 		summary.Tickets++
 		summary.Articles++
@@ -330,23 +352,23 @@ func (s *DemoService) seedTickets(
 		for _, step := range ticket.steps {
 			moment = now.Add(-step.ago)
 
-			if err := s.takeStep(ctx, back, caller, t, opened.ID, step, now, summary); err != nil {
-				return fmt.Errorf("writing what happened to the ticket %s: %w", ticket.title.key, err)
+			if err := s.takeStep(ctx, back, caller, t, made.ID, step, now, summary); err != nil {
+				return nil, fmt.Errorf("writing what happened to the ticket %s: %w", ticket.title.key, err)
 			}
 		}
 
-		if err := s.linkAbout(ctx, caller, opened.ID, items[ticket.about]); err != nil {
-			return fmt.Errorf("linking the ticket %s to what it is about: %w", ticket.title.key, err)
+		if err := s.linkAbout(ctx, caller, made.ID, items[ticket.about]); err != nil {
+			return nil, fmt.Errorf("linking the ticket %s to what it is about: %w", ticket.title.key, err)
 		}
 
 		if ticket.watched {
-			if err := s.tickets.SetWatching(ctx, caller, opened.ID, true); err != nil {
-				return fmt.Errorf("watching the ticket %s: %w", ticket.title.key, err)
+			if err := s.tickets.SetWatching(ctx, caller, made.ID, true); err != nil {
+				return nil, fmt.Errorf("watching the ticket %s: %w", ticket.title.key, err)
 			}
 		}
 	}
 
-	return nil
+	return opened, nil
 }
 
 // takeStep writes one step's article and puts the ticket into its state, through

@@ -808,7 +808,8 @@ func main() {
 	links := appservice.NewLinkApplicationService(sqldb.NewLinkRepository(db, cfg.Dialect), tickets, configItems).
 		WithChanges(changes)
 	demo := appservice.NewDemoService(userRepo, auth, tickets, catalogRepos, queues, levels, customers, faq,
-		templates).WithInventory(configItems, generalCatalogRepo, links)
+		templates).WithInventory(configItems, generalCatalogRepo, links).
+		WithChanges(changes, workOrders, generalCatalogRepo, links)
 
 	// The built-in administrator is created after the migrations have run, so
 	// there is always a way in even on a brand new database.
@@ -894,9 +895,10 @@ func main() {
 				ctx.Logger.Warnf("no demo data was added: %s", summary.Skipped)
 			default:
 				ctx.Logger.Infof("added demo data in the built-in administrator's name: %d organisations, "+
-					"%d contacts, %d configuration items, %d tickets with %d articles, %d knowledge base articles "+
-					"and %d templates", summary.Organisations, summary.Contacts, summary.ConfigItems,
-					summary.Tickets, summary.Articles, summary.FAQArticles, summary.Templates)
+					"%d contacts, %d configuration items, %d tickets with %d articles, %d knowledge base articles, "+
+					"%d templates and %d changes with %d work orders", summary.Organisations, summary.Contacts,
+					summary.ConfigItems, summary.Tickets, summary.Articles, summary.FAQArticles, summary.Templates,
+					summary.Changes, summary.WorkOrders)
 			}
 
 			demoWanted = false
