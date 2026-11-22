@@ -48,7 +48,7 @@ services:
     ports:
       - "53306:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ugts", "-pgts-test-password"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uqubitdesk", "-pqubitdesk-test-password"]
       interval: 3s
       timeout: 5s
       retries: 30

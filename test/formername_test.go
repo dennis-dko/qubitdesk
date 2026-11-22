@@ -9,40 +9,52 @@ import (
 	"testing"
 )
 
-// formerName matches both names this project had before it was QubitDesk,
-// however they are written: the time recording's it was cloned from, until
-// 2026-11-12, and its own first one, until 2026-11-21 - each three words joined
-// by a hyphen, an underscore, a space or nothing, in any case - and the
-// three-letter abbreviation each carried in its cookies, token prefixes,
-// variables and sealed secrets. The abbreviation counts as a word of its own
-// after anything but a letter or a digit, glued to a word where no + or /
-// before it could make it the inside of a hash, and anywhere in the words it
-// was glued to - a calendar key, a backup, a theme - which are too long to
-// turn up inside a hash. A word of its own after a slash is a path, a host or
-// a connection string, and the first sweep of the second rename left exactly
-// those behind, and a calendar key after a slash, because it skipped them as
-// the earlier version of this pattern did. All of it is spelled so that this
-// file does not match it.
+// formerName matches every name that is not this project's, however it is
+// written: the two it had before it was QubitDesk - the time recording's it
+// was cloned from, until 2026-11-12, and its own first one, until 2026-11-21 -
+// and the name the time recording carries now, which this tree has not named
+// since 2026-11-22, as Dennis decided that day. A name is its words joined by
+// a hyphen, an underscore, a space or nothing, in any case, and its
+// abbreviations go with it: the three letters each former name carried in its
+// cookies, token prefixes, variables and sealed secrets, and the two the time
+// recording's backups carry now.
+//
+// The three letters count as a word of their own after anything but a letter
+// or a digit; glued to a word where no + or / before them could make them the
+// inside of a hash; anywhere before a separator their prefixes used, which is
+// how two MySQL health checks still carried them, glued to the option in front
+// of a user and a password; and anywhere in the words they were glued to - a
+// calendar key, a backup, a theme - which are too long to turn up inside a
+// hash. A word of its own after a slash is a path, a host or a connection
+// string, and the first sweep of the second rename left exactly those behind,
+// and a calendar key after a slash, because it skipped them as the earlier
+// version of this pattern did. All of it is spelled so that this file does not
+// match it.
 var formerName = regexp.MustCompile(`(?i)go[-_ ]?time[-_ ]?recording|go[-_ ]?tick[e]t[-_ ]?system|` +
-	`(^|[^a-z0-9])g[t][rs]([^a-z0-9]|$)|(^|[^a-z0-9+/])g[t][rs]|g[t][rs](cal|bak|theme|backup)`)
+	`time[-_ ]?pul[s]e|t[p](bak|backup)|(^|[^a-z0-9])g[t][rs]([^a-z0-9]|$)|(^|[^a-z0-9+/])g[t][rs]|` +
+	`g[t][rs][_.:-]|g[t][rs](cal|bak|theme|backup)`)
 
-// oldNameKeptOnPurpose are the files that may still use a former name, each
-// with its reason. A row whose file has stopped using it fails as well, so the
-// list cannot go on excusing what is no longer there. No code is on it: both
-// renames came before any release, so no database, cookie or token ever carried
-// a former name for something to convert.
-var oldNameKeptOnPurpose = map[string]string{
-	"doc/audit-ledger.md": "it quotes what a file said on the day it was read, and a record is not rewritten",
-}
+// oldNameKeptOnPurpose are the files that may still use a name formerName
+// matches, each with its reason. A row whose file has stopped using it fails
+// as well, so the list cannot go on excusing what is no longer there. It is
+// empty: both renames came before any release, so no database, cookie or token
+// ever carried a former name for something to convert, and the audit ledger's
+// quotes of a database name were brought to the present one on 2026-11-22 -
+// the first rename had rewritten them already, so they quoted nothing as it
+// was read.
+var oldNameKeptOnPurpose = map[string]string{}
 
 // The clone was given its own name on 2026-11-12, before anything else changed,
 // and the one it carries now on 2026-11-21. Each rename looked for the
 // spellings somebody thought of, and each let one past: the time recording's
 // left its former name in camel case in the Android app's download keeper,
 // which nothing reported because nothing reads that mark but the script that
-// sets it, and the second left the abbreviation in every path, host and
-// connection string, where it follows a slash. So every spelling of both is
-// looked for here at once, in every text file git keeps.
+// sets it; the second left the abbreviation in every path, host and connection
+// string, where it follows a slash; and after both, two MySQL health checks
+// still asked with the user and passwords of the first name, which went on
+// passing because mysqladmin ping answers success to a refused password. So
+// every spelling of every name is looked for here at once, in every text file
+// git keeps and in the name of every file.
 func TestNothingStillCarriesTheFormerName(t *testing.T) {
 	// safe.directory, because in the Linux container the suite runs in here the
 	// mounted repository belongs to another user and git refuses it otherwise.
@@ -60,6 +72,10 @@ func TestNothingStillCarriesTheFormerName(t *testing.T) {
 
 	for _, line := range listed {
 		meta, path, _ := strings.Cut(line, "\t")
+		if formerName.MatchString(path) {
+			t.Errorf("%s is named with a name that is not this project's", path)
+		}
+
 		if strings.HasPrefix(meta, "i/-text") {
 			continue
 		}
@@ -79,14 +95,15 @@ func TestNothingStillCarriesTheFormerName(t *testing.T) {
 			usesIt[path] = true
 
 			if _, kept := oldNameKeptOnPurpose[path]; !kept {
-				t.Errorf("%s:%d still uses the project's former name: %s", path, n+1, strings.TrimSpace(text))
+				t.Errorf("%s:%d names what this project is not called: %s", path, n+1, strings.TrimSpace(text))
 			}
 		}
 	}
 
 	for path, reason := range oldNameKeptOnPurpose {
 		if !usesIt[path] {
-			t.Errorf("%s no longer uses the former name, so its row (%q) excuses nothing; remove it", path, reason)
+			t.Errorf("%s no longer uses a name formerName matches, so its row (%q) excuses nothing; remove it",
+				path, reason)
 		}
 	}
 }
