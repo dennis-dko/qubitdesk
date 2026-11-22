@@ -9112,6 +9112,7 @@ function resetItsmChangeForm({ keepShown = false } = {}) {
   $('#itsmchange-submit').hidden = !can('changes:write');
   $('#itsmchange-delete').hidden = true;
   $('#itsmchange-state').hidden = true;
+  $('#itsmchange-standing').textContent = '';
   $('#itsmchange-workorders').hidden = true;
   $('#table-workorder tbody').replaceChildren();
   resetWorkOrderForm();

@@ -59,6 +59,14 @@ func TestAChangeIsCarriedOutInWorkOrdersOnTheChangesScreen(t *testing.T) {
 	}
 
 	p.run("sign out", chromedp.Click("#logout", chromedp.ByID), chromedp.WaitVisible("#form-login", chromedp.ByID))
+
+	// Nothing of the change stays in the document under the sign-in screen,
+	// hidden or not, for whoever signs in next.
+	if left := p.text("#itsmchange-detail"); strings.Contains(left, "Replace the core switch") ||
+		strings.Contains(left, "pending approval") {
+		t.Errorf("after the sign-out the change's card still holds %q", left)
+	}
+
 	p.signIn(workerEmail, workerPassword)
 	p.waitGone("#login-screen")
 	p.settled()
