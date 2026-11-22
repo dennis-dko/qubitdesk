@@ -793,6 +793,17 @@
             <div class="row"><button type="submit" data-i18n="link.add">Link</button></div>
           </form>
         </section>
+        <!-- Folding this ticket into another, as OTRS merges one: offered where
+             the reader works the ticket, and refused by the server where they do
+             not work the other. -->
+        <form method="post" class="form" id="form-ticket-merge" hidden>
+          <h3 data-i18n="ticket.mergeTitle">Merge into another ticket</h3>
+          <div class="grid">
+            <label data-i18n="link.find">Find<input type="search" name="find" maxlength="255" data-not-an-edit data-i18n-placeholder="ticket.mergeHint" placeholder="number or title"></label>
+            <label data-i18n="field.intoId">Merge into<select name="intoId" required></select></label>
+          </div>
+          <div class="row"><button type="submit" data-i18n="ticket.merge">Merge</button></div>
+        </form>
       </div>
 
       <form method="post" id="form-ticket" class="card form" data-perm="tickets:create,tickets:write">

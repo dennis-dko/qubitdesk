@@ -8614,6 +8614,7 @@ function wireConfigItems() {
 
   wireLinkForm($('#configitem-links'));
   wireLinkForm($('#ticket-links'));
+  wireTicketMerge();
 }
 
 // --------------------------------------------------------------------- links
@@ -9993,6 +9994,11 @@ async function openTicket(id, { keepPlace = false } = {}) {
     await drawLinks(linked, 'ticket', ticket.id, worksIn(ticket.queueId) && can('tickets:write'));
   }
 
+  // Merged only where it is worked, and only once.
+  const merging = $('#form-ticket-merge');
+  merging.hidden = !worksIn(ticket.queueId) || !can('tickets:write') || Boolean(ticket.mergedInto);
+  forgetMergeChoice();
+
   // Corrected only where the reader's role works in its queue: the server
   // answers any change to a ticket of a queue only read as not found, and a form
   // that offers what the server refuses teaches somebody the screen is broken.
@@ -10048,6 +10054,65 @@ function forgetTheOpenTicket() {
   }
 
   forgetLinks($('#ticket-links'));
+  forgetMergeChoice();
+}
+
+/** Empties the merge form's search and its choices, for a ticket opened or closed. */
+function forgetMergeChoice() {
+  const form = $('#form-ticket-merge');
+
+  form.reset();
+  form.elements.intoId.replaceChildren(el('option', { value: '', text: '–' }));
+}
+
+/**
+ * Wires the merge form: a search for the ticket to merge into, which fills the
+ * choice with tickets not merged themselves, and the merge once it is
+ * confirmed - after which the ticket it went into is opened, holding both.
+ */
+function wireTicketMerge() {
+  const form = $('#form-ticket-merge');
+  let pending;
+
+  const offer = async () => {
+    const query = new URLSearchParams({ q: form.elements.find.value.trim(), limit: String(SEARCH_OFFERS) });
+    const found = (await api(`/tickets?${query}`))?.items ?? [];
+
+    form.elements.intoId.replaceChildren(el('option', { value: '', text: '–' }),
+      ...found
+        .filter((ticket) => ticket.id !== openTicketShown?.id && !ticket.mergedInto)
+        .map((ticket) => el('option', { value: String(ticket.id), text: `${ticket.number} ${ticket.title}` })));
+  };
+
+  form.elements.find.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => offer().catch((err) => toastFailure(err)), 250);
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const ticket = openTicketShown;
+    const into = Number(form.elements.intoId.value) || 0;
+    if (!ticket || !into) return;
+
+    const sure = await confirmDialog({
+      title: t('ticket.mergeConfirmTitle', 'Merge the ticket?'),
+      text: fillIn(t('ticket.mergeConfirmText',
+        '{0} goes into {1}: its articles, the time noted on it and its watchers go there, and it stays merged.'),
+      [ticket.number, form.elements.intoId.selectedOptions[0]?.textContent ?? '']),
+      confirmLabel: t('ticket.mergeConfirm', 'Merge it'),
+    });
+
+    if (!sure) return;
+
+    await mutate(() => api(`/tickets/${ticket.id}/merge`, { method: 'POST', body: JSON.stringify({ intoId: into }) }),
+      t('msg.ticketMerged', 'Ticket merged'),
+      async () => {
+        await openTicket(into);
+        await loadTicketPage();
+      });
+  });
 }
 
 /** What a ticket is, what was written in it and what happened to it. */
@@ -10080,6 +10145,12 @@ function drawTicketDetail(ticket, articles, history) {
     ...fact(t('field.organisationId', 'Organisation'), ticket.organisationName || t('ticket.nobody', 'nobody')),
     ...fact(t('ticket.locked', 'Locked'), ticket.locked ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no')),
     ...(ticket.pendingUntil ? fact(t('field.pendingUntil', 'Pending until'), fmtMoment(ticket.pendingUntil)) : []),
+    ...(ticket.mergedInto ? fact(t('ticket.mergedInto', 'Merged into'), el('button', {
+      type: 'button',
+      class: 'link',
+      text: t('ticket.openMergedInto', 'the ticket it went into'),
+      onclick: () => openTicket(ticket.mergedInto).catch((err) => toastFailure(err)),
+    })) : []),
     ...fact(t('ticket.opened', 'Opened'),
       `${fmtMoment(ticket.createdAt)}${ticket.createdByName ? ` – ${ticket.createdByName}` : ''}`),
     ...fact(t('ticket.accounted', 'Time noted'),
