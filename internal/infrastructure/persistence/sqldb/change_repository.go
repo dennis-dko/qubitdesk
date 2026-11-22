@@ -13,7 +13,8 @@ import (
 )
 
 // ChangeRepository keeps the changes in changes, the state machine in
-// change_transitions and the matrix in change_cip.
+// change_transitions and the matrix in change_cip. A change's work orders are
+// WorkOrderRepository's, and go when the change goes.
 type ChangeRepository struct{ base }
 
 // NewChangeRepository creates the repository for the given dialect.
@@ -188,6 +189,10 @@ func (r *ChangeRepository) Delete(ctx context.Context, id uint) error {
 			return err
 		}
 
+		if _, err := tx.exec(ctx, "DELETE FROM work_orders WHERE change_id = ?", id); err != nil {
+			return apperror.Internal(err)
+		}
+
 		if _, err := tx.exec(ctx, "DELETE FROM changes WHERE id = ?", id); err != nil {
 			return apperror.Internal(err)
 		}
@@ -196,14 +201,14 @@ func (r *ChangeRepository) Delete(ctx context.Context, id uint) error {
 	})
 }
 
-func (r *ChangeRepository) Transitions(ctx context.Context) ([]model.ChangeTransition, error) {
+func (r *ChangeRepository) Transitions(ctx context.Context) ([]model.StateTransition, error) {
 	rows, err := r.db.QueryContext(ctx, "SELECT from_state_id, to_state_id FROM change_transitions")
 	if err != nil {
 		return nil, apperror.Internal(err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var transitions []model.ChangeTransition
+	var transitions []model.StateTransition
 
 	for rows.Next() {
 		var (
@@ -215,7 +220,7 @@ func (r *ChangeRepository) Transitions(ctx context.Context) ([]model.ChangeTrans
 			return nil, apperror.Internal(err)
 		}
 
-		transitions = append(transitions, model.ChangeTransition{FromID: optionalID(from), ToID: to})
+		transitions = append(transitions, model.StateTransition{FromID: optionalID(from), ToID: to})
 	}
 
 	if err := rows.Err(); err != nil {

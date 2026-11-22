@@ -36,7 +36,7 @@ type ChangeRepository interface {
 	Delete(ctx context.Context, id uint) error
 
 	// Transitions is every step the state machine allows.
-	Transitions(ctx context.Context) ([]model.ChangeTransition, error)
+	Transitions(ctx context.Context) ([]model.StateTransition, error)
 
 	// Priority is the priority the matrix gives a category and an impact, or
 	// not found where it gives none.

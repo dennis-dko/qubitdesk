@@ -5,6 +5,7 @@ package integration
 import (
 	"net/http"
 	"testing"
+	"time"
 )
 
 type changeResponse struct {
@@ -18,6 +19,31 @@ type changeResponse struct {
 	PriorityID   uint   `json:"priorityId"`
 	StateID      uint   `json:"stateId"`
 	NextStateIDs []uint `json:"nextStateIds"`
+
+	PlannedStartAt *time.Time `json:"plannedStartAt"`
+	WorkOrders     int        `json:"workOrders"`
+}
+
+// catalogValue is the id of the value a list of the general catalog ships under
+// the name given, as a client reads it.
+func catalogValue(t *testing.T, c *client, class, name string) uint {
+	t.Helper()
+
+	var values struct {
+		Items []catalogItem `json:"items"`
+	}
+
+	c.must(c.api(http.MethodGet, "/general-catalog?class="+class, nil), http.StatusOK).Data(t, &values)
+
+	for _, entry := range values.Items {
+		if entry.Name == name {
+			return entry.ID
+		}
+	}
+
+	t.Fatalf("the catalog ships no %s %s", class, name)
+
+	return 0
 }
 
 // Changes are kept over HTTP on every database, as OTRS::ITSM keeps them: read
@@ -30,23 +56,7 @@ func TestChangesAreKeptOverHTTP(t *testing.T) {
 
 	a, admin, agent := startWithWorker(t)
 
-	value := func(class, name string) uint {
-		var values struct {
-			Items []catalogItem `json:"items"`
-		}
-
-		agent.must(agent.api(http.MethodGet, "/general-catalog?class="+class, nil), http.StatusOK).Data(t, &values)
-
-		for _, entry := range values.Items {
-			if entry.Name == name {
-				return entry.ID
-			}
-		}
-
-		t.Fatalf("the catalog ships no %s %s", class, name)
-
-		return 0
-	}
+	value := func(class, name string) uint { return catalogValue(t, agent, class, name) }
 
 	state := func(name string) uint { return value("ITSM::ChangeManagement::Change::State", name) }
 	request := map[string]any{"title": "Replace the core switch",

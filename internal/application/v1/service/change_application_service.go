@@ -111,37 +111,27 @@ func (s *ChangeApplicationService) NextStates(ctx context.Context, change *model
 		return nil, err
 	}
 
-	next := []uint{}
-
-	for _, step := range transitions {
-		if step.FromID != nil && *step.FromID == change.StateID {
-			next = append(next, step.ToID)
-		}
-	}
-
-	return next, nil
+	return nextStates(transitions, change.StateID), nil
 }
 
-// Create makes a change, by the account given, in the state the machine starts
-// with.
-func (s *ChangeApplicationService) Create(ctx context.Context, author uint, cmd ChangeCommand) (*model.Change, error) {
+// Create makes a change, by the caller, in the state the machine starts with.
+func (s *ChangeApplicationService) Create(ctx context.Context, caller *Principal, cmd ChangeCommand) (*model.Change, error) {
 	transitions, err := s.changes.Transitions(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	start := slices.IndexFunc(transitions, func(step model.ChangeTransition) bool { return step.FromID == nil })
-	if start < 0 {
-		return nil, apperror.Internal(fmt.Errorf("the change state machine has no state to start in"))
+	start, err := startState(transitions, "change")
+	if err != nil {
+		return nil, err
 	}
 
-	if cmd.StateID != nil && *cmd.StateID != transitions[start].ToID {
+	if cmd.StateID != nil && *cmd.StateID != start {
 		return nil, apperror.InvalidFields("stateId")
 	}
 
-	now := s.now().UTC()
-	change := &model.Change{StateID: transitions[start].ToID, CreatedAt: now, ChangedAt: now, CreatedBy: author,
-		ChangedBy: author}
+	now, author := s.now().UTC(), caller.User.ID
+	change := &model.Change{StateID: start, CreatedAt: now, ChangedAt: now, CreatedBy: author, ChangedBy: author}
 
 	for _, defaulted := range []struct {
 		given **uint
@@ -151,7 +141,7 @@ func (s *ChangeApplicationService) Create(ctx context.Context, author uint, cmd 
 			continue
 		}
 
-		id, err := s.named(ctx, defaulted.class, normal)
+		id, err := catalogNamed(ctx, s.catalog, defaulted.class, normal)
 		if err != nil {
 			return nil, err
 		}
@@ -170,11 +160,11 @@ func (s *ChangeApplicationService) Create(ctx context.Context, author uint, cmd 
 	return s.changes.Create(ctx, change, s.numbered(ctx, now))
 }
 
-// Update corrects a change, by the account given: what the command names,
-// the state only as the machine allows from where it stands.
+// Update corrects a change, by the caller: what the command names, the state
+// only as the machine allows from where it stands.
 func (s *ChangeApplicationService) Update(
 	ctx context.Context,
-	author uint,
+	caller *Principal,
 	id uint,
 	cmd ChangeCommand,
 ) (*model.Change, error) {
@@ -201,12 +191,12 @@ func (s *ChangeApplicationService) Update(
 		return nil, err
 	}
 
-	change.ChangedAt, change.ChangedBy = s.now().UTC(), author
+	change.ChangedAt, change.ChangedBy = s.now().UTC(), caller.User.ID
 
 	return s.changes.Update(ctx, change)
 }
 
-// Delete removes a change, with its links.
+// Delete removes a change, with its work orders and its links.
 func (s *ChangeApplicationService) Delete(ctx context.Context, id uint) error {
 	return s.changes.Delete(ctx, id)
 }
@@ -350,21 +340,65 @@ func (s *ChangeApplicationService) worker(ctx context.Context, standing, given *
 		return nil, nil
 	}
 
-	user, err := s.users.GetByID(ctx, *given)
-	if apperror.KindOf(err) == apperror.KindNotFound {
-		return nil, nil
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	role, err := s.roles.GetByID(ctx, user.RoleID)
-	if err != nil && apperror.KindOf(err) != apperror.KindNotFound {
+	user, role, err := accountWithRole(ctx, s.users, s.roles, *given)
+	if user == nil || err != nil {
 		return nil, err
 	}
 
 	return &changeWorker{id: user.ID, name: user.Name, works: role != nil && role.Has(model.PermChangeWrite)}, nil
+}
+
+// accountWithRole is the account an id names and the role it holds: no account
+// where the id names none, and no role where the account holds none there is.
+func accountWithRole(
+	ctx context.Context,
+	users repository.UserRepository,
+	roles repository.RoleRepository,
+	id uint,
+) (*model.User, *model.Role, error) {
+	user, err := users.GetByID(ctx, id)
+	if apperror.KindOf(err) == apperror.KindNotFound {
+		return nil, nil, nil
+	}
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	role, err := roles.GetByID(ctx, user.RoleID)
+	if apperror.KindOf(err) == apperror.KindNotFound {
+		return user, nil, nil
+	}
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return user, role, nil
+}
+
+// nextStates are the states a state machine lets one move to from the state
+// given; none from a state that ends it.
+func nextStates(transitions []model.StateTransition, from uint) []uint {
+	next := []uint{}
+
+	for _, step := range transitions {
+		if step.FromID != nil && *step.FromID == from {
+			next = append(next, step.ToID)
+		}
+	}
+
+	return next
+}
+
+// startState is the state a state machine starts in: the one no state leads to.
+func startState(transitions []model.StateTransition, machine string) (uint, error) {
+	start := slices.IndexFunc(transitions, func(step model.StateTransition) bool { return step.FromID == nil })
+	if start < 0 {
+		return 0, apperror.Internal(fmt.Errorf("the %s state machine has no state to start in", machine))
+	}
+
+	return transitions[start].ToID, nil
 }
 
 // rank sets a change's category, impact and priority: each a value of its
@@ -458,9 +492,10 @@ func (s *ChangeApplicationService) stillOfferedWhereChosen(ctx context.Context, 
 	return nil
 }
 
-// named is the id of a value its list ships under the name given.
-func (s *ChangeApplicationService) named(ctx context.Context, class, name string) (uint, error) {
-	entries, err := s.catalog.Items(ctx, class)
+// catalogNamed is the id of the value a list of the general catalog ships under
+// the name given.
+func catalogNamed(ctx context.Context, catalog repository.GeneralCatalogRepository, class, name string) (uint, error) {
+	entries, err := catalog.Items(ctx, class)
 	if err != nil {
 		return 0, err
 	}

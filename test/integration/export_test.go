@@ -44,7 +44,8 @@ func TestAnAccountIsHandedOverWholeAndWithoutItsSecrets(t *testing.T) {
 		"notifications", "queues-told-about", "passkeys", "push-subscriptions", "openid-links",
 		"written-articles", "config-item-versions-written", "links-made", "changes-managed", "changes-built",
 		"tickets-opened", "ticket-history-made", "config-items-made", "config-items-last-changed",
-		"class-definitions-written", "changes-made", "changes-last-changed"} {
+		"class-definitions-written", "changes-made", "changes-last-changed", "work-orders-assigned",
+		"work-orders-made", "work-orders-last-changed"} {
 		if rows, there := parts[part]; !there || len(rows) != 0 {
 			t.Errorf("%s reads %v, want an empty list", part, rows)
 		}

@@ -5915,7 +5915,7 @@
             }
           }
         ],
-        "description": "With the states the machine lets it move to. Takes changes:read.",
+        "description": "With the states the machine lets it move to, and what its work orders say of it: when it is planned and when it ran, the effort planned and the time accounted. Takes changes:read.",
         "responses": {
           "200": {
             "description": "OK"
@@ -6012,7 +6012,245 @@
             }
           }
         ],
-        "description": "With its links. Takes changes:write.",
+        "description": "With its work orders and its links. Takes changes:write.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/changes/{id}/work-orders": {
+      "get": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "A change's work orders",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "In the order of its plan, each numbered by its place in it. Takes changes:read.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "Add a work order to a change",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "Created, and a plain work order where no type is given. Planned moments are both given or neither, the start before the end. Takes changes:write.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "maxLength": 250
+                  },
+                  "instruction": {
+                    "type": "string"
+                  },
+                  "report": {
+                    "type": "string"
+                  },
+                  "workOrderTypeId": {
+                    "type": "integer"
+                  },
+                  "stateId": {
+                    "type": "integer"
+                  },
+                  "agentId": {
+                    "type": "integer"
+                  },
+                  "clearAgent": {
+                    "type": "boolean"
+                  },
+                  "plannedStartAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "plannedEndAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "clearPlanned": {
+                    "type": "boolean"
+                  },
+                  "actualStartAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "actualEndAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "clearActual": {
+                    "type": "boolean"
+                  },
+                  "plannedMinutes": {
+                    "type": "integer"
+                  },
+                  "minutes": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/work-orders/{id}": {
+      "get": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "One work order",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "With the states the machine lets it move to. Takes changes:read.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "Correct, move or report on a work order",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "What the request names; the state only as the machine allows, giving the moment it began once it is in progress and the moment it ended once its state ends it, unless they are given. Minutes are accounted on top of what is. Takes changes:write, or changes:read for the work order's agent reporting on it: the report, the state, the actual moments and minutes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "maxLength": 250
+                  },
+                  "instruction": {
+                    "type": "string"
+                  },
+                  "report": {
+                    "type": "string"
+                  },
+                  "workOrderTypeId": {
+                    "type": "integer"
+                  },
+                  "stateId": {
+                    "type": "integer"
+                  },
+                  "agentId": {
+                    "type": "integer"
+                  },
+                  "clearAgent": {
+                    "type": "boolean"
+                  },
+                  "plannedStartAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "plannedEndAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "clearPlanned": {
+                    "type": "boolean"
+                  },
+                  "actualStartAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "actualEndAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "clearActual": {
+                    "type": "boolean"
+                  },
+                  "plannedMinutes": {
+                    "type": "integer"
+                  },
+                  "minutes": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "Delete a work order",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "Takes changes:write.",
         "responses": {
           "204": {
             "description": "Deleted"

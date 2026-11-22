@@ -560,6 +560,15 @@ const FIELD_NAMES = {
   criteria: 'Which tickets',
   macroIds: 'Macros',
   managerId: 'Change manager',
+  agentId: 'Agent',
+  instruction: 'Instruction',
+  report: 'Report',
+  workOrderTypeId: 'Work order type',
+  plannedStartAt: 'Planned start',
+  plannedEndAt: 'Planned end',
+  actualStartAt: 'Actual start',
+  actualEndAt: 'Actual end',
+  plannedMinutes: 'Planned effort (minutes)',
   planIds: 'Execution plans',
   pendingMinutes: 'Waits for (minutes)',
   locked: 'Locked',
@@ -723,6 +732,7 @@ const REFUSAL_VALUES = {
   configItemClassRetired: { 0: catalogValueTitle },
   configItemNoDefinition: { 0: catalogValueTitle },
   changeStateNotAllowed: { 0: catalogValueTitle, 1: catalogValueTitle },
+  workOrderStateNotAllowed: { 0: catalogValueTitle, 1: catalogValueTitle },
 };
 
 /** The values of one refusal, each written the way the rest of the screen writes it. */
@@ -2667,8 +2677,8 @@ const PERMISSION_DETAILS = {
   'catalog:write': 'Add to and change the general catalog - the classes a configuration item can be of, its deployment and incident states and what each means, and the lists its details pick from - and retire a value nobody should pick any more.',
   'assets:read': 'Every configuration item and every version of it, whatever its class.',
   'assets:write': 'Create a configuration item, write its next version and delete it.',
-  'changes:read': 'Every change, whatever it is about and whoever manages it.',
-  'changes:write': 'Create a change, correct it, move it on as its states allow, and delete it.',
+  'changes:read': 'Every change and its work orders, whatever it is about and whoever manages it - and report on a work order given to the account: what was done, its state, when it ran and how long it took.',
+  'changes:write': 'Create a change, correct it, move it on as its states allow, and delete it - and plan, hand out and correct its work orders.',
   'portal:use': 'As a customer: open tickets, read and answer one’s own, and read the public knowledge base. Nothing of anybody else’s.',
 };
 

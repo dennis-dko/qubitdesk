@@ -72,6 +72,12 @@ var accountExport = []struct {
 	{"changes-built", "SELECT id, number, title, created_at FROM changes WHERE builder_id = ? ORDER BY id"},
 	{"changes-made", "SELECT id, number, title, created_at FROM changes WHERE created_by = ? ORDER BY id"},
 	{"changes-last-changed", "SELECT id, number, title, changed_at FROM changes WHERE changed_by = ? ORDER BY id"},
+	{"work-orders-assigned", "SELECT id, change_id, title, created_at FROM work_orders WHERE agent_id = ? " +
+		"ORDER BY id"},
+	{"work-orders-made", "SELECT id, change_id, title, created_at FROM work_orders WHERE created_by = ? " +
+		"ORDER BY id"},
+	{"work-orders-last-changed", "SELECT id, change_id, title, changed_at FROM work_orders WHERE changed_by = ? " +
+		"ORDER BY id"},
 }
 
 // ExportUser reads everything held about an account, a part per table, each row

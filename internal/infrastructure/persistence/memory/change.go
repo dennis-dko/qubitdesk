@@ -17,13 +17,13 @@ import (
 type ChangeRepository struct {
 	mu          sync.Mutex
 	changes     *store[model.Change]
-	transitions []model.ChangeTransition
+	transitions []model.StateTransition
 	matrix      []model.CIPEntry
 }
 
 // NewChangeRepository creates a store holding no change, following the state
 // machine and the matrix given.
-func NewChangeRepository(transitions []model.ChangeTransition, matrix []model.CIPEntry) *ChangeRepository {
+func NewChangeRepository(transitions []model.StateTransition, matrix []model.CIPEntry) *ChangeRepository {
 	return &ChangeRepository{changes: newStore[model.Change]("change"), transitions: transitions, matrix: matrix}
 }
 
@@ -82,7 +82,7 @@ func (r *ChangeRepository) Delete(_ context.Context, id uint) error {
 	return r.changes.delete(id)
 }
 
-func (r *ChangeRepository) Transitions(_ context.Context) ([]model.ChangeTransition, error) {
+func (r *ChangeRepository) Transitions(_ context.Context) ([]model.StateTransition, error) {
 	return slices.Clone(r.transitions), nil
 }
 

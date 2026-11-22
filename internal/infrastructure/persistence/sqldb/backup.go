@@ -37,6 +37,8 @@ var BackupTables = []string{
 	"changes",
 	"change_transitions",
 	"change_cip",
+	"work_orders",
+	"work_order_transitions",
 	"calendars",
 	"calendar_hours",
 	"calendar_free_days",

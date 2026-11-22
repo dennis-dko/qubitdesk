@@ -793,7 +793,8 @@ func main() {
 			Definitions: classDefinitionRepo, Catalog: generalCatalogRepo, Contacts: contactRepo,
 			Organisations: customerRepos.Organisations, Users: userRepo,
 		})
-	changes := appservice.NewChangeApplicationService(sqldb.NewChangeRepository(db, cfg.Dialect), generalCatalogRepo,
+	changeRepo := sqldb.NewChangeRepository(db, cfg.Dialect)
+	changes := appservice.NewChangeApplicationService(changeRepo, generalCatalogRepo,
 		userRepo, roleRepo, func(ctx context.Context) string {
 			name, err := settingsService.Timezone(ctx)
 			if err != nil {
@@ -802,6 +803,8 @@ func main() {
 
 			return name
 		})
+	workOrders := appservice.NewWorkOrderApplicationService(sqldb.NewWorkOrderRepository(db, cfg.Dialect),
+		changeRepo, generalCatalogRepo, userRepo, roleRepo)
 	links := appservice.NewLinkApplicationService(sqldb.NewLinkRepository(db, cfg.Dialect), tickets, configItems).
 		WithChanges(changes)
 	demo := appservice.NewDemoService(userRepo, auth, tickets, catalogRepos, queues, levels, customers, faq,
@@ -1227,7 +1230,7 @@ func main() {
 			generalCatalogRepo, classDefinitionRepo), authorizer),
 		ConfigItems: rest.NewConfigItemHandler(configItems, authorizer),
 		Links:       rest.NewLinkHandler(links, authorizer),
-		Changes:     rest.NewChangeHandler(changes, authorizer),
+		Changes:     rest.NewChangeHandler(changes, workOrders, authorizer),
 	})
 
 	// What a ticket is owed without anybody asking: a wait that is over moves

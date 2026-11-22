@@ -10,21 +10,29 @@ import (
 	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
-// ChangeHandler serves the changes: read with changes:read and written with
-// changes:write, every change - a change is the organisation's, not narrowed by
-// queue.
+// ChangeHandler serves the changes and the work orders they are carried out in:
+// read with changes:read and written with changes:write, every change - a
+// change is the organisation's, not narrowed by queue - except the report a
+// work order's agent writes, which the work order service lets through.
 type ChangeHandler struct {
-	changes *service.ChangeApplicationService
-	authz   *Authorizer
+	changes    *service.ChangeApplicationService
+	workOrders *service.WorkOrderApplicationService
+	authz      *Authorizer
 }
 
 // NewChangeHandler wires the handler.
-func NewChangeHandler(changes *service.ChangeApplicationService, authz *Authorizer) *ChangeHandler {
-	return &ChangeHandler{changes: changes, authz: authz}
+func NewChangeHandler(
+	changes *service.ChangeApplicationService,
+	workOrders *service.WorkOrderApplicationService,
+	authz *Authorizer,
+) *ChangeHandler {
+	return &ChangeHandler{changes: changes, workOrders: workOrders, authz: authz}
 }
 
-// ChangeResponse is a change, with the names of the accounts it names and the
-// states the machine lets it move to from where it stands.
+// ChangeResponse is a change, with the names of the accounts it names, the
+// states the machine lets it move to from where it stands, and what its work
+// orders say of it: when it is planned and when it ran, the effort planned and
+// the time accounted, and how many there are.
 type ChangeResponse struct {
 	ID            uint       `json:"id"`
 	Number        string     `json:"number"`
@@ -47,6 +55,14 @@ type ChangeResponse struct {
 	CreatedByName string     `json:"createdByName"`
 	ChangedBy     uint       `json:"changedBy"`
 	ChangedByName string     `json:"changedByName"`
+
+	PlannedStartAt   *time.Time `json:"plannedStartAt"`
+	PlannedEndAt     *time.Time `json:"plannedEndAt"`
+	ActualStartAt    *time.Time `json:"actualStartAt"`
+	ActualEndAt      *time.Time `json:"actualEndAt"`
+	PlannedMinutes   int        `json:"plannedMinutes"`
+	AccountedMinutes int        `json:"accountedMinutes"`
+	WorkOrders       int        `json:"workOrders"`
 }
 
 // ChangeRequest makes or corrects a change. A correction names only what it
@@ -77,7 +93,12 @@ func (r ChangeRequest) command() service.ChangeCommand {
 	}
 }
 
-func newChangeResponse(change *model.Change, names map[uint]string, next []uint) ChangeResponse {
+func newChangeResponse(
+	change *model.Change,
+	names map[uint]string,
+	next []uint,
+	schedule model.Schedule,
+) ChangeResponse {
 	name := func(id *uint) string {
 		if id == nil {
 			return ""
@@ -93,7 +114,10 @@ func newChangeResponse(change *model.Change, names map[uint]string, next []uint)
 		ImpactID: change.ImpactID, PriorityID: change.PriorityID, StateID: change.StateID, NextStateIDs: next,
 		RequestedAt: change.RequestedAt, CreatedAt: change.CreatedAt, ChangedAt: change.ChangedAt,
 		CreatedBy: change.CreatedBy, CreatedByName: names[change.CreatedBy], ChangedBy: change.ChangedBy,
-		ChangedByName: names[change.ChangedBy],
+		ChangedByName: names[change.ChangedBy], PlannedStartAt: schedule.PlannedStartAt,
+		PlannedEndAt: schedule.PlannedEndAt, ActualStartAt: schedule.ActualStartAt, ActualEndAt: schedule.ActualEndAt,
+		PlannedMinutes: schedule.PlannedMinutes, AccountedMinutes: schedule.AccountedMinutes,
+		WorkOrders: schedule.WorkOrders,
 	}
 }
 
@@ -109,7 +133,12 @@ func (h *ChangeHandler) respond(c *gofr.Context, change *model.Change) (any, err
 		return nil, toHTTPError(err)
 	}
 
-	return newChangeResponse(change, names, next), nil
+	schedules, err := h.workOrders.Schedules(c, []uint{change.ID})
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return newChangeResponse(change, names, next, schedules[change.ID]), nil
 }
 
 // List handles GET /api/v1/changes: a page of the changes, narrowed by ?state=
@@ -156,8 +185,18 @@ func (h *ChangeHandler) List(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
+	ids := make([]uint, 0, len(changes))
+	for _, change := range changes {
+		ids = append(ids, change.ID)
+	}
+
+	schedules, err := h.workOrders.Schedules(c, ids)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
 	listed := listOf(changes, func(change *model.Change) ChangeResponse {
-		return newChangeResponse(change, names, nil)
+		return newChangeResponse(change, names, nil, schedules[change.ID])
 	})
 	listed.TotalCount = total
 
@@ -195,7 +234,7 @@ func (h *ChangeHandler) Create(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	change, err := h.changes.Create(c, principal.User.ID, req.command())
+	change, err := h.changes.Create(c, principal, req.command())
 	if err != nil {
 		return nil, toHTTPError(err)
 	}
@@ -220,7 +259,7 @@ func (h *ChangeHandler) Update(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	change, err := h.changes.Update(c, principal.User.ID, id, req.command())
+	change, err := h.changes.Update(c, principal, id, req.command())
 	if err != nil {
 		return nil, toHTTPError(err)
 	}

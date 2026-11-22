@@ -12,12 +12,13 @@ const (
 	CatalogChangePriority = "ITSM::ChangeManagement::Priority"
 
 	// CatalogChangeState lists where a change stands; which state may follow
-	// which is ChangeTransition's.
+	// which is StateTransition's.
 	CatalogChangeState = "ITSM::ChangeManagement::Change::State"
 )
 
-// MaxChangeTitleLength and MaxChangeTextLength bound what a change says: its
-// title, and its description and justification each.
+// MaxChangeTitleLength and MaxChangeTextLength bound what a change and its work
+// orders say: a title, and a description, a justification, an instruction or a
+// report each.
 const (
 	MaxChangeTitleLength = 250
 	MaxChangeTextLength  = 50000
@@ -47,10 +48,10 @@ type Change struct {
 	ChangedBy     uint
 }
 
-// ChangeTransition is one step OTRS's change state machine allows: from a
-// state, or from nowhere for the state a change starts in, to the next. A
-// state nothing leads out of ends a change.
-type ChangeTransition struct {
+// StateTransition is one step one of OTRS's state machines allows, a change's
+// or a work order's: from a state, or from nowhere for the state one starts in,
+// to the next. A state nothing leads out of ends the change or the work order.
+type StateTransition struct {
 	FromID *uint
 	ToID   uint
 }

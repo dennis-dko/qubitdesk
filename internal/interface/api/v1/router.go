@@ -381,6 +381,14 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.PUT(base+"/changes/{id}", h.Changes.Update)
 	app.DELETE(base+"/changes/{id}", h.Changes.Delete)
 
+	// The work orders a change is carried out in: read with changes:read,
+	// written with changes:write, and reported on by their agent.
+	app.GET(base+"/changes/{id}/work-orders", h.Changes.WorkOrders)
+	app.POST(base+"/changes/{id}/work-orders", h.Changes.CreateWorkOrder)
+	app.GET(base+"/work-orders/{id}", h.Changes.WorkOrder)
+	app.PUT(base+"/work-orders/{id}", h.Changes.UpdateWorkOrder)
+	app.DELETE(base+"/work-orders/{id}", h.Changes.DeleteWorkOrder)
+
 	app.GET(base+"/response-templates", h.Templates.List)
 	app.GET(base+"/response-templates/{id}", h.Templates.Get)
 	app.POST(base+"/response-templates", h.Templates.Create)

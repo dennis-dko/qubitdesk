@@ -234,6 +234,15 @@ func All(dialect string) map[int64]migration.Migrate {
 		20261121030400: {UP: func(d migration.Datasource) error { return seedChangeTransitions(d, dialect) }},
 		20261121030500: {UP: func(d migration.Datasource) error { return createChangeCIP(d, dialect) }},
 		20261121030600: {UP: func(d migration.Datasource) error { return seedChangeCIP(d, dialect) }},
+
+		// The work orders a change is carried out in, and OTRS's state machine
+		// for them.
+		20261121040100: {UP: func(d migration.Datasource) error { return createWorkOrders(d, dialect) }},
+		20261121040200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_work_orders_change", "work_orders", "change_id")
+		}},
+		20261121040300: {UP: func(d migration.Datasource) error { return createWorkOrderTransitions(d, dialect) }},
+		20261121040400: {UP: func(d migration.Datasource) error { return seedWorkOrderTransitions(d, dialect) }},
 	}
 }
 
@@ -366,6 +375,84 @@ func seedChangeTransitions(d migration.Datasource, dialect string) error {
 
 		if _, err := d.SQL.Exec(insert, from, to); err != nil {
 			return fmt.Errorf("seeding the change state machine's %s -> %s: %w", step.from, step.to, err)
+		}
+	}
+
+	return nil
+}
+
+// createWorkOrders keeps the work orders a change is carried out in, as
+// OTRS::ITSM keeps them. Their number is not kept: it is a work order's place in
+// its change's plan, worked out whenever they are read. The agent is an account
+// and loses them when erased; created_by and changed_by are ids without a key,
+// read as names when shown. A moment nobody has given is NULL, where OTRS writes
+// 9999-01-01.
+func createWorkOrders(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE work_orders (
+		%[1]s,
+		change_id %[2]s NOT NULL REFERENCES changes(id),
+		title VARCHAR(250) NOT NULL,
+		instruction %[4]s NOT NULL,
+		report %[4]s NOT NULL,
+		state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		type_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		agent_id %[2]s REFERENCES users(id),
+		planned_start_at %[3]s,
+		planned_end_at %[3]s,
+		actual_start_at %[3]s,
+		actual_end_at %[3]s,
+		planned_minutes INT NOT NULL DEFAULT 0,
+		accounted_minutes INT NOT NULL DEFAULT 0,
+		created_at %[3]s NOT NULL,
+		changed_at %[3]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0,
+		changed_by INT NOT NULL DEFAULT 0
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), longText(dialect)))
+}
+
+// createWorkOrderTransitions keeps OTRS's work order state machine, shaped as
+// the change's is and kept apart from it, so that each machine has one state to
+// start in.
+func createWorkOrderTransitions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE work_order_transitions (
+		from_state_id %[1]s REFERENCES general_catalog(id),
+		to_state_id %[1]s NOT NULL REFERENCES general_catalog(id),
+		UNIQUE (from_state_id, to_state_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// seedWorkOrderTransitions writes OTRS's default work order state machine, from
+// _StateMachineDefaultSet in ITSMChangeManagement's package setup: a work order
+// is created, accepted, ready and in progress, and ends closed - or canceled
+// from any of those.
+func seedWorkOrderTransitions(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect, "INSERT INTO work_order_transitions (from_state_id, to_state_id) VALUES (?, ?)")
+
+	for _, step := range []struct{ from, to string }{
+		{"", "created"},
+		{"created", "accepted"}, {"created", "canceled"},
+		{"accepted", "ready"}, {"accepted", "canceled"},
+		{"ready", "in-progress"}, {"ready", "canceled"},
+		{"in-progress", "closed"}, {"in-progress", "canceled"},
+	} {
+		var from any
+
+		if step.from != "" {
+			id, err := catalogID(d, dialect, "ITSM::ChangeManagement::WorkOrder::State", step.from)
+			if err != nil {
+				return err
+			}
+
+			from = id
+		}
+
+		to, err := catalogID(d, dialect, "ITSM::ChangeManagement::WorkOrder::State", step.to)
+		if err != nil {
+			return err
+		}
+
+		if _, err := d.SQL.Exec(insert, from, to); err != nil {
+			return fmt.Errorf("seeding the work order state machine's %s -> %s: %w", step.from, step.to, err)
 		}
 	}
 
