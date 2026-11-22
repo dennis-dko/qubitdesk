@@ -17,7 +17,7 @@ const cache = {
   users: [], roles: [], permissions: [], queues: [],
   ticketQueues: [], states: [], priorities: [], types: [],
   found: {}, sysconfig: [], calendars: [], levels: [],
-  macros: [], macroSteps: [], stepChoices: { queues: [], states: [], priorities: [], types: [] },
+  macros: [], macroSteps: [], stepChoices: { queues: [], states: [], priorities: [], types: [], accounts: [] },
   plans: [], planEvents: [], jobs: [],
   notifying: notifyingNothing(),
   templates: [], templateQueues: [], ticketTemplates: [],
@@ -5227,10 +5227,11 @@ function macroStepName(type) {
 const MAX_MACRO_STEPS = 50;
 
 /**
- * Fills the automation screen, for whoever may set it up. What a step can name
- * is read here as well, through the rights that read it, so that a role allowed
- * the automation and not the tickets is offered nothing to name rather than a
- * screenful of refusals.
+ * Fills the automation screen, for whoever may set it up. What a step and a
+ * job's criteria can name is read through the automation's own choices, which
+ * the right to set it up reads alone: a role allowed the automation and not the
+ * tickets, the accounts or the customers was offered nothing to choose, while
+ * the server took a step naming any record that is there.
  */
 async function loadAutomation() {
   if (!can('automation:write')) {
@@ -5243,11 +5244,8 @@ async function loadAutomation() {
     return;
   }
 
-  const named = can('tickets:read') || can('queues:write')
-    ? ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path]
-    : [];
-  const [macros, plans, jobs, queues, states, priorities, types] = await Promise.all(
-    ['/macros', '/exec-plans', '/jobs', ...named].map((path) => api(path)),
+  const [macros, plans, jobs, choices] = await Promise.all(
+    ['/macros', '/exec-plans', '/jobs', '/automation/choices'].map((path) => api(path)),
   );
 
   cache.macros = macros?.items ?? [];
@@ -5256,10 +5254,11 @@ async function loadAutomation() {
   cache.planEvents = plans?.events ?? [];
   cache.jobs = jobs?.items ?? [];
   cache.stepChoices = {
-    queues: queues?.items ?? [],
-    states: states?.items ?? [],
-    priorities: priorities?.items ?? [],
-    types: types?.items ?? [],
+    queues: choices?.queues ?? [],
+    states: choices?.states ?? [],
+    priorities: choices?.priorities ?? [],
+    types: choices?.types ?? [],
+    accounts: choices?.accounts ?? [],
   };
 
   fillTable($('#table-macro tbody'), cache.macros.map(macroRow), 4, t('macro.empty', 'No macros yet.'));
@@ -5481,7 +5480,7 @@ function stepChoices(kind, current) {
     type: () => kept(types).map((type) => ({ value: String(type.id), label: ticketTypeName(type.name) })),
     queue: () => kept(queues).map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
       .sort((a, b) => a.label.localeCompare(b.label)),
-    user: () => cache.users.map((user) => ({ value: String(user.id), label: user.name || user.email })),
+    user: () => cache.stepChoices.accounts.map((user) => ({ value: String(user.id), label: user.name })),
     channel: () => AGENT_CHANNELS.map((channel) => ({ value: channel, label: channelName(channel) })),
   }[kind]?.() ?? [];
 
@@ -5513,18 +5512,28 @@ const STEP_SEARCHES = {
 };
 
 /**
+ * Where a step searches for a contact or an organisation: the automation's own
+ * searches, which the right to set it up reads. The paths alone: how an entry
+ * is written is SEARCHED_KINDS', which is declared further down and read when a
+ * step is drawn, because reading it here, while the script is still being run,
+ * stopped the whole script before anything was wired.
+ */
+const STEP_SEARCH_PATHS = {
+  contact: '/automation/contacts',
+  organisation: '/automation/organisations',
+};
+
+/**
  * A step's choice of contact or organisation, each of which runs to thousands:
  * a box to search in and a select of what it finds, as every such choice is -
  * see SEARCHED_KINDS. The one the step names is kept among the options whatever
- * a search finds, and named once its record has been read. Without the right to
- * read customers there is nothing to search, and the choice keeps what the step
- * names by its number.
+ * a search finds, and named once its record has been read.
  */
 function searchedStep(parameter, value) {
-  const kind = SEARCHED_KINDS[parameter.kind];
+  const kind = { path: STEP_SEARCH_PATHS[parameter.kind], describe: SEARCHED_KINDS[parameter.kind].describe };
   const words = STEP_SEARCHES[parameter.kind];
   const select = el('select', {});
-  const reads = can('customers:read');
+  const reads = can('automation:write');
   let asked = 0;
   let typing;
 
@@ -5541,8 +5550,11 @@ function searchedStep(parameter, value) {
   offer([], keptEntry(value, ''));
 
   if (value && reads) {
-    api(`${kind.path}/${value}`)
-      .then((record) => { if (record && select.value === value) offer([], keptEntry(value, kind.describe(record))); })
+    api(`${kind.path}?id=${encodeURIComponent(value)}`)
+      .then((found) => {
+        const record = found?.items?.[0];
+        if (record && select.value === value) offer([], keptEntry(value, kind.describe(record)));
+      })
       .catch((err) => toastFailure(err));
   }
 
@@ -13695,7 +13707,7 @@ function forgetTheLastAccount() {
   cache.levels = [];
   cache.macros = [];
   cache.macroSteps = [];
-  cache.stepChoices = { queues: [], states: [], priorities: [], types: [] };
+  cache.stepChoices = { queues: [], states: [], priorities: [], types: [], accounts: [] };
   cache.plans = [];
   cache.planEvents = [];
   cache.jobs = [];

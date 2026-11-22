@@ -310,6 +310,9 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.GET(base+"/unlock-state-types", h.Catalog.ListUnlockStateTypes)
 	app.PUT(base+"/unlock-state-types", h.Catalog.SetUnlockStateTypes)
 
+	app.GET(base+"/automation/choices", h.Macros.Choices)
+	app.GET(base+"/automation/contacts", h.Macros.Contacts)
+	app.GET(base+"/automation/organisations", h.Macros.Organisations)
 	app.GET(base+"/macros", h.Macros.List)
 	app.GET(base+"/macros/{id}", h.Macros.Get)
 	app.POST(base+"/macros", h.Macros.Create)

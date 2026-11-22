@@ -692,7 +692,7 @@ func main() {
 	macroRepo := sqldb.NewMacroRepository(db, cfg.Dialect)
 	planRepo := sqldb.NewExecPlanRepository(db, cfg.Dialect)
 	automationRefs := appservice.MacroReferences{
-		Catalog: catalogRepos, Customers: customerRepos, Queues: queueRepo, Users: userRepo,
+		Catalog: catalogRepos, Customers: customerRepos, Queues: queueRepo, Users: userRepo, Roles: roleRepo,
 	}
 	sysConfig.WithCheck(model.ConfigTimeWorkingHours, calendars.CanBeTheInstallations)
 	jobRepo := sqldb.NewJobRepository(db, cfg.Dialect)

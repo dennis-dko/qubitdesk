@@ -19,6 +19,10 @@ type MacroReferences struct {
 	Customers TicketCustomerRepositories
 	Queues    repository.QueueRepository
 	Users     repository.UserRepository
+
+	// Roles decide which accounts the automation's choices offer a ticket to:
+	// those whose role may work on tickets. Without them every account is.
+	Roles repository.RoleRepository
 }
 
 // MacroApplicationService administers the macros: what the automation does to a

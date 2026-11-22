@@ -3479,6 +3479,108 @@
         }
       }
     },
+    "/automation/choices": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "What a step and a job's criteria can name",
+        "description": "Every queue, state, priority and type, and the accounts whose role may work on tickets, each by id and name and whether it is still offered - what choosing takes and no more. Takes automation:write alone, so that setting the automation up needs no right to the tickets, the accounts or the customers themselves.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/automation/contacts": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Search the contacts a step can name",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "valid",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "A page of contacts by name and address, narrowed by q and valid; with id, the one a step names. Takes automation:write.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/automation/organisations": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Search the organisations a step can name",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "valid",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "A page of organisations by name and number, narrowed by q and valid; with id, the one a step names. Takes automation:write.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/macros": {
       "get": {
         "tags": [
