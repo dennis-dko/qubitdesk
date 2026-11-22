@@ -20,6 +20,12 @@ import (
 // handed over about each of those is that it exists, when it was made and when
 // it was last used.
 //
+// The administration log keeps what an account did to how the installation runs
+// after the account is gone, which is a reason not to erase it and none not to
+// hand it over: the export says when the account did what, and leaves out to
+// whom and with which detail, because those name other accounts, roles and
+// settings.
+//
 // What the account wrote in tickets is handed over as where and when, not as the
 // text: an answer quotes the customer it answers, and the export of one person
 // is not the place for another's words. A line of a ticket's history says what
@@ -68,6 +74,7 @@ var accountExport = []struct {
 		"FROM ci_class_definitions WHERE created_by = ? ORDER BY id"},
 	{"links-made", "SELECT id, source_object, source_id, target_object, target_id, type, created_at " +
 		"FROM links WHERE created_by = ? ORDER BY id"},
+	{"administration-log", "SELECT at, action FROM admin_events WHERE actor_id = ? ORDER BY id"},
 	{"changes-managed", "SELECT id, number, title, created_at FROM changes WHERE manager_id = ? ORDER BY id"},
 	{"changes-built", "SELECT id, number, title, created_at FROM changes WHERE builder_id = ? ORDER BY id"},
 	{"changes-made", "SELECT id, number, title, created_at FROM changes WHERE created_by = ? ORDER BY id"},

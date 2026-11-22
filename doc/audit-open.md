@@ -18,7 +18,7 @@ What is below was raised and is not recorded as decided anywhere.
 
 ## Decisions waiting on the maintainer
 
-Five: four raised on 2026-11-17 by the automation, the notifications and the mail to come, and one on 2026-11-21 by the export.
+Four, raised on 2026-11-17 by the automation, the notifications and the mail to come.
 
 | | Question |
 | --- | --- |
@@ -26,7 +26,6 @@ Five: four raised on 2026-11-17 by the automation, the notifications and the mai
 | K5 | The automation screen offers what a step can name and what a job's criteria can take from the lists the ticket rights read: the queues, states, priorities and types through *Read tickets* or *Set up queues*, the accounts through *Read accounts*, the contacts and organisations through *Read customers*. A role given *Set up the automation* without them is offered nothing to choose, though the server takes a step naming any record that is there. Keep it - each right reads what it reads, and the administrator holds them all - or let *Set up the automation* read those lists as well? |
 | K6 | The notifications are set up with *Set up queues*, whose description already covers how tickets are sorted and answered, the answer templates and the mailboxes to come. KIX18 files them under Communication, a group of its own beside the ticket setup that its mail accounts and templates belong to as well. Keep them with the queues, or give the communication a right - and later a screen - of its own? |
 | K7 | The mail (P10) fetches from mailboxes and sends through a mail server. Sending needs nothing beyond the standard library (`net/smtp`, `net/mail`, `mime/multipart`); fetching needs IMAP or POP3, which the standard library does not speak. Write the client for the part KIX18 uses - log in, list what is unseen, fetch it, mark it seen - or take a library such as github.com/emersion/go-imap v2, a dependency this repository would carry from then on? Until it is decided the knowledge base (P12) and the customer portal (P11) go first. |
-| K8 | An account's export hands over everything it wrote - the tickets it opened, its history lines, the changes and items it made - except its entries in the administration log. `CLAUDE.md` keeps that log on neither list on purpose, and its reason covers the erasure: what an account did to how the installation runs must outlive the account. It does not say why the export leaves those entries out, and they are data about the account while it exists. Keep them out, or hand them over as where and when - the moment and the action, without the target or the detail, which name other accounts? |
 
 ## Measurements reading cannot make
 

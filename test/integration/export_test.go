@@ -19,7 +19,7 @@ import (
 func TestAnAccountIsHandedOverWholeAndWithoutItsSecrets(t *testing.T) {
 	t.Parallel()
 
-	_, _, worker := startWithWorker(t)
+	_, admin, worker := startWithWorker(t)
 
 	var token struct {
 		Secret *string `json:"secret"`
@@ -43,11 +43,26 @@ func TestAnAccountIsHandedOverWholeAndWithoutItsSecrets(t *testing.T) {
 	for _, part := range []string{"owned-tickets", "tickets-responsible-for", "contact", "watched-tickets",
 		"notifications", "queues-told-about", "passkeys", "push-subscriptions", "openid-links",
 		"written-articles", "config-item-versions-written", "links-made", "changes-managed", "changes-built",
-		"tickets-opened", "ticket-history-made", "config-items-made", "config-items-last-changed",
+		"tickets-opened", "ticket-history-made", "administration-log", "config-items-made", "config-items-last-changed",
 		"class-definitions-written", "changes-made", "changes-last-changed", "work-orders-assigned",
 		"work-orders-made", "work-orders-last-changed"} {
 		if rows, there := parts[part]; !there || len(rows) != 0 {
 			t.Errorf("%s reads %v, want an empty list", part, rows)
+		}
+	}
+
+	// The administrator made the worker's account, which the administration log
+	// keeps; the export says when and what, and never to whom.
+	administered, _ := exportOf(t, admin)
+	if len(administered["administration-log"]) == 0 {
+		t.Error("the administrator's export holds nothing of the administration log, though it made an account")
+	}
+
+	for _, entry := range administered["administration-log"] {
+		for column := range entry {
+			if column != "at" && column != "action" {
+				t.Errorf("the administration log is handed over with %q, which names somebody else's", column)
+			}
 		}
 	}
 

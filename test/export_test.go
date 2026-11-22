@@ -77,6 +77,9 @@ var writtenAndKept = map[string]string{
 		"signed by an id that names nobody once the account is gone; the export says which and when",
 	"links": "a link between two records belongs to the records, signed by an id that names nobody once the " +
 		"account is gone; the export says which and when",
+	"admin_events": "the administration log keeps who changed how the installation runs and outlives the " +
+		"account that did, on purpose; the export says when the account did what, not to whom or with which " +
+		"detail, which name others",
 	"ticket_history": "a line of a ticket's history is the ticket's record of what happened to it, signed by " +
 		"an id that names nobody once the account is gone; the export says where, when and what kind of thing",
 	"config_items": "a configuration item is the organisation's inventory, saying who made it and who last " +
@@ -141,12 +144,9 @@ func TestEverythingAnAccountWroteIsInItsExport(t *testing.T) {
 }
 
 // notHandedOver are the columns naming an account without a key that the export
-// leaves out, each with the reason.
-var notHandedOver = map[string]string{
-	"admin_events.actor_id": "the administration log is on neither list on purpose, as CLAUDE.md records: " +
-		"what an account did to how the installation runs must outlive it; whether an export should still " +
-		"say where and when the account administered waits on the maintainer in doc/audit-open.md",
-}
+// leaves out, each with the reason. It is empty: the last, the administration
+// log's actor, has been handed over since 2026-11-22.
+var notHandedOver = map[string]string{}
 
 // authorColumn is what a column naming an account without a key is called. A
 // column without a key says nothing else about what it holds, so the name is
