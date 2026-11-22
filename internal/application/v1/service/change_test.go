@@ -275,3 +275,35 @@ func TestThePeopleOfAChangeAreThoseWhoMaySeeChanges(t *testing.T) {
 		t.Error("a customer, who may not see changes, is offered for one")
 	}
 }
+
+// A change given its priority keeps it when it is corrected with its category
+// and its impact as they stand: the matrix ranks a change wherever one of the
+// two changes, and a form that sends every field back has changed neither.
+func TestAChangesChosenPriorityOutlivesACorrectionThatChangesNeitherScale(t *testing.T) {
+	ctx := context.Background()
+	w := newChangeWorld(t)
+	category := w.value(model.CatalogChangeCategory, "5-very-high")
+	impact := w.value(model.CatalogChangeImpact, "4-high")
+	chosen := w.value(model.CatalogChangePriority, "1-very-low")
+
+	change, err := w.changes.Create(ctx, w.adminCaller, service.ChangeCommand{Title: ptr("Tidy the wiring"),
+		CategoryID: &category, ImpactID: &impact, PriorityID: &chosen})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	corrected, err := w.changes.Update(ctx, w.adminCaller, change.ID, service.ChangeCommand{
+		Title: ptr("Tidy the wiring twice"), CategoryID: &category, ImpactID: &impact})
+	if err != nil || corrected.PriorityID != chosen {
+		t.Errorf("correcting the title with both scales as they stand ranked the change %d (%v), want %d as given",
+			corrected.PriorityID, err, chosen)
+	}
+
+	lower := w.value(model.CatalogChangeImpact, "3-normal")
+
+	reranked, err := w.changes.Update(ctx, w.adminCaller, change.ID, service.ChangeCommand{ImpactID: &lower})
+	if want := w.value(model.CatalogChangePriority, "4-high"); err != nil || reranked.PriorityID != want {
+		t.Errorf("a lower impact ranked the change %d (%v), want %d as the matrix gives it", reranked.PriorityID,
+			err, want)
+	}
+}

@@ -446,9 +446,13 @@ func startState(transitions []model.StateTransition, machine string) (uint, erro
 
 // rank sets a change's category, impact and priority: each a value of its
 // list, and the priority the matrix gives the other two wherever they change
-// and the priority is not given.
+// and the priority is not given. Changed, not merely sent: a form sends every
+// field back, and asking the matrix whenever a scale arrives put its priority
+// over the one somebody had chosen, on a correction of the title.
 func (s *ChangeApplicationService) rank(ctx context.Context, change *model.Change, cmd ChangeCommand) error {
 	var invalid []string
+
+	stood := [2]uint{change.CategoryID, change.ImpactID}
 
 	category, err := s.ranked(ctx, &change.CategoryID, cmd.CategoryID, model.CatalogChangeCategory)
 	if err != nil {
@@ -481,7 +485,7 @@ func (s *ChangeApplicationService) rank(ctx context.Context, change *model.Chang
 		return apperror.InvalidFields(invalid...)
 	}
 
-	if cmd.PriorityID == nil && (cmd.CategoryID != nil || cmd.ImpactID != nil) {
+	if cmd.PriorityID == nil && stood != [2]uint{change.CategoryID, change.ImpactID} {
 		given, err := s.changes.Priority(ctx, change.CategoryID, change.ImpactID)
 		if apperror.KindOf(err) == apperror.KindNotFound {
 			return apperror.InvalidFields("priorityId")
