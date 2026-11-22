@@ -43,6 +43,12 @@ type Ticket struct {
 	// names nobody once that account is gone.
 	CreatedBy *uint
 
+	// MergedInto is the ticket this one was merged into, once it was: its
+	// articles, the time noted on it and its watchers went there. An id without
+	// a key, like CreatedBy, because a merged ticket is the record of a merge and
+	// outlives the ticket it names.
+	MergedInto *uint
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
@@ -230,6 +236,7 @@ const (
 	HistoryTime         HistoryEvent = "time"
 	HistoryAttachment   HistoryEvent = "attachment"
 	HistoryServiceLevel HistoryEvent = "sla"
+	HistoryMerged       HistoryEvent = "merged"
 )
 
 // HistoryEvents lists every kind of thing that happens to a ticket, which is
@@ -238,7 +245,7 @@ func HistoryEvents() []HistoryEvent {
 	return []HistoryEvent{
 		HistoryCreated, HistoryTitle, HistoryQueue, HistoryState, HistoryPriority, HistoryType,
 		HistoryOwner, HistoryResponsible, HistoryContact, HistoryOrganisation, HistoryLock, HistoryPending,
-		HistoryArticle, HistoryTime, HistoryAttachment, HistoryServiceLevel,
+		HistoryArticle, HistoryTime, HistoryAttachment, HistoryServiceLevel, HistoryMerged,
 	}
 }
 

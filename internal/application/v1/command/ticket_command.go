@@ -37,6 +37,13 @@ type CreateTicketCommand struct {
 	Minutes         int
 }
 
+// MergeTicketCommand folds a ticket into another: IntoID is the ticket it goes
+// into, in a command of its own so that the two ids a merge takes cannot be
+// handed over the wrong way round and merge the other ticket instead.
+type MergeTicketCommand struct {
+	IntoID uint
+}
+
 // UpdateTicketCommand changes a ticket; a nil field is left as it was.
 //
 // The owner and the responsible are emptiable, so their third state is said out

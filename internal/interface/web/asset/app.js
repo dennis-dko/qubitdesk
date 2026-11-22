@@ -560,6 +560,7 @@ const FIELD_NAMES = {
   criteria: 'Which tickets',
   macroIds: 'Macros',
   managerId: 'Change manager',
+  intoId: 'Merge into',
   agentId: 'Agent',
   instruction: 'Instruction',
   report: 'Report',
@@ -9686,6 +9687,7 @@ const HISTORY_SENTENCES = {
   time: () => t('history.time', 'Noted {1} minutes'),
   attachment: () => t('history.attachment', 'Attached {1}'),
   sla: () => t('history.sla', 'Changed the service level from {0} to {1}'),
+  merged: () => t('history.merged', 'Merged ticket {0} into ticket {1}'),
 };
 
 /** How the ticket list stands: which page, how many to a page, how many in all. */

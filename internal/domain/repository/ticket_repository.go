@@ -28,6 +28,14 @@ type TicketRepository interface {
 	// Update stores what changed on a ticket, with the history saying so.
 	Update(ctx context.Context, ticket *model.Ticket, history []model.HistoryEntry) (*model.Ticket, error)
 
+	// Merge folds the ticket given into the one it names as MergedInto, in one
+	// transaction, as OTRS's TicketMerge does: its articles, the time noted on
+	// it, its watchers and its links go to the other, the two are linked as
+	// parent and child by the account given, the ticket is written as given,
+	// the other is noted as changed when the ticket was, and the history lines
+	// of both are written.
+	Merge(ctx context.Context, merged *model.Ticket, history []model.HistoryEntry, by *uint) error
+
 	// AddArticle stores an article, the time noted with it and the history
 	// saying so, and marks the ticket changed at the article's moment.
 	// firstResponse is when the article answered the ticket for the first time

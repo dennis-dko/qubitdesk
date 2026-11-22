@@ -20,6 +20,7 @@ type TicketService interface {
 	GetTicket(ctx context.Context, caller *Principal, id uint) (*model.Ticket, error)
 	CreateTicket(ctx context.Context, caller *Principal, cmd command.CreateTicketCommand) (*model.Ticket, error)
 	UpdateTicket(ctx context.Context, caller *Principal, id uint, cmd command.UpdateTicketCommand) (*model.Ticket, error)
+	MergeTicket(ctx context.Context, caller *Principal, id uint, cmd command.MergeTicketCommand) (*model.Ticket, error)
 	DeleteTicket(ctx context.Context, caller *Principal, id uint) error
 
 	AddArticle(ctx context.Context, caller *Principal, id uint, cmd command.AddArticleCommand) (*model.Article, error)

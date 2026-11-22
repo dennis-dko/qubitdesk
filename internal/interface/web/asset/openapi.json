@@ -2563,6 +2563,48 @@
         }
       }
     },
+    "/tickets/{id}/merge": {
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Merge a ticket into another",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "As OTRS merges one: the ticket's articles, the time noted on it, its watchers and its links go to the ticket the request names, the two are linked as parent and child, and the ticket is left merged and unlocked, naming the one it went into. Takes tickets:write and working in both tickets' queues; neither may be merged already.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "intoId"
+                ],
+                "properties": {
+                  "intoId": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Merged"
+          }
+        }
+      }
+    },
     "/tickets/{id}/articles": {
       "get": {
         "tags": [

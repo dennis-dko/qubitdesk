@@ -59,6 +59,9 @@ type TicketResponse struct {
 	ClosedAt         *time.Time `json:"closedAt"`
 	PendingUntil     *time.Time `json:"pendingUntil"`
 
+	// MergedInto is the ticket this one was merged into, once it was.
+	MergedInto *uint `json:"mergedInto"`
+
 	// ServiceLevelID is the service level the ticket is owed; the moments are
 	// empty for a promise it does not make, and Escalated says one has run out
 	// unkept.
@@ -260,6 +263,36 @@ func (h *TicketHandler) Update(c *gofr.Context) (any, error) {
 		OrganisationID: req.OrganisationID, ClearOrganisation: req.ClearOrganisation,
 		ServiceLevelID: req.ServiceLevelID, ClearServiceLevel: req.ClearServiceLevel, Locked: req.Locked,
 	}); err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return h.detail(c, caller, id)
+}
+
+// MergeRequest names the ticket a ticket is merged into.
+type MergeRequest struct {
+	IntoID uint `json:"intoId"`
+}
+
+// Merge handles POST /api/v1/tickets/{id}/merge: the ticket folded into the
+// one the request names, and answered as it stands merged.
+func (h *TicketHandler) Merge(c *gofr.Context) (any, error) {
+	caller, err := h.authz.Require(c, model.PermTicketWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := pathID(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	var req MergeRequest
+	if err := bind(c, &req); err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	if _, err := h.tickets.MergeTicket(c, caller, id, command.MergeTicketCommand{IntoID: req.IntoID}); err != nil {
 		return nil, toHTTPError(err)
 	}
 
@@ -602,7 +635,7 @@ func newTicketResponse(ticket *model.Ticket, names ticketNames) TicketResponse {
 		Locked: ticket.Locked, LockedAt: ticket.LockedAt, Channel: string(ticket.Channel),
 		CreatedBy: ticket.CreatedBy, CreatedByName: nameIn(names.people, ticket.CreatedBy),
 		CreatedAt: ticket.CreatedAt, UpdatedAt: ticket.UpdatedAt, ClosedAt: ticket.ClosedAt,
-		PendingUntil:   ticket.PendingUntil,
+		PendingUntil: ticket.PendingUntil, MergedInto: ticket.MergedInto,
 		ServiceLevelID: ticket.ServiceLevelID, FirstResponseDue: ticket.FirstResponseDue,
 		FirstResponseAt: ticket.FirstResponseAt, SolutionDue: ticket.SolutionDue, UpdateDue: ticket.UpdateDue,
 		Escalated: ticket.Escalated(time.Now()),

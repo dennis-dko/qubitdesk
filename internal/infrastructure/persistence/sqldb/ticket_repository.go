@@ -29,7 +29,7 @@ var _ repository.TicketRepository = (*TicketRepository)(nil)
 
 const ticketColumns = "id, number, title, queue_id, state_id, priority_id, type_id, owner_id, responsible_id, " +
 	"contact_id, organisation_id, locked, locked_at, channel, created_by, created_at, updated_at, closed_at, " +
-	"pending_until, service_level_id, first_response_due, first_response_at, solution_due, update_due"
+	"pending_until, service_level_id, first_response_due, first_response_at, solution_due, update_due, merged_into"
 
 func (r *TicketRepository) Create(
 	ctx context.Context,
@@ -193,22 +193,8 @@ func (r *TicketRepository) Update(
 	history []model.HistoryEntry,
 ) (*model.Ticket, error) {
 	err := r.withTx(ctx, func(tx base) error {
-		found, err := tx.update(ctx, "tickets",
-			"UPDATE tickets SET title = ?, queue_id = ?, state_id = ?, priority_id = ?, type_id = ?, owner_id = ?, "+
-				"responsible_id = ?, contact_id = ?, organisation_id = ?, locked = ?, locked_at = ?, updated_at = ?, "+
-				"closed_at = ?, pending_until = ?, service_level_id = ?, first_response_due = ?, solution_due = ?, "+
-				"update_due = ? WHERE id = ?",
-			ticket.ID,
-			ticket.Title, ticket.QueueID, ticket.StateID, ticket.PriorityID, ticket.TypeID, ticket.OwnerID,
-			ticket.ResponsibleID, ticket.ContactID, ticket.OrganisationID, ticket.Locked, ticket.LockedAt,
-			ticket.UpdatedAt, ticket.ClosedAt, ticket.PendingUntil,
-			ticket.ServiceLevelID, ticket.FirstResponseDue, ticket.SolutionDue, ticket.UpdateDue, ticket.ID)
-		if err != nil {
-			return apperror.Internal(err)
-		}
-
-		if !found {
-			return apperror.NotFound("ticket", strconv.FormatUint(uint64(ticket.ID), 10))
+		if err := writeTicket(ctx, tx, ticket); err != nil {
+			return err
 		}
 
 		return insertHistory(ctx, tx, history)
@@ -540,6 +526,7 @@ func scanTicket(row scanner) (*model.Ticket, error) {
 		number                        sql.NullString
 		owner, responsible, createdBy sql.NullInt64
 		contact, organisation, level  sql.NullInt64
+		mergedInto                    sql.NullInt64
 		channel                       string
 		lockedAt, created, updated    dateTime
 		closed, pending               dateTime
@@ -550,7 +537,8 @@ func scanTicket(row scanner) (*model.Ticket, error) {
 	err := row.Scan(&ticket.ID, &number, &ticket.Title, &ticket.QueueID, &ticket.StateID, &ticket.PriorityID,
 		&ticket.TypeID, &owner, &responsible, &contact, &organisation, &ticket.Locked, &lockedAt, &channel,
 		&createdBy,
-		&created, &updated, &closed, &pending, &level, &responseDue, &respondedAt, &solutionDue, &updateDue)
+		&created, &updated, &closed, &pending, &level, &responseDue, &respondedAt, &solutionDue, &updateDue,
+		&mergedInto)
 	if err != nil {
 		return nil, err
 	}
@@ -572,6 +560,7 @@ func scanTicket(row scanner) (*model.Ticket, error) {
 	ticket.FirstResponseAt = ptr(respondedAt)
 	ticket.SolutionDue = ptr(solutionDue)
 	ticket.UpdateDue = ptr(updateDue)
+	ticket.MergedInto = optionalID(mergedInto)
 
 	return &ticket, nil
 }
