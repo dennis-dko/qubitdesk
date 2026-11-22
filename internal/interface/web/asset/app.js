@@ -13646,6 +13646,10 @@ function forgetTheLastAccount() {
   closeConfigItem();
   $('#form-configitem-filter').reset();
   itemPaging.page = 1;
+  Object.keys(itsmChangeLists).forEach((list) => { itsmChangeLists[list] = []; });
+  closeItsmChange();
+  $('#form-itsmchange-filter').reset();
+  itsmChangePaging.page = 1;
   closePublishedFAQ('portal');
   $('#form-portal-faq').reset();
   $('#portal-faq-list').replaceChildren();

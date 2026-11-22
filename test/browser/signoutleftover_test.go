@@ -123,7 +123,8 @@ func TestASignOutTakesAnImportsFileAndVerdictWithIt(t *testing.T) {
 //
 // It held the account and the role form alone while the ticket system added
 // seven more of the shape - the ticket, the queue, the three catalogs, the
-// organisation and the contact - and the sign-out reset none of them. So the
+// organisation and the contact - and the sign-out reset none of them; the change
+// and its work order were the next two. So the
 // forms are found by the hidden id they hold rather than named, a record is
 // opened in each, and a form the case cannot open one in stops it: the next form
 // of the kind is taught to the case instead of passed over by it.
@@ -163,6 +164,8 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 		await send('/cmdb/items', { classId: place.id, name: 'Head office',
 			deploymentStateId: await offered('ITSM::ConfigItem::DeploymentState'),
 			incidentStateId: await offered('ITSM::Core::IncidentState'), data: least(definition.attributes) });
+		const swap = await send('/changes', { title: 'Swap the switch' });
+		await send('/changes/' + swap.id + '/work-orders', { title: 'Install it' });
 		await refreshAll();
 		return true;
 	})()`, &made)
@@ -200,6 +203,19 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 			fmt.Sprintf(`void document.querySelector(%s)?.click()`, jsString(opener)), nil))
 	}
 
+	// A work order's row is drawn only once its change has been read, so one
+	// script opens the change, waits for it and opens the work order, rather
+	// than a click on a row that is not there yet.
+	scripted := []string{"form-itsmchange", "form-workorder"}
+
+	var opened bool
+
+	p.awaitJSON(`(async () => {
+		await openItsmChange((await api('/changes')).items[0].id);
+		document.querySelector('#table-workorder tbody button.link').click();
+		return true;
+	})()`, &opened)
+
 	const holdingAnID = `[...document.querySelectorAll('form')]
 		.filter((form) => form.querySelector('input[type="hidden"][name="id"]'))`
 
@@ -216,14 +232,14 @@ func TestASignOutPutsEveryFormBackToCreating(t *testing.T) {
 	}
 
 	for form, id := range correcting {
-		if _, known := openers[form]; !known {
+		if _, known := openers[form]; !known && !slices.Contains(scripted, form) {
 			t.Errorf("%s holds a hidden id and this case does not know how to open a record in it - teach it", form)
 		} else if id == "" {
 			t.Errorf("this case starts from every form correcting a record, and %s is not", form)
 		}
 	}
 
-	for form := range openers {
+	for _, form := range slices.Concat(slices.Collect(maps.Keys(openers)), scripted) {
 		if _, there := correcting[form]; !there {
 			t.Errorf("this case opens a record in %s, which holds no hidden id any more", form)
 		}
