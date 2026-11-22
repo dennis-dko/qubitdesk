@@ -8195,12 +8195,8 @@ async function openConfigItem(id) {
   await drawItemAttributes(definition?.attributes ?? [], item.version.data, !can('assets:write'));
   drawItemVersions();
 
-  // A ticket is offered to link only to whoever may read tickets, the right
-  // searching for one takes.
   const linked = $('#configitem-links');
-  const ticketKind = $('#form-configitem-link [name="object"] [value="ticket"]');
-  ticketKind.hidden = !can('tickets:read');
-  if (ticketKind.hidden) $('#form-configitem-link').elements.object.value = 'configitem';
+  offerLinkKinds($('#form-configitem-link'));
   linked.hidden = false;
   await drawLinks(linked, 'configitem', item.id, can('assets:write'));
 }
@@ -8631,21 +8627,48 @@ const LINK_WORDS = {
   DependsOn: { out: () => t('link.dependsOn', 'depends on'), in: () => t('link.requiredFor', 'required for') },
 };
 
-/** The kinds of record a link reaches: how one is searched for, written and opened. */
+/**
+ * The kinds of record a link reaches: how one is searched for and with which
+ * right, how it is written, and how it is opened.
+ */
 const LINK_KINDS = {
   ticket: {
     path: '/tickets',
+    right: 'tickets:read',
     describe: (ticket) => `${ticket.number} ${ticket.title}`,
     name: () => t('link.aTicket', 'a ticket'),
     open: (id) => { switchView('tickets'); return openTicket(id); },
   },
   configitem: {
     path: '/cmdb/items',
+    right: 'assets:read',
     describe: (item) => `${item.number} ${item.name}`,
     name: () => t('link.anItem', 'a configuration item'),
     open: (id) => { switchView('assets'); return openConfigItem(id); },
   },
+  change: {
+    path: '/changes',
+    right: 'changes:read',
+    describe: (change) => `${change.number} ${change.title}`,
+    name: () => t('link.aChange', 'a change'),
+    open: (id) => { switchView('changes'); return openItsmChange(id); },
+  },
 };
+
+/**
+ * Offers a link form only the kinds of record its reader may search for - the
+ * right a link to one is made with - and chooses the first of them where the
+ * one chosen is not offered.
+ */
+function offerLinkKinds(form) {
+  const select = form.elements.object;
+
+  for (const option of select.options) option.hidden = !can(LINK_KINDS[option.value].right);
+
+  if (select.selectedOptions[0]?.hidden) {
+    select.value = [...select.options].find((option) => !option.hidden)?.value ?? '';
+  }
+}
 
 /**
  * Draws a record's links into its section: how each reads from here, the record
@@ -8752,6 +8775,604 @@ function wireLinkForm(section) {
         await drawLinks(section, object, id, form.dataset.canChange === 'yes');
       });
   });
+}
+
+// ------------------------------------------------------------------ changes
+
+/**
+ * The lists the Changes screen picks from and the people it can name, read on
+ * each load: a change's category, impact, priority and state, and a work
+ * order's state and type.
+ */
+const itsmChangeLists = {
+  categories: [], impacts: [], priorities: [], states: [], orderStates: [], orderTypes: [], people: [],
+};
+
+/** Which page of changes the list shows. */
+const itsmChangePaging = { page: 1, limit: 50, total: 0 };
+
+/** The change open below the list, or null. */
+let itsmChangeShown = null;
+
+/** The work order open in its form, or null while the form adds one or is closed. */
+let workOrderShown = null;
+
+/** A list's values as choices: those still offered, and the one given, which may since have been retired. */
+function catalogChoices(entries, kept) {
+  return entries
+    .filter((entry) => entry.valid || entry.id === kept)
+    .map((entry) => ({ value: String(entry.id), label: catalogValueTitle(entry.name) }));
+}
+
+/**
+ * The people a field can name, as choices: those who may work on changes for a
+ * manager or a builder, anybody who may see them for a work order's agent -
+ * and the one named already, who may since have lost the right.
+ */
+function peopleChoices(working, kept, keptName) {
+  const people = itsmChangeLists.people
+    .filter((person) => !working || person.works)
+    .map((person) => ({ value: String(person.id), label: person.name }));
+
+  if (kept && !people.some((person) => person.value === String(kept))) {
+    people.push({ value: String(kept), label: keptName || `#${kept}` });
+  }
+
+  return people;
+}
+
+/** From when to when something is planned or ran, since when where it goes on, or a dash. */
+function momentSpan(start, end) {
+  if (start && end) return fillIn(t('itsmchange.span', '{0} to {1}'), [fmtMoment(start), fmtMoment(end)]);
+  if (start) return fillIn(t('workorder.since', 'since {0}'), [fmtMoment(start)]);
+
+  return '–';
+}
+
+/**
+ * Fills the Changes screen for whoever may read changes: the lists a change and
+ * its work orders pick from, the people they can name, the page of changes,
+ * and the open change, read again - unless somebody is writing in it or in one
+ * of its work orders.
+ */
+async function loadItsmChanges() {
+  if (!can('changes:read')) return;
+
+  const list = (name) => api(`/general-catalog?class=${encodeURIComponent(`ITSM::ChangeManagement::${name}`)}`);
+  const [categories, impacts, priorities, states, orderStates, orderTypes, people] = await Promise.all([
+    list('Category'), list('Impact'), list('Priority'), list('Change::State'), list('WorkOrder::State'),
+    list('WorkOrder::Type'), api('/changes/people'),
+  ]);
+
+  Object.assign(itsmChangeLists, {
+    categories: categories?.items ?? [],
+    impacts: impacts?.items ?? [],
+    priorities: priorities?.items ?? [],
+    states: states?.items ?? [],
+    orderStates: orderStates?.items ?? [],
+    orderTypes: orderTypes?.items ?? [],
+    people: people?.items ?? [],
+  });
+
+  fillSelect($('#form-itsmchange-filter').elements.state,
+    itsmChangeLists.states.map((entry) => ({ value: String(entry.id), label: catalogValueTitle(entry.name) })),
+    { placeholder: t('itsmchange.everyState', 'every state'), labelKey: 'label', valueKey: 'value' });
+
+  await loadItsmChangePage();
+
+  if (itsmChangeShown && !beingEdited($('#form-itsmchange')) && !beingEdited($('#form-workorder'))) {
+    await openItsmChange(itsmChangeShown.id);
+  }
+}
+
+/** Reads the page of changes the filter asks for, and draws it. */
+async function loadItsmChangePage() {
+  const filter = $('#form-itsmchange-filter');
+  const query = new URLSearchParams({
+    limit: String(itsmChangePaging.limit), page: String(itsmChangePaging.page),
+  });
+
+  if (filter.elements.state.value) query.set('state', filter.elements.state.value);
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+
+  const page = await api(`/changes?${query}`);
+  itsmChangePaging.total = page?.totalCount ?? 0;
+
+  fillTable($('#table-itsmchange tbody'), (page?.items ?? []).map(itsmChangeRow), 7,
+    t('itsmchange.empty', 'No changes.'));
+
+  const { total, limit } = itsmChangePaging;
+  const from = total === 0 ? 0 : (itsmChangePaging.page - 1) * limit + 1;
+  const to = Math.min(itsmChangePaging.page * limit, total);
+
+  $('#itsmchanges-range').textContent = fillIn(t('ticket.range', '{0}–{1} of {2}'), [from, to, total]);
+  $('#itsmchanges-previous').disabled = itsmChangePaging.page <= 1;
+  $('#itsmchanges-next').disabled = to >= total;
+}
+
+/** One change as a row of the list. */
+function itsmChangeRow(change) {
+  return el('tr', {},
+    el('td', { class: 'text' },
+      el('button', { class: 'link', text: change.number, onclick: () => openItsmChange(change.id) })),
+    el('td', { class: 'text', text: change.title }),
+    el('td', { class: 'text', text: catalogEntryTitle(itsmChangeLists.states, change.stateId) }),
+    el('td', { class: 'text', text: catalogEntryTitle(itsmChangeLists.priorities, change.priorityId) }),
+    el('td', { class: 'text', text: change.managerName || '–' }),
+    el('td', { text: momentSpan(change.plannedStartAt, change.plannedEndAt) }),
+    el('td', { class: 'num', text: String(change.workOrders) }),
+  );
+}
+
+/** Fills the change form's lists, keeping what a change already names. */
+function fillItsmChangeForm(form, change) {
+  const choose = { labelKey: 'label', valueKey: 'value' };
+  const nobody = { ...choose, placeholder: t('ticket.nobody', 'nobody') };
+
+  fillSelect(form.elements.categoryId, catalogChoices(itsmChangeLists.categories, change?.categoryId), choose);
+  fillSelect(form.elements.impactId, catalogChoices(itsmChangeLists.impacts, change?.impactId), choose);
+  fillSelect(form.elements.priorityId, catalogChoices(itsmChangeLists.priorities, change?.priorityId),
+    { ...choose, placeholder: t('itsmchange.byMatrix', 'from category and impact') });
+  fillSelect(form.elements.managerId, peopleChoices(true, change?.managerId, change?.managerName), nobody);
+  fillSelect(form.elements.builderId, peopleChoices(true, change?.builderId, change?.builderName), nobody);
+}
+
+/** Opens the form for a new change, ranked in the middle of the scale, as OTRS ranks one nobody ranks. */
+function startItsmChange() {
+  const form = $('#form-itsmchange');
+  const normal = (entries) => String(entries.find((entry) => entry.name === '3-normal')?.id ?? '');
+
+  resetItsmChangeForm();
+  $('#itsmchange-detail').hidden = false;
+  fillItsmChangeForm(form, null);
+  form.elements.categoryId.value = normal(itsmChangeLists.categories);
+  form.elements.impactId.value = normal(itsmChangeLists.impacts);
+  form.elements.priorityId.value = '';
+  form.elements.managerId.value = '';
+  form.elements.builderId.value = '';
+
+  $('#itsmchange-detail').scrollIntoView({ block: 'start' });
+  form.elements.title.focus();
+}
+
+/**
+ * Opens a change below the list: its form, read only for whoever may not work
+ * on changes; where it stands and where it may go; its work orders; and what it
+ * is linked to.
+ */
+async function openItsmChange(id) {
+  let change;
+  let orders;
+
+  try {
+    [change, orders] = await Promise.all([api(`/changes/${id}`), api(`/changes/${id}/work-orders`)]);
+  } catch (err) {
+    toastFailure(err);
+    closeItsmChange();
+    await loadItsmChangePage();
+
+    return;
+  }
+
+  const form = $('#form-itsmchange');
+
+  resetItsmChangeForm({ keepShown: true });
+  itsmChangeShown = change;
+  $('#itsmchange-detail').hidden = false;
+
+  form.elements.id.value = String(change.id);
+  fillItsmChangeForm(form, change);
+  form.elements.title.value = change.title;
+  form.elements.description.value = change.description;
+  form.elements.justification.value = change.justification;
+  form.elements.categoryId.value = String(change.categoryId);
+  form.elements.impactId.value = String(change.impactId);
+  form.elements.priorityId.value = String(change.priorityId);
+  form.elements.managerId.value = change.managerId ? String(change.managerId) : '';
+  form.elements.builderId.value = change.builderId ? String(change.builderId) : '';
+
+  const requested = change.requestedAt ? dayAndTimeIn(change.requestedAt, readerZone()) : { day: '', time: '' };
+  setDateField(form.elements.requestedDay, requested.day);
+  form.elements.requestedTime.value = requested.time;
+
+  $('#itsmchange-fields').disabled = !can('changes:write');
+
+  // Drawn rather than declared with a key, because it carries the change's
+  // number; see editRole for why the key has to come off.
+  const heading = $('#itsmchange-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('itsmChangeFormTitle', () => {
+    heading.textContent = fillIn(t('itsmchange.edit', 'Change {0}'), [change.number]);
+  });
+
+  swapTheLabel($('#itsmchange-submit'), 'itsmchange.save', 'Save the change');
+  $('#itsmchange-delete').hidden = !can('changes:write');
+
+  drawItsmChangeStanding(change);
+  drawWorkOrders(orders?.items ?? []);
+
+  const linked = $('#itsmchange-links');
+  offerLinkKinds($('#form-itsmchange-link'));
+  linked.hidden = false;
+  await drawLinks(linked, 'change', change.id, can('changes:write'));
+}
+
+/**
+ * Says where the open change stands and what its work orders say of when it
+ * runs, and offers the states the machine lets it move on to - nothing where
+ * its state ends it, or the reader may not work on changes.
+ */
+function drawItsmChangeStanding(change) {
+  const minutes = (count) => fillIn(t('ticket.minutes', '{0} minutes'), [count]);
+  const move = $('#form-itsmchange-move');
+  const next = change.nextStateIds ?? [];
+
+  $('#itsmchange-standing').textContent = fillIn(t('itsmchange.standing',
+    'State: {0}. Planned: {1}. Ran: {2}. {3} planned and {4} accounted over {5} work orders.'), [
+    catalogEntryTitle(itsmChangeLists.states, change.stateId),
+    momentSpan(change.plannedStartAt, change.plannedEndAt),
+    momentSpan(change.actualStartAt, change.actualEndAt),
+    minutes(change.plannedMinutes), minutes(change.accountedMinutes), change.workOrders,
+  ]);
+
+  fillSelect(move.elements.stateId,
+    next.map((id) => ({ value: String(id), label: catalogEntryTitle(itsmChangeLists.states, id) })),
+    { labelKey: 'label', valueKey: 'value' });
+  move.hidden = !next.length || !can('changes:write');
+  $('#itsmchange-state').hidden = false;
+}
+
+/**
+ * Writes the change: a new one, or what the open one says now. Its priority is
+ * sent only where it was chosen, so that a category or an impact changed here
+ * is ranked by the matrix rather than kept at the priority it had.
+ */
+async function saveItsmChange(form) {
+  const id = form.elements.id.value;
+  const number = (name) => Number(form.elements[name].value) || 0;
+  const priority = number('priorityId');
+  const day = form.elements.requestedDay.value;
+  const body = {
+    title: form.elements.title.value,
+    description: form.elements.description.value,
+    justification: form.elements.justification.value,
+    categoryId: number('categoryId'),
+    impactId: number('impactId'),
+    ...(priority && priority !== itsmChangeShown?.priorityId ? { priorityId: priority } : {}),
+    ...(number('managerId') ? { managerId: number('managerId') } : { clearManager: true }),
+    ...(number('builderId') ? { builderId: number('builderId') } : { clearBuilder: true }),
+    ...(day ? { requestedAt: momentIn(day, form.elements.requestedTime.value, readerZone()) }
+      : { clearRequestedAt: true }),
+  };
+
+  await mutate(() => api(id ? `/changes/${id}` : '/changes',
+    { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) }),
+  id ? t('msg.itsmChangeSaved', 'Change saved') : t('msg.itsmChangeAdded', 'Change added'),
+  async (change) => {
+    delete form.dataset.editing;
+    await loadItsmChangePage();
+    await openItsmChange(change.id);
+  });
+}
+
+/** Moves the open change on to the state chosen. */
+async function moveItsmChange(form) {
+  if (!itsmChangeShown) return;
+
+  const { id } = itsmChangeShown;
+
+  await mutate(() => api(`/changes/${id}`,
+    { method: 'PUT', body: JSON.stringify({ stateId: Number(form.elements.stateId.value) || 0 }) }),
+  t('msg.itsmChangeMoved', 'Change moved on'),
+  async () => {
+    await loadItsmChangePage();
+    await openItsmChange(id);
+  });
+}
+
+/** Deletes the open change with its work orders and its links, once asked. */
+async function deleteItsmChange() {
+  if (!itsmChangeShown) return;
+
+  const change = itsmChangeShown;
+  const sure = await confirmDialog({
+    title: t('itsmchange.deleteTitle', 'Delete the change?'),
+    text: fillIn(t('itsmchange.deleteText', '{0} {1} goes with its work orders and its links.'),
+      [change.number, change.title]),
+    confirmLabel: t('itsmchange.deleteConfirm', 'Delete it'),
+  });
+
+  if (!sure) return;
+
+  await mutate(() => api(`/changes/${change.id}`, { method: 'DELETE' }),
+    t('msg.itsmChangeDeleted', 'Change deleted'),
+    async () => {
+      closeItsmChange();
+      await loadItsmChangePage();
+    });
+}
+
+/**
+ * Puts the change form back to adding one, empty, with nothing below it.
+ * keepShown leaves which change is open alone, for opening another in its
+ * place.
+ */
+function resetItsmChangeForm({ keepShown = false } = {}) {
+  const form = $('#form-itsmchange');
+
+  form.reset();
+  form.elements.id.value = '';
+  delete form.dataset.editing;
+  $('#itsmchange-fields').disabled = false;
+  stopRedrawing('itsmChangeFormTitle');
+  swapTheLabel($('#itsmchange-form-title'), 'itsmchange.create', 'Add a change');
+  swapTheLabel($('#itsmchange-submit'), 'itsmchange.add', 'Add the change');
+  $('#itsmchange-submit').hidden = !can('changes:write');
+  $('#itsmchange-delete').hidden = true;
+  $('#itsmchange-state').hidden = true;
+  $('#itsmchange-workorders').hidden = true;
+  $('#table-workorder tbody').replaceChildren();
+  resetWorkOrderForm();
+  $('#itsmchange-links').hidden = true;
+  forgetLinks($('#itsmchange-links'));
+
+  if (!keepShown) itsmChangeShown = null;
+}
+
+/** Closes the change below the list. */
+function closeItsmChange() {
+  resetItsmChangeForm();
+  $('#itsmchange-detail').hidden = true;
+}
+
+/** Draws the open change's work orders, in the order of its plan. */
+function drawWorkOrders(orders) {
+  fillTable($('#table-workorder tbody'), orders.map(workOrderRow), 8, t('workorder.empty', 'No work orders yet.'));
+  $('#itsmchange-workorders').hidden = false;
+}
+
+/** One work order as a row of its change's table. */
+function workOrderRow(order) {
+  return el('tr', {},
+    el('td', { class: 'num', text: String(order.number) }),
+    el('td', { class: 'text' },
+      el('button', { type: 'button', class: 'link', text: order.title, onclick: () => openWorkOrder(order) })),
+    el('td', { class: 'text', text: catalogEntryTitle(itsmChangeLists.orderStates, order.stateId) }),
+    el('td', { class: 'text', text: catalogEntryTitle(itsmChangeLists.orderTypes, order.workOrderTypeId) }),
+    el('td', { class: 'text', text: order.agentName || '–' }),
+    el('td', { text: momentSpan(order.plannedStartAt, order.plannedEndAt) }),
+    el('td', { text: momentSpan(order.actualStartAt, order.actualEndAt) }),
+    el('td', { class: 'num', text: fillIn(t('ticket.minutes', '{0} minutes'), [order.accountedMinutes]) }),
+  );
+}
+
+/**
+ * Fills the work order form from a work order, or empty and of OTRS's default
+ * type for a new one. Its state offers where it stands and where the machine
+ * lets it go from there.
+ */
+function fillWorkOrderForm(form, order) {
+  const choose = { labelKey: 'label', valueKey: 'value' };
+  const states = order ? [order.stateId, ...(order.nextStateIds ?? [])] : [];
+
+  fillSelect(form.elements.workOrderTypeId, catalogChoices(itsmChangeLists.orderTypes, order?.workOrderTypeId),
+    choose);
+  fillSelect(form.elements.agentId, peopleChoices(false, order?.agentId, order?.agentName),
+    { ...choose, placeholder: t('ticket.nobody', 'nobody') });
+  fillSelect(form.elements.stateId,
+    states.map((id) => ({ value: String(id), label: catalogEntryTitle(itsmChangeLists.orderStates, id) })), choose);
+
+  const plain = itsmChangeLists.orderTypes.find((entry) => entry.name === 'workorder')?.id;
+
+  form.elements.workOrderTypeId.value = String(order?.workOrderTypeId ?? plain ?? '');
+  form.elements.agentId.value = order?.agentId ? String(order.agentId) : '';
+  form.elements.stateId.value = order ? String(order.stateId) : '';
+  form.elements.title.value = order?.title ?? '';
+  form.elements.instruction.value = order?.instruction ?? '';
+  form.elements.report.value = order?.report ?? '';
+  form.elements.plannedMinutes.value = order ? String(order.plannedMinutes) : '';
+  form.elements.minutes.value = '';
+
+  for (const [field, at] of [
+    ['plannedStart', order?.plannedStartAt], ['plannedEnd', order?.plannedEndAt],
+    ['actualStart', order?.actualStartAt], ['actualEnd', order?.actualEndAt],
+  ]) {
+    const moment = at ? dayAndTimeIn(at, readerZone()) : { day: '', time: '' };
+
+    setDateField(form.elements[`${field}Day`], moment.day);
+    form.elements[`${field}Time`].value = moment.time;
+  }
+}
+
+/** Opens the form for a new work order of the open change, without the report a new one has nothing for. */
+function startWorkOrder() {
+  const form = $('#form-workorder');
+
+  resetWorkOrderForm();
+  form.hidden = false;
+  fillWorkOrderForm(form, null);
+  form.scrollIntoView({ block: 'nearest' });
+  form.elements.title.focus();
+}
+
+/**
+ * Opens a work order in its form: all of it for whoever may work on changes,
+ * the report alone for its agent - whom the server lets write nothing else -
+ * and read only for anybody else.
+ */
+function openWorkOrder(order) {
+  const form = $('#form-workorder');
+  const plans = can('changes:write');
+  const reports = plans || (Boolean(order.agentId) && order.agentId === me.user?.id);
+
+  resetWorkOrderForm();
+  workOrderShown = order;
+  form.hidden = false;
+  form.elements.id.value = String(order.id);
+  fillWorkOrderForm(form, order);
+
+  $('#workorder-plan').disabled = !plans;
+  $('#workorder-report').hidden = false;
+  $('#workorder-report').disabled = !reports;
+  $('#workorder-submit').hidden = !reports;
+  $('#workorder-delete').hidden = !plans;
+
+  // Drawn rather than declared with a key, because it carries the work
+  // order's number; see editRole for why the key has to come off.
+  const heading = $('#workorder-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('workOrderFormTitle', () => {
+    heading.textContent = fillIn(t('workorder.edit', 'Work order {0}'), [order.number]);
+  });
+
+  swapTheLabel($('#workorder-submit'), 'workorder.save', 'Save the work order');
+  form.scrollIntoView({ block: 'nearest' });
+}
+
+/**
+ * Writes the work order: a new one of the open change, or what the open one
+ * says now - only what the reader may write of it, so that its agent's report
+ * is not refused for the plan beside it.
+ */
+async function saveWorkOrder(form) {
+  if (!itsmChangeShown) return;
+
+  const changeId = itsmChangeShown.id;
+  const order = workOrderShown;
+  const moment = (field) => {
+    const day = form.elements[`${field}Day`].value;
+
+    return day ? momentIn(day, form.elements[`${field}Time`].value, readerZone()) : null;
+  };
+  const moments = (startField, endField, startKey, endKey, clearKey) => {
+    const [start, end] = [moment(startField), moment(endField)];
+
+    if (!start && !end) return { [clearKey]: true };
+
+    return { ...(start ? { [startKey]: start } : {}), ...(end ? { [endKey]: end } : {}) };
+  };
+  const body = {};
+
+  if (!$('#workorder-plan').disabled) {
+    const agent = Number(form.elements.agentId.value) || 0;
+
+    Object.assign(body, {
+      title: form.elements.title.value,
+      instruction: form.elements.instruction.value,
+      workOrderTypeId: Number(form.elements.workOrderTypeId.value) || 0,
+      plannedMinutes: Number(form.elements.plannedMinutes.value) || 0,
+      ...(agent ? { agentId: agent } : { clearAgent: true }),
+      ...moments('plannedStart', 'plannedEnd', 'plannedStartAt', 'plannedEndAt', 'clearPlanned'),
+    });
+  }
+
+  if (order && !$('#workorder-report').disabled) {
+    const state = Number(form.elements.stateId.value) || 0;
+
+    Object.assign(body, {
+      report: form.elements.report.value,
+      minutes: Number(form.elements.minutes.value) || 0,
+      ...(state && state !== order.stateId ? { stateId: state } : {}),
+      ...moments('actualStart', 'actualEnd', 'actualStartAt', 'actualEndAt', 'clearActual'),
+    });
+  }
+
+  await mutate(() => api(order ? `/work-orders/${order.id}` : `/changes/${changeId}/work-orders`,
+    { method: order ? 'PUT' : 'POST', body: JSON.stringify(body) }),
+  order ? t('msg.workOrderSaved', 'Work order saved') : t('msg.workOrderAdded', 'Work order added'),
+  async () => {
+    resetWorkOrderForm();
+    await loadItsmChangePage();
+    await openItsmChange(changeId);
+  });
+}
+
+/** Deletes the open work order, once asked. */
+async function deleteWorkOrder() {
+  const order = workOrderShown;
+  if (!order || !itsmChangeShown) return;
+
+  const changeId = itsmChangeShown.id;
+  const sure = await confirmDialog({
+    title: t('workorder.deleteTitle', 'Delete the work order?'),
+    text: fillIn(t('workorder.deleteText', '{0} goes, with its report and the time accounted on it.'),
+      [order.title]),
+    confirmLabel: t('workorder.deleteConfirm', 'Delete it'),
+  });
+
+  if (!sure) return;
+
+  await mutate(() => api(`/work-orders/${order.id}`, { method: 'DELETE' }),
+    t('msg.workOrderDeleted', 'Work order deleted'),
+    async () => {
+      resetWorkOrderForm();
+      await loadItsmChangePage();
+      await openItsmChange(changeId);
+    });
+}
+
+/** Puts the work order form back to adding one, empty and closed. */
+function resetWorkOrderForm() {
+  const form = $('#form-workorder');
+
+  form.reset();
+  form.elements.id.value = '';
+  delete form.dataset.editing;
+  workOrderShown = null;
+  $('#workorder-plan').disabled = false;
+  $('#workorder-report').disabled = false;
+  $('#workorder-report').hidden = true;
+  stopRedrawing('workOrderFormTitle');
+  swapTheLabel($('#workorder-form-title'), 'workorder.create', 'Add a work order');
+  swapTheLabel($('#workorder-submit'), 'workorder.add', 'Add the work order');
+  $('#workorder-submit').hidden = false;
+  $('#workorder-delete').hidden = true;
+  form.hidden = true;
+}
+
+function wireItsmChanges() {
+  const filter = $('#form-itsmchange-filter');
+  const reload = () => loadItsmChangePage().catch((err) => toastFailure(err));
+  let pending;
+
+  filter.addEventListener('submit', (e) => e.preventDefault());
+  filter.elements.state.addEventListener('change', () => {
+    itsmChangePaging.page = 1;
+    reload();
+  });
+  filter.elements.q.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => {
+      itsmChangePaging.page = 1;
+      reload();
+    }, 250);
+  });
+
+  $('#itsmchanges-previous').addEventListener('click', () => {
+    itsmChangePaging.page = Math.max(1, itsmChangePaging.page - 1);
+    reload();
+  });
+  $('#itsmchanges-next').addEventListener('click', () => {
+    itsmChangePaging.page += 1;
+    reload();
+  });
+
+  $('#itsmchange-new').addEventListener('click', startItsmChange);
+  $('#form-itsmchange').addEventListener('submit', (e) => { e.preventDefault(); saveItsmChange(e.target); });
+  $('#itsmchange-cancel').addEventListener('click', closeItsmChange);
+  $('#itsmchange-delete').addEventListener('click', () => deleteItsmChange());
+  $('#form-itsmchange-move').addEventListener('submit', (e) => { e.preventDefault(); moveItsmChange(e.target); });
+
+  $('#workorder-new').addEventListener('click', startWorkOrder);
+  $('#form-workorder').addEventListener('submit', (e) => { e.preventDefault(); saveWorkOrder(e.target); });
+  $('#workorder-close').addEventListener('click', resetWorkOrderForm);
+  $('#workorder-delete').addEventListener('click', () => deleteWorkOrder());
+
+  wireLinkForm($('#itsmchange-links'));
 }
 
 // ------------------------------------------------------------------ portal
@@ -9360,11 +9981,14 @@ async function openTicket(id, { keepPlace = false } = {}) {
   drawTicketDetail(ticket, articles?.items ?? [], history?.items ?? []);
   offerTemplates(templates?.items ?? []);
 
-  // The items a ticket concerns, for whoever may read items; a link is made
-  // where the reader works the ticket, as any change to it is.
+  // The items and the changes a ticket concerns, for whoever may read either; a
+  // link is made where the reader works the ticket, as any change to it is.
   const linked = $('#ticket-links');
-  linked.hidden = !can('assets:read');
-  if (!linked.hidden) await drawLinks(linked, 'ticket', ticket.id, worksIn(ticket.queueId) && can('tickets:write'));
+  linked.hidden = !can('assets:read', 'changes:read');
+  if (!linked.hidden) {
+    offerLinkKinds($('#form-ticket-link'));
+    await drawLinks(linked, 'ticket', ticket.id, worksIn(ticket.queueId) && can('tickets:write'));
+  }
 
   // Corrected only where the reader's role works in its queue: the server
   // answers any change to a ticket of a queue only read as not found, and a form
@@ -13914,6 +14538,16 @@ const TOUR_STEPS = [
       + 'a new version, so an item written before it is still read the way it was written.'),
   },
   {
+    target: '#itsmchange-card',
+    view: 'changes',
+    permission: 'changes:read',
+    title: () => t('tour.itsmchange.title', 'Changes and their work orders'),
+    text: () => t('tour.itsmchange.text',
+      'The changes to what the organisation runs, a page of them by state and words, each opened below the list '
+      + 'with the work orders it is carried out in. A change moves on only as its states allow, and whoever a '
+      + 'work order is given to reports on it here.'),
+  },
+  {
     target: '#macro-card',
     view: 'automation',
     permission: 'automation:write',
@@ -18457,6 +19091,7 @@ async function refreshAll() {
   await loadGeneralCatalog();
   await loadClassDefinitions();
   await loadConfigItems();
+  await loadItsmChanges();
   await loadPortal();
   await loadFAQ();
   await loadTickets();
@@ -18534,6 +19169,7 @@ function wireForms() {
   wireGeneralCatalog();
   wireClassDefinitions();
   wireConfigItems();
+  wireItsmChanges();
   wireSysConfig();
   wireCalendars();
   wireSla();

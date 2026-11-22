@@ -196,6 +196,8 @@ var numberRules = map[string]numberRule{
 	"form-sla/updateMinutes":                  {"0", figure(model.MaxServiceMinutes), "1"},
 	"form-sla/solutionMinutes":                {"0", figure(model.MaxServiceMinutes), "1"},
 	"form-ticket/minutes":                     {"0", figure(model.MaxArticleMinutes), "1"},
+	"form-workorder/plannedMinutes":           {"0", figure(model.MaxWorkOrderPlannedMinutes), "1"},
+	"form-workorder/minutes":                  {"0", figure(model.MaxArticleMinutes), "1"},
 	"form-article/minutes":                    {"0", figure(model.MaxArticleMinutes), "1"},
 	"form-datasource/port":                    {"1", figure(model.MaxPort), "1"},
 

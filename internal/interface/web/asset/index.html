@@ -89,6 +89,12 @@
         <path d="M4 12l8 4 8-4"/>
         <path d="M4 16.5l8 4 8-4"/>
       </symbol>
+      <symbol id="icon-changes" viewBox="0 0 24 24">
+        <path d="M4 8h14"/>
+        <path d="m15 5 3 3-3 3"/>
+        <path d="M20 16H6"/>
+        <path d="m9 13-3 3 3 3"/>
+      </symbol>
       <symbol id="icon-ticketsetup" viewBox="0 0 24 24">
         <path d="M4 7h9M17 7h3M4 17h3M11 17h9"/>
         <circle cx="15" cy="7" r="2"/>
@@ -231,6 +237,7 @@
       <button class="tab" data-view="roles" data-perm="roles:read" data-i18n="nav.roles">Roles<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-roles"/></svg></button>
       <button class="tab" data-view="ticketsetup" data-perm="queues:write" data-i18n="nav.ticketSetup">Ticket setup<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-ticketsetup"/></svg></button>
       <button class="tab" data-view="assets" data-perm="assets:read,catalog:write" data-i18n="nav.assets">Assets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-assets"/></svg></button>
+      <button class="tab" data-view="changes" data-perm="changes:read" data-i18n="nav.changes">Changes<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-changes"/></svg></button>
       <button class="tab" data-view="automation" data-perm="automation:write" data-i18n="nav.automation">Automation<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-automation"/></svg></button>
       <button class="tab" data-view="settings" data-i18n="nav.settings">My account<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-account"/></svg></button>
       <button class="tab" data-view="admin" id="tab-admin" hidden data-perm="settings:manage" data-i18n="nav.admin">Settings<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-admin"/></svg></button>
@@ -777,9 +784,9 @@
           <h3 data-i18n="link.title">Linked</h3>
           <ul class="link-list"></ul>
           <form method="post" class="form" id="form-ticket-link" hidden>
-            <input type="hidden" name="object" value="configitem">
             <div class="grid">
               <label data-i18n="link.type">Link<select name="type"></select></label>
+              <label data-i18n="link.kind">To<select name="object"><option value="configitem" data-i18n="link.anItem">a configuration item</option><option value="change" data-i18n="link.aChange">a change</option></select></label>
               <label data-i18n="link.find">Find<input type="search" name="find" maxlength="255" data-not-an-edit data-i18n-placeholder="configitem.findHint" placeholder="name or number"></label>
               <label data-i18n="link.record">Record<select name="record" required></select></label>
             </div>
@@ -1537,7 +1544,7 @@
           <form method="post" class="form" id="form-configitem-link" hidden>
             <div class="grid">
               <label data-i18n="link.type">Link<select name="type"></select></label>
-              <label data-i18n="link.kind">To<select name="object"><option value="ticket" data-i18n="link.aTicket">a ticket</option><option value="configitem" data-i18n="link.anItem">a configuration item</option></select></label>
+              <label data-i18n="link.kind">To<select name="object"><option value="ticket" data-i18n="link.aTicket">a ticket</option><option value="configitem" data-i18n="link.anItem">a configuration item</option><option value="change" data-i18n="link.aChange">a change</option></select></label>
               <label data-i18n="link.find">Find<input type="search" name="find" maxlength="255" data-not-an-edit data-i18n-placeholder="configitem.findHint" placeholder="name or number"></label>
               <label data-i18n="link.record">Record<select name="record" required></select></label>
             </div>
@@ -1614,6 +1621,154 @@
             <tbody></tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <!-- The changes, as OTRS::ITSM keeps them: a page of them by state and
+         words, and the one opened below it with where it stands, the work
+         orders it is carried out in and what it is linked to. -->
+    <section id="view-changes" class="view" hidden>
+      <div class="card" id="itsmchange-card" data-perm="changes:read">
+        <h2 data-i18n="itsmchange.title">Changes</h2>
+        <p class="muted" data-i18n="itsmchange.hint">Changes to what the organisation runs, each carried out in work orders. A change moves on only as its states allow, and is ranked by its category and impact unless it is given a priority.</p>
+        <form method="post" id="form-itsmchange-filter" class="form">
+          <div class="grid">
+            <label data-i18n="field.stateId">State<select name="state" data-not-an-edit></select></label>
+            <label data-i18n="itsmchange.search">Search<input type="search" name="q" maxlength="255" data-not-an-edit data-i18n-placeholder="itsmchange.searchHint" placeholder="title or number"></label>
+          </div>
+        </form>
+        <div class="row" data-perm="changes:write">
+          <button type="button" id="itsmchange-new" data-i18n="itsmchange.new">Add a change</button>
+        </div>
+        <div class="table-wrap">
+          <table id="table-itsmchange">
+            <thead>
+              <tr>
+                <th data-i18n="itsmchange.number">Number</th>
+                <th data-i18n="field.title">Title</th>
+                <th data-i18n="field.stateId">State</th>
+                <th data-i18n="field.priorityId">Priority</th>
+                <th data-i18n="field.managerId">Change manager</th>
+                <th data-i18n="itsmchange.planned">Planned</th>
+                <th class="num" data-i18n="itsmchange.workOrders">Work orders</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="row">
+          <button type="button" class="secondary" id="itsmchanges-previous" data-i18n="ticket.previous">Previous</button>
+          <span class="muted" id="itsmchanges-range"></span>
+          <button type="button" class="secondary" id="itsmchanges-next" data-i18n="ticket.next">Next</button>
+        </div>
+      </div>
+      <div class="card" id="itsmchange-detail" data-perm="changes:read" hidden>
+        <h2 id="itsmchange-form-title" data-i18n="itsmchange.create">Add a change</h2>
+        <form method="post" id="form-itsmchange" class="form">
+          <input type="hidden" name="id">
+          <fieldset id="itsmchange-fields">
+            <div class="grid">
+              <label class="wide" data-i18n="field.title">Title<input type="text" name="title" maxlength="250" required></label>
+              <label data-i18n="field.categoryId">Category<select name="categoryId"></select></label>
+              <label data-i18n="field.impactId">Impact<select name="impactId"></select></label>
+              <label data-i18n="field.priorityId">Priority<select name="priorityId"></select></label>
+              <label data-i18n="field.managerId">Change manager<select name="managerId"></select></label>
+              <label data-i18n="field.builderId">Change builder<select name="builderId"></select></label>
+              <label data-i18n="field.requestedAt">Requested for<input type="date" name="requestedDay"></label>
+              <label data-i18n="itsmchange.at">at<input type="time" name="requestedTime"></label>
+              <label class="wide" data-i18n="field.description">Description<textarea name="description" rows="4" maxlength="50000"></textarea></label>
+              <label class="wide" data-i18n="field.justification">Justification<textarea name="justification" rows="3" maxlength="50000"></textarea></label>
+            </div>
+          </fieldset>
+          <div class="row">
+            <button type="submit" id="itsmchange-submit" data-perm="changes:write" data-i18n="itsmchange.add">Add the change</button>
+            <button type="button" class="secondary" id="itsmchange-cancel" data-i18n="itsmchange.close">Close</button>
+            <button type="button" class="danger" id="itsmchange-delete" data-perm="changes:write" hidden data-i18n="itsmchange.delete">Delete the change</button>
+          </div>
+        </form>
+        <!-- Where the change stands, what its work orders say of when it runs,
+             and the states the machine lets it move on to. -->
+        <section id="itsmchange-state" hidden>
+          <p class="muted" id="itsmchange-standing"></p>
+          <form method="post" id="form-itsmchange-move" class="form" hidden>
+            <div class="grid">
+              <label data-i18n="itsmchange.moveTo">Move it on to<select name="stateId" required></select></label>
+            </div>
+            <div class="row"><button type="submit" data-i18n="itsmchange.move">Move it on</button></div>
+          </form>
+        </section>
+        <!-- The work orders, in the order of the change's plan: planned by
+             whoever may work on changes, and reported on by their agent, who
+             may only see them. -->
+        <section id="itsmchange-workorders" hidden>
+          <h3 data-i18n="workorder.title">Work orders</h3>
+          <div class="table-wrap">
+            <table id="table-workorder">
+              <thead>
+                <tr>
+                  <th class="num" data-i18n="workorder.number">No.</th>
+                  <th data-i18n="field.title">Title</th>
+                  <th data-i18n="field.stateId">State</th>
+                  <th data-i18n="field.workOrderTypeId">Work order type</th>
+                  <th data-i18n="field.agentId">Agent</th>
+                  <th data-i18n="itsmchange.planned">Planned</th>
+                  <th data-i18n="workorder.ran">Ran</th>
+                  <th class="num" data-i18n="workorder.accounted">Accounted</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="row" data-perm="changes:write">
+            <button type="button" id="workorder-new" data-i18n="workorder.new">Add a work order</button>
+          </div>
+          <form method="post" id="form-workorder" class="form" hidden>
+            <h4 id="workorder-form-title" data-i18n="workorder.create">Add a work order</h4>
+            <input type="hidden" name="id">
+            <fieldset id="workorder-plan">
+              <div class="grid">
+                <label class="wide" data-i18n="field.title">Title<input type="text" name="title" maxlength="250" required></label>
+                <label data-i18n="field.workOrderTypeId">Work order type<select name="workOrderTypeId"></select></label>
+                <label data-i18n="field.agentId">Agent<select name="agentId"></select></label>
+                <label data-i18n="field.plannedStartAt">Planned start<input type="date" name="plannedStartDay"></label>
+                <label data-i18n="itsmchange.at">at<input type="time" name="plannedStartTime"></label>
+                <label data-i18n="field.plannedEndAt">Planned end<input type="date" name="plannedEndDay"></label>
+                <label data-i18n="itsmchange.at">at<input type="time" name="plannedEndTime"></label>
+                <label data-i18n="field.plannedMinutes">Planned effort (minutes)<input type="number" name="plannedMinutes" min="0" max="527040" step="1"></label>
+                <label class="wide" data-i18n="field.instruction">Instruction<textarea name="instruction" rows="3" maxlength="50000"></textarea></label>
+              </div>
+            </fieldset>
+            <fieldset id="workorder-report" hidden>
+              <div class="grid">
+                <label data-i18n="field.stateId">State<select name="stateId"></select></label>
+                <label data-i18n="field.actualStartAt">Actual start<input type="date" name="actualStartDay"></label>
+                <label data-i18n="itsmchange.at">at<input type="time" name="actualStartTime"></label>
+                <label data-i18n="field.actualEndAt">Actual end<input type="date" name="actualEndDay"></label>
+                <label data-i18n="itsmchange.at">at<input type="time" name="actualEndTime"></label>
+                <label data-i18n="workorder.account">Account (minutes)<input type="number" name="minutes" min="0" max="1440" step="1"></label>
+                <label class="wide" data-i18n="field.report">Report<textarea name="report" rows="3" maxlength="50000"></textarea></label>
+              </div>
+            </fieldset>
+            <div class="row">
+              <button type="submit" id="workorder-submit" data-i18n="workorder.add">Add the work order</button>
+              <button type="button" class="secondary" id="workorder-close" data-i18n="workorder.close">Close</button>
+              <button type="button" class="danger" id="workorder-delete" hidden data-i18n="workorder.delete">Delete the work order</button>
+            </div>
+          </form>
+        </section>
+        <section class="links" id="itsmchange-links" hidden>
+          <h3 data-i18n="link.title">Linked</h3>
+          <ul class="link-list"></ul>
+          <form method="post" class="form" id="form-itsmchange-link" hidden>
+            <div class="grid">
+              <label data-i18n="link.type">Link<select name="type"></select></label>
+              <label data-i18n="link.kind">To<select name="object"><option value="ticket" data-i18n="link.aTicket">a ticket</option><option value="configitem" data-i18n="link.anItem">a configuration item</option><option value="change" data-i18n="link.aChange">a change</option></select></label>
+              <label data-i18n="link.find">Find<input type="search" name="find" maxlength="255" data-not-an-edit data-i18n-placeholder="configitem.findHint" placeholder="name or number"></label>
+              <label data-i18n="link.record">Record<select name="record" required></select></label>
+            </div>
+            <div class="row"><button type="submit" data-i18n="link.add">Link</button></div>
+          </form>
+        </section>
       </div>
     </section>
 
