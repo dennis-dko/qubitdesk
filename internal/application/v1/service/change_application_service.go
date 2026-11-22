@@ -218,6 +218,49 @@ func (s *ChangeApplicationService) Names(ctx context.Context) (map[uint]string, 
 	return names, nil
 }
 
+// ChangePerson is an account whose role may see changes, and whether it may
+// work on them.
+type ChangePerson struct {
+	ID    uint
+	Name  string
+	Works bool
+}
+
+// People are the accounts whose role may see changes, by name: those that may
+// work on them are whom a change can be managed and built by, and any of them
+// is whom a work order can be given to - what the screen offers for each, so
+// that it never offers somebody the server would refuse.
+func (s *ChangeApplicationService) People(ctx context.Context) ([]*ChangePerson, error) {
+	roles, err := s.roles.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	sees, works := map[uint]bool{}, map[uint]bool{}
+
+	for _, role := range roles {
+		works[role.ID] = role.Has(model.PermChangeWrite)
+		sees[role.ID] = works[role.ID] || role.Has(model.PermChangeRead)
+	}
+
+	users, err := s.users.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	people := []*ChangePerson{}
+
+	for _, user := range users {
+		if sees[user.RoleID] {
+			people = append(people, &ChangePerson{ID: user.ID, Name: user.Name, Works: works[user.RoleID]})
+		}
+	}
+
+	slices.SortFunc(people, func(a, b *ChangePerson) int { return strings.Compare(a.Name, b.Name) })
+
+	return people, nil
+}
+
 // moving refuses a step the state machine does not allow.
 func (s *ChangeApplicationService) moving(ctx context.Context, stood *model.Change, to uint) error {
 	entry, err := catalogEntry(ctx, s.catalog, to, model.CatalogChangeState)

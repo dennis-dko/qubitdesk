@@ -203,6 +203,30 @@ func (h *ChangeHandler) List(c *gofr.Context) (any, error) {
 	return listed, nil
 }
 
+// ChangePersonResponse is an account a change or a work order can name, and
+// whether it may manage or build a change.
+type ChangePersonResponse struct {
+	ID    uint   `json:"id"`
+	Name  string `json:"name"`
+	Works bool   `json:"works"`
+}
+
+// People handles GET /api/v1/changes/people: the accounts that may see changes.
+func (h *ChangeHandler) People(c *gofr.Context) (any, error) {
+	if _, err := h.authz.Require(c, model.PermChangeRead); err != nil {
+		return nil, err
+	}
+
+	people, err := h.changes.People(c)
+	if err != nil {
+		return nil, toHTTPError(err)
+	}
+
+	return listOf(people, func(person *service.ChangePerson) ChangePersonResponse {
+		return ChangePersonResponse{ID: person.ID, Name: person.Name, Works: person.Works}
+	}), nil
+}
+
 // Get handles GET /api/v1/changes/{id}.
 func (h *ChangeHandler) Get(c *gofr.Context) (any, error) {
 	if _, err := h.authz.Require(c, model.PermChangeRead); err != nil {

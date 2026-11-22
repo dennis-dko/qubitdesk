@@ -244,3 +244,34 @@ func TestARetiredRankIsNotChosenForAChange(t *testing.T) {
 		t.Errorf("a new change of a retired category was answered %v, want catalogValueRetired", err)
 	}
 }
+
+// The people a change can name are the accounts that may see changes, and only
+// those that may work on them can manage or build one.
+func TestThePeopleOfAChangeAreThoseWhoMaySeeChanges(t *testing.T) {
+	ctx := context.Background()
+	w := newChangeWorld(t)
+
+	customerRole, _ := w.roles.GetByName(ctx, model.RoleCustomer)
+	if _, err := w.users.Save(ctx, &model.User{Name: "Cora Customer", Email: "cora@example.com",
+		RoleID: customerRole.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	people, err := w.changes.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	works := map[string]bool{}
+	for _, person := range people {
+		works[person.Name] = person.Works
+	}
+
+	if len(people) != 2 || !works["Ada Admin"] || works["Agnes Agent"] {
+		t.Errorf("the people a change can name are %v, want the administrator working and the agent seeing", works)
+	}
+
+	if _, listed := works["Cora Customer"]; listed {
+		t.Error("a customer, who may not see changes, is offered for one")
+	}
+}

@@ -5899,6 +5899,20 @@
         }
       }
     },
+    "/changes/people": {
+      "get": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "Who a change and its work orders can name",
+        "description": "The accounts whose role may see changes, by name, each saying whether it may work on them: those that may are whom a change can be managed and built by, and any of them is whom a work order can be given to. Takes changes:read.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/changes/{id}": {
       "get": {
         "tags": [

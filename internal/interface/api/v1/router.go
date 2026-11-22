@@ -376,6 +376,7 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 
 	// The changes, read with changes:read and written with changes:write.
 	app.GET(base+"/changes", h.Changes.List)
+	app.GET(base+"/changes/people", h.Changes.People)
 	app.GET(base+"/changes/{id}", h.Changes.Get)
 	app.POST(base+"/changes", h.Changes.Create)
 	app.PUT(base+"/changes/{id}", h.Changes.Update)

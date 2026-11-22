@@ -58,6 +58,25 @@ func TestAChangesWorkOrdersAreKeptOverHTTP(t *testing.T) {
 
 	olaf := a.signInAsAgent(admin, "Olaf", "olaf@example.com")
 
+	var people struct {
+		Items []struct {
+			Name  string `json:"name"`
+			Works bool   `json:"works"`
+		} `json:"items"`
+	}
+
+	agent.must(agent.api(http.MethodGet, "/changes/people", nil), http.StatusOK).Data(t, &people)
+
+	offered := map[string]bool{}
+	for _, person := range people.Items {
+		offered[person.Name] = person.Works
+	}
+
+	if works, listed := offered["Olaf"]; !listed || works {
+		t.Errorf("the people a change can name are %v; want Olaf among them, seeing changes and not working on them",
+			offered)
+	}
+
 	var review, install workOrderResponse
 
 	admin.must(admin.api(http.MethodPost, orders, map[string]any{"title": "Review", "agentId": idOf(olaf),
