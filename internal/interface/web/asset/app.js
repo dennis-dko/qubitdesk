@@ -15586,9 +15586,13 @@ function wireTour() {
     if (node) placeTour(node);
   };
 
-  for (const event of ['resize', 'scroll']) {
-    window.addEventListener(event, redraw, { passive: true });
-  }
+  // Scrolling is listened for on the way down rather than on the way up,
+  // because a scroll does not bubble: an open menu on a telephone is a scroller
+  // of its own once it is taller than the window, the step about the navigation
+  // scrolled the tabs into view inside it, and the window heard nothing - the
+  // ring stood 139 pixels under the tabs it was about.
+  window.addEventListener('resize', redraw, { passive: true });
+  window.addEventListener('scroll', redraw, { passive: true, capture: true });
 
   // And when the page itself changes under it, which neither of those reports.
   // A step is drawn two frames after its screen is switched to, and the card it
