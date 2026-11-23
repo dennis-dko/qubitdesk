@@ -390,8 +390,8 @@ func TestASignOutTakesTheOverviewWithIt(t *testing.T) {
 	p.run("open the overview", p.click(`.tab[data-view="overview"]`),
 		chromedp.WaitVisible("#overview-tiles", chromedp.ByID))
 	p.waitForText("#table-overview-queues tbody", "Service Desk")
-	p.run("open the statistics", p.click(`.tab[data-view="reports"]`),
-		chromedp.WaitVisible("#report-tiles", chromedp.ByID))
+	p.showTabOf("#report-card")
+	p.run("wait for the statistics", chromedp.WaitVisible("#report-tiles", chromedp.ByID))
 	p.waitForText("#table-report-rows tbody", "Service Desk")
 
 	p.run("sign out", p.click("#logout"), chromedp.WaitVisible("#form-login", chromedp.ByID))
@@ -400,7 +400,7 @@ func TestASignOutTakesTheOverviewWithIt(t *testing.T) {
 		t.Errorf("the overview is still in the document under the sign-in screen: %q", left)
 	}
 
-	if left := p.text("#view-reports"); strings.Contains(left, "Service Desk") || p.count(".report-tile") > 0 {
+	if left := p.text("#overview-panel-statistics"); strings.Contains(left, "Service Desk") || p.count(".report-tile") > 0 {
 		t.Errorf("the statistics are still in the document under the sign-in screen: %q", left)
 	}
 }

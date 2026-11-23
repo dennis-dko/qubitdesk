@@ -70,10 +70,6 @@
         <path d="M12 2.8 20 6v6.1c0 4.5-3.2 7.8-8 9.1-4.8-1.3-8-4.6-8-9.1V6z"/>
         <path d="m8.8 11.9 2.3 2.4 4.3-4.7"/>
       </symbol>
-      <symbol id="icon-reports" viewBox="0 0 24 24">
-        <path d="M3 3v18h18"/>
-        <path d="M7 15l4-4 3 3 5-6"/>
-      </symbol>
       <symbol id="icon-overview" viewBox="0 0 24 24">
         <path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>
       </symbol>
@@ -241,11 +237,10 @@
 
     <nav id="tabs">
       <button class="tab" data-view="portal" data-perm="portal:use" data-i18n="nav.portal">My tickets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-tickets"/></svg></button>
-      <button class="tab" data-view="overview" data-perm="tickets:read" data-i18n="nav.overview">Overview<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-overview"/></svg></button>
+      <button class="tab" data-view="overview" data-perm="tickets:read,reports:read" data-i18n="nav.overview">Overview<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-overview"/></svg></button>
       <button class="tab" data-view="tickets" data-perm="tickets:read" data-i18n="nav.tickets">Tickets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-tickets"/></svg></button>
       <button class="tab" data-view="customers" data-perm="customers:read" data-i18n="nav.customers">Customers<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-customers"/></svg></button>
       <button class="tab" data-view="faq" data-perm="faq:read" data-i18n="nav.faq">Knowledge base<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-faq"/></svg></button>
-      <button class="tab" data-view="reports" data-perm="reports:read" data-i18n="nav.reports">Statistics<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-reports"/></svg></button>
       <button class="tab" data-view="users" data-perm="users:read" data-i18n="nav.users">Users<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-users"/></svg></button>
       <button class="tab" data-view="roles" data-perm="roles:read" data-i18n="nav.roles">Roles<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-roles"/></svg></button>
       <button class="tab" data-view="ticketsetup" data-perm="queues:write" data-i18n="nav.ticketSetup">Ticket setup<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-ticketsetup"/></svg></button>
@@ -697,16 +692,35 @@
          from it, and the one form that opens a ticket or corrects the one that
          is open - told apart by the hidden id, as every form here is. Writing in
          a ticket is a job of its own, with a form of its own. -->
-    <!-- An agent's overview: the work that is theirs, what waits in each queue
-         they reach, and whether the last two weeks' tickets were kept up with.
-         Every number opens the ticket list searched for what it counts. -->
+    <!-- An agent's overview, on two tabs. At a glance: the work that is theirs,
+         what waits in each queue they reach, and whether the last two weeks'
+         tickets were kept up with - every number opens the ticket list searched
+         for what it counts. The statistics: a span of days chosen above
+         everything it scopes, the whole of it as figures, its days as columns,
+         and its tickets broken down by what was chosen. One screen rather than
+         two, because the navigation holds no more points on one line of a wide
+         window than it has. -->
     <section id="view-overview" class="view" hidden>
-      <div class="card" id="overview-mine-card">
+      <div id="overview-tabs" class="screen-tabs" role="tablist" aria-label="Parts of the overview"
+           data-i18n-aria="overview.tabs">
+        <button type="button" role="tab" id="overview-tab-glance" class="screen-tab" data-card-tab="glance"
+                aria-controls="overview-panel-glance" aria-selected="true"
+                data-i18n="overview.tab.glance">At a glance</button>
+        <button type="button" role="tab" id="overview-tab-statistics" class="screen-tab" data-card-tab="statistics"
+                aria-controls="overview-panel-statistics" aria-selected="false" tabindex="-1"
+                data-i18n="overview.tab.statistics">Statistics</button>
+      </div>
+      <div id="overview-panel-glance" class="screen-panel" role="tabpanel"
+           aria-labelledby="overview-tab-glance" data-card-panel="glance"></div>
+      <div id="overview-panel-statistics" class="screen-panel" role="tabpanel"
+           aria-labelledby="overview-tab-statistics" data-card-panel="statistics" hidden></div>
+
+      <div class="card" id="overview-mine-card" data-tab="glance" data-perm="tickets:read">
         <h2 data-i18n="overview.mine">Your work</h2>
         <div class="overview-tiles" id="overview-tiles"></div>
       </div>
 
-      <div class="card" id="overview-queues-card">
+      <div class="card" id="overview-queues-card" data-tab="glance" data-perm="tickets:read">
         <h2 data-i18n="overview.queues">The queues</h2>
         <p class="muted" data-i18n="overview.queuesHint">What is still to do in each queue you reach.</p>
         <div class="table-wrap">
@@ -725,7 +739,7 @@
         </div>
       </div>
 
-      <div class="card" id="overview-days-card">
+      <div class="card" id="overview-days-card" data-tab="glance" data-perm="tickets:read">
         <h2 data-i18n="overview.days">The last two weeks</h2>
         <p class="muted" data-i18n="overview.daysHint">The tickets opened and finished each day in the queues you reach, today last.</p>
         <div class="chart-legend">
@@ -749,14 +763,9 @@
           </div>
         </details>
       </div>
-    </section>
 
-    <!-- The statistics: a span of days chosen above everything it scopes, the
-         whole of it as figures, its days as columns, and its tickets broken down
-         by what was chosen. -->
-    <section id="view-reports" class="view" hidden>
-      <div class="card" id="report-card">
-        <h2 data-i18n="nav.reports">Statistics</h2>
+      <div class="card" id="report-card" data-tab="statistics" data-perm="reports:read">
+        <h2 data-i18n="report.title">Statistics</h2>
         <form method="post" id="form-report" class="form">
           <div class="grid">
             <label data-i18n="report.period">Period<select name="period">
@@ -783,7 +792,7 @@
         <div class="overview-tiles" id="report-tiles"></div>
       </div>
 
-      <div class="card" id="report-days-card">
+      <div class="card" id="report-days-card" data-tab="statistics" data-perm="reports:read">
         <h2 data-i18n="report.days">Over the span</h2>
         <p class="muted" data-i18n="report.daysHint">The tickets opened and finished in the span - by day, by week over a longer span, by month over a longer one still.</p>
         <div class="chart-legend">
@@ -808,7 +817,7 @@
         </details>
       </div>
 
-      <div class="card" id="report-rows-card">
+      <div class="card" id="report-rows-card" data-tab="statistics" data-perm="reports:read">
         <h2 data-i18n="report.rows">Broken down</h2>
         <div class="table-wrap">
           <table id="table-report-rows">

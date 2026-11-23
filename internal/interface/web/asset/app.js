@@ -10008,6 +10008,24 @@ function spanBuckets(days) {
   }));
 }
 
+/** What each chart was last given and the width it was drawn at, to draw it again. */
+const chartsDrawn = new WeakMap();
+
+/**
+ * Draws a chart again once its card's width changes: a screen or a tab that was
+ * hidden when the numbers came has no width to draw at, and a window resized
+ * has a different one.
+ */
+const chartWidths = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const drawn = chartsDrawn.get(entry.target);
+
+    if (drawn && Math.round(entry.contentRect.width) !== drawn.width) {
+      drawColumns(entry.target, drawn.tbody, drawn.buckets);
+    }
+  }
+});
+
 /**
  * Buckets as pairs of columns, opened beside finished, with a tooltip per
  * bucket and a table of the same numbers under it. Drawn at the width the card
@@ -10015,6 +10033,9 @@ function spanBuckets(days) {
  */
 function drawColumns(holder, tbody, buckets) {
   if (!holder || !tbody) return;
+
+  chartsDrawn.set(holder, { tbody, buckets, width: Math.round(holder.clientWidth) });
+  chartWidths.observe(holder);
 
   fillTable(tbody, buckets.map((bucket) => el('tr', {},
     el('td', { class: 'text', text: bucket.name }),
@@ -14711,6 +14732,15 @@ const TOUR_STEPS = [
       + 'hidden button. Tick what the role may do; every account holding it changes with it.'),
   },
   {
+    target: '#overview-tabs',
+    view: 'overview',
+    permission: 'reports:read',
+    title: () => t('tour.overviewTabs.title', 'The overview, on two tabs'),
+    text: () => t('tour.overviewTabs.text',
+      'At a glance shows your work and what waits in your queues today; the statistics count any span of days. '
+      + 'The walk opens each as it gets there.'),
+  },
+  {
     target: '#overview-mine-card',
     view: 'overview',
     permission: 'tickets:read',
@@ -14739,7 +14769,7 @@ const TOUR_STEPS = [
   },
   {
     target: '#report-card',
-    view: 'reports',
+    view: 'overview',
     permission: 'reports:read',
     title: () => t('tour.reportSpan.title', 'Statistics over a span'),
     text: () => t('tour.reportSpan.text',
@@ -14748,7 +14778,7 @@ const TOUR_STEPS = [
   },
   {
     target: '#report-days-card',
-    view: 'reports',
+    view: 'overview',
     permission: 'reports:read',
     title: () => t('tour.reportDays.title', 'The span as columns'),
     text: () => t('tour.reportDays.text',
@@ -14757,7 +14787,7 @@ const TOUR_STEPS = [
   },
   {
     target: '#report-rows-card',
-    view: 'reports',
+    view: 'overview',
     permission: 'reports:read',
     title: () => t('tour.reportRows.title', 'Broken down by what you chose'),
     text: () => t('tour.reportRows.text',
@@ -19569,9 +19599,6 @@ function switchView(name) {
   // offers them may have changed since it was last drawn.
   if (name === 'welcome') renderWelcome();
 
-  // Drawn to the width it has, which a hidden screen does not have.
-  if (name === 'overview') drawDayLoads(cache.overviewDays ?? []);
-  if (name === 'reports' && reportShown) drawReport(reportShown, $('#form-report'));
 
   // And what the reader was told, which other people's changes add to while
   // nothing on this page moves.

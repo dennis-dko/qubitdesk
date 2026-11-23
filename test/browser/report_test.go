@@ -31,8 +31,10 @@ func TestTheStatisticsCountTheSpansTickets(t *testing.T) {
 		return true;
 	})()`, &made)
 
-	p.run("open the statistics", p.click(`.tab[data-view="reports"]`),
-		chromedp.WaitVisible("#report-tiles", chromedp.ByID))
+	p.run("open the overview", p.click(`.tab[data-view="overview"]`),
+		chromedp.WaitVisible("#overview-tabs", chromedp.ByID))
+	p.showTabOf("#report-card")
+	p.run("wait for the statistics", chromedp.WaitVisible("#report-tiles", chromedp.ByID))
 	p.waitEvaluates("the span's figures",
 		`[...document.querySelectorAll('#report-tiles .report-tile')].slice(0, 2)
 			.map((tile) => tile.querySelector('.overview-value').textContent).join('|')`, "2|1")

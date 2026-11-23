@@ -93,10 +93,12 @@ func TestEveryCardOnATabbedScreenNamesATabItHas(t *testing.T) {
 	}
 
 	// My account and Settings, as the time recording this was cloned from sorted
-	// them on 2026-11-18; its other three tabbed screens are its own. Counted, so
-	// a third is a decision somebody writes down here rather than one that
-	// happens.
-	if screens != 2 {
-		t.Errorf("%d screens have tabs, want My account and Settings", screens)
+	// them on 2026-11-18 - its other three tabbed screens are its own - and the
+	// overview, whose second tab the statistics became on 2026-11-23: a point of
+	// their own in the navigation spread it over two lines of a 1600-pixel
+	// window, which holds no more points than it has. Counted, so a fourth is a
+	// decision somebody writes down here rather than one that happens.
+	if screens != 3 {
+		t.Errorf("%d screens have tabs, want My account, Settings and the overview", screens)
 	}
 }
