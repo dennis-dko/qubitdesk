@@ -79,3 +79,94 @@ func TestTheTicketListIsSearchedByWhatTicketsSay(t *testing.T) {
 		t.Errorf("after signing out and in, the search still asks for %+v", left)
 	}
 }
+
+// A search is saved under a name and run again from it: kept from the filter
+// as it stands, offered among the agent's saved searches, put back into the
+// filter when chosen - the further criteria folded out - and let go of again.
+// Signing out leaves none of them for whoever signs in next.
+func TestASearchIsSavedAndRunAgainFromTheTicketList(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+
+	var made bool
+
+	p.awaitJSON(`(async () => {
+		const send = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body) });
+		const desk = (await api('/queues')).items.find((queue) => queue.name === 'Service Desk');
+		await send('/tickets', { title: 'Printer jams', queueId: desk.id, body: 'The printer jams.' });
+		await send('/tickets', { title: 'Paper stuck', queueId: desk.id, body: 'Paper is stuck.' });
+		await refreshAll();
+		return true;
+	})()`, &made)
+
+	rows := `String(document.querySelectorAll('#table-tickets tbody tr').length)`
+
+	p.run("open the tickets", p.click(`.tab[data-view="tickets"]`),
+		chromedp.WaitVisible("#table-tickets", chromedp.ByID))
+	p.waitEvaluates("both tickets listed", rows, "2")
+	p.run("search for the printer", p.click("#ticket-search > summary"),
+		chromedp.SendKeys(`#form-ticket-filter [name="text"]`, "printer", chromedp.ByQuery))
+	p.waitEvaluates("the printer alone", rows, "1")
+
+	p.run("keep the search", chromedp.SendKeys(`#form-ticket-saved [name="name"]`, "Printers", chromedp.ByQuery),
+		p.click(`#form-ticket-saved button[type="submit"]`))
+	p.waitForText("#toast", "Search saved.")
+	p.waitEvaluates("the search offered and chosen", `(() => {
+		const select = document.querySelector('#form-ticket-saved [name="saved"]');
+		return select.selectedOptions[0]?.textContent ?? '';
+	})()`, "Printers")
+
+	p.run("ask for everything again", p.click("#ticket-search-clear"))
+	p.waitEvaluates("both tickets back", rows, "2")
+	p.run("close the further criteria", chromedp.Evaluate(`document.querySelector('#ticket-search').open = false`, nil))
+
+	p.run("run the saved search", chromedp.Evaluate(`(() => {
+		const select = document.querySelector('#form-ticket-saved [name="saved"]');
+		select.value = [...select.options].find((option) => option.textContent === 'Printers').value;
+		select.dispatchEvent(new Event('change', { bubbles: true }));
+		return true;
+	})()`, nil))
+	p.waitEvaluates("the printer alone again", rows, "1")
+
+	var applied struct {
+		Text string `json:"text"`
+		Open bool   `json:"open"`
+	}
+
+	p.awaitJSON(`(async () => ({
+		text: document.querySelector('#form-ticket-filter [name="text"]').value,
+		open: document.querySelector('#ticket-search').open,
+	}))()`, &applied)
+
+	if applied.Text != "printer" || !applied.Open {
+		t.Errorf("the saved search put the filter at %+v; want its words, the further criteria folded out", applied)
+	}
+
+	p.run("keep another", chromedp.SendKeys(`#form-ticket-saved [name="name"]`, "Paper", chromedp.ByQuery),
+		p.click(`#form-ticket-saved button[type="submit"]`))
+	p.waitEvaluates("two searches kept",
+		`String(document.querySelectorAll('#form-ticket-saved [name="saved"] option[value]:not([value=""])').length)`, "2")
+
+	p.run("let the chosen one go", p.click("#ticket-saved-delete"))
+	p.waitForText("#toast", "Saved search deleted.")
+	p.waitEvaluates("one search kept",
+		`String(document.querySelectorAll('#form-ticket-saved [name="saved"] option[value]:not([value=""])').length)`, "1")
+
+	p.run("sign out", p.click("#logout"), chromedp.WaitVisible("#form-login", chromedp.ByID))
+
+	var left struct {
+		Options int `json:"options"`
+		Cached  int `json:"cached"`
+	}
+
+	p.awaitJSON(`(async () => ({
+		options: document.querySelectorAll('#form-ticket-saved [name="saved"] option').length,
+		cached: (cache.savedSearches ?? []).length,
+	}))()`, &left)
+
+	if left.Options != 0 || left.Cached != 0 {
+		t.Errorf("after signing out the saved searches are still in the page: %+v", left)
+	}
+}

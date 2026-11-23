@@ -9802,6 +9802,7 @@ async function loadTickets() {
   }
 
   await loadTicketPage();
+  await loadSavedSearches();
   await loadTold();
   await loadNotifyChoices();
 
@@ -10306,6 +10307,106 @@ function ticketSearchQuery(filter, query) {
   if (order === 'asc') query.set('order', 'asc');
 }
 
+/**
+ * What the filter asks the ticket list for, without the page: what a saved
+ * search keeps, and what the list is asked with before the page is added.
+ */
+function listingQuery(filter) {
+  const query = new URLSearchParams();
+
+  if (filter.elements.queue.value) query.set('queue', filter.elements.queue.value);
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+  if (filter.elements.unfinished.checked) query.set('unfinished', 'true');
+  if (filter.elements.mine.checked) query.set('owner', 'me');
+  ticketSearchQuery(filter, query);
+
+  return query;
+}
+
+/**
+ * Puts the filter where a saved search had it: back to asking for nothing,
+ * then every field the query names, the further criteria folded out where it
+ * names one of them. A list the listing takes but a field cannot show - more
+ * than one state - is shown by its first.
+ */
+function applySavedSearch(filter, query) {
+  filter.reset();
+
+  const given = new URLSearchParams(query);
+  const first = (name) => (given.get(name) ?? '').split(',')[0];
+
+  filter.elements.queue.value = given.get('queue') ?? '';
+  filter.elements.q.value = given.get('q') ?? '';
+  filter.elements.unfinished.checked = given.get('unfinished') === 'true';
+  filter.elements.mine.checked = given.get('owner') === 'me';
+
+  for (const name of ['state', 'priority', 'type']) filter.elements[name].value = first(name);
+  for (const name of ['serviceLevel', 'responsible', 'locked']) filter.elements[name].value = given.get(name) ?? '';
+  for (const name of ['createdFrom', 'createdTo', 'changedFrom', 'changedTo']) {
+    setDateField(filter.elements[name], given.get(name) ?? '');
+  }
+
+  filter.elements.text.value = given.get('text') ?? '';
+  filter.elements.watched.checked = given.get('watched') === 'true';
+  filter.elements.overdue.checked = given.get('overdue') === 'true';
+  filter.elements.sort.value = [given.get('sort') ?? 'changed', given.get('order') === 'asc' ? 'asc' : '']
+    .filter(Boolean).join('-');
+
+  $('#ticket-search').open = ['state', 'priority', 'type', 'serviceLevel', 'responsible', 'locked', 'createdFrom',
+    'createdTo', 'changedFrom', 'changedTo', 'text', 'watched', 'overdue', 'sort'].some((name) => given.has(name));
+
+  ticketPaging.page = 1;
+  loadTicketPage().catch((err) => toastFailure(err));
+}
+
+/** The searches this agent saved, offered to run. */
+async function loadSavedSearches() {
+  const form = $('#form-ticket-saved');
+  if (!form || !can('tickets:read')) return;
+
+  const saved = (await api('/me/ticket-searches'))?.items ?? [];
+  cache.savedSearches = saved;
+
+  fillSelect(form.elements.saved, saved.map((search) => ({ value: String(search.id), label: search.name })),
+    { placeholder: t('ticket.savedSearchPick', 'a saved search…'), labelKey: 'label', valueKey: 'value' });
+  $('#ticket-saved-delete').hidden = !form.elements.saved.value;
+}
+
+/** Wires the saved searches: one chosen is run, the search as it stands kept, the chosen one let go. */
+function wireSavedSearches(filter) {
+  const form = $('#form-ticket-saved');
+  if (!form) return;
+
+  form.elements.saved.addEventListener('change', () => {
+    const chosen = (cache.savedSearches ?? []).find((search) => String(search.id) === form.elements.saved.value);
+    $('#ticket-saved-delete').hidden = !chosen;
+
+    if (chosen) applySavedSearch(filter, chosen.query);
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    saveForm(form, () => api('/me/ticket-searches', {
+      method: 'POST',
+      body: JSON.stringify({ name: form.elements.name.value.trim(), query: listingQuery(filter).toString() }),
+    }), t('ticket.searchSaved', 'Search saved.'), async (saved) => {
+      form.elements.name.value = '';
+      await loadSavedSearches();
+      if (saved?.id) form.elements.saved.value = String(saved.id);
+      $('#ticket-saved-delete').hidden = !form.elements.saved.value;
+    });
+  });
+
+  $('#ticket-saved-delete').addEventListener('click', () => {
+    const id = form.elements.saved.value;
+    if (!id) return;
+
+    mutate(() => api(`/me/ticket-searches/${id}`, { method: 'DELETE' }),
+      t('ticket.savedSearchDeleted', 'Saved search deleted.'), loadSavedSearches);
+  });
+}
+
 /** Puts every criterion of the search back to asking for nothing. */
 function clearTicketSearch(filter) {
   for (const field of $$('select, input', $('#ticket-search'))) {
@@ -10436,13 +10537,9 @@ async function loadTicketPage() {
   const filter = $('#form-ticket-filter');
   if (!tbody || !filter) return;
 
-  const query = new URLSearchParams({ limit: String(ticketPaging.limit), page: String(ticketPaging.page) });
-
-  if (filter.elements.queue.value) query.set('queue', filter.elements.queue.value);
-  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
-  if (filter.elements.unfinished.checked) query.set('unfinished', 'true');
-  if (filter.elements.mine.checked) query.set('owner', 'me');
-  ticketSearchQuery(filter, query);
+  const query = listingQuery(filter);
+  query.set('limit', String(ticketPaging.limit));
+  query.set('page', String(ticketPaging.page));
 
   const page = await api(`/tickets?${query}`);
   ticketPaging.total = page?.totalCount ?? 0;
@@ -11103,6 +11200,7 @@ function wireTickets() {
   }
 
   $('#ticket-search-clear').addEventListener('click', () => clearTicketSearch(filter));
+  wireSavedSearches(filter);
 
   wireReport();
 
@@ -14280,6 +14378,10 @@ function forgetTheLastAccount() {
   assetLists.definitions.clear();
   closeConfigItem();
   $('#form-configitem-filter').reset();
+  // And the searches the last account saved, which the list emptied on the way
+  // out does not take with it.
+  cache.savedSearches = [];
+  $('#ticket-saved-delete').hidden = true;
   // And the overview and the statistics, which count the last account's work and
   // name its queues.
   cache.overviewDays = [];
