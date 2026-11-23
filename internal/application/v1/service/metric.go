@@ -5,42 +5,41 @@ import "context"
 // The framework already measures the machinery: a histogram per HTTP request, a
 // histogram per SQL query, a gauge of goroutines. None of that says whether the
 // application is doing its job. A deployment can serve every request in
-// milliseconds while nobody has been able to book time since the directory
-// changed, and app_http_response looks the same either way.
+// milliseconds while nobody has been able to sign in since the directory changed,
+// and app_http_response looks the same either way.
 //
-// So these four measure the work rather than the plumbing, and each one is here
+// So these measure the work rather than the plumbing, and each one is here
 // because somebody would act on it:
 //
-//   - hours booked, which is what the installation exists to record, and whose
-//     absence is the first sign that something upstream is broken;
 //   - refused sign-ins, which is either a directory that has stopped answering
 //     or somebody working through a password list;
 //   - accounts the directory synchronisation creates and deletes, which is the
-//     one operation here that removes people together with their recorded hours;
+//     one operation here that removes people, leaving their tickets without an
+//     owner;
 //   - what each scheduled synchronisation came to, because GoFr counts a job
-//     that returned as a success, and a refused run returns like one that worked.
+//     that returned as a success, and a refused run returns like one that worked;
+//   - tickets opened, by how they arrived, which is the desk's load - and, once
+//     mail arrives by itself, the first sign that it has stopped arriving.
 //
-// Deliberately absent: anything labelled with a user, an address or a project
+// Deliberately absent: anything labelled with a user, an address or a queue
 // name. A label is a time series, and one per person is both a memory leak in
 // the collector and a list of who works here, published on a port that asks for
 // no password.
 const (
-	// MetricHoursBooked is a histogram, so it carries the total and the shape:
-	// a day recorded as one eight-hour entry and one recorded as sixteen
-	// half-hour entries are different installations to support.
-	MetricHoursBooked = "timepulse_timesheet_hours_booked"
-
 	// MetricSignInFailures counts refused sign-ins, labelled "reason" with a
 	// fixed handful of values.
-	MetricSignInFailures = "timepulse_signin_failures_total"
+	MetricSignInFailures = "qubitdesk_signin_failures_total"
 
 	// MetricDirectoryAccounts counts what a synchronisation did, labelled
 	// "action" with "created" or "deleted".
-	MetricDirectoryAccounts = "timepulse_directory_accounts_total"
+	MetricDirectoryAccounts = "qubitdesk_directory_accounts_total"
 
 	// MetricDirectoryRuns counts what each scheduled synchronisation came to,
 	// labelled "outcome" with one of the DirectoryRun values.
-	MetricDirectoryRuns = "timepulse_directory_scheduled_runs_total"
+	MetricDirectoryRuns = "qubitdesk_directory_scheduled_runs_total"
+	// MetricTicketsOpened counts the tickets opened, labelled "channel" with how
+	// each arrived: a closed set, the model's channels.
+	MetricTicketsOpened = "qubitdesk_tickets_opened_total"
 )
 
 // What a scheduled synchronisation came to. A closed set, because it is a label.
@@ -70,14 +69,13 @@ const (
 // adapter to keep in step either.
 type Recorder interface {
 	IncrementCounter(ctx context.Context, name string, labels ...string)
-	RecordHistogram(ctx context.Context, name string, value float64, labels ...string)
 }
 
 // metrics is embedded by the services that record, so each one gets the nil
 // check once rather than at every call site.
 //
 // Nil is the ordinary state in a unit test, and a test that has to supply a
-// metrics recorder to exercise a booking rule is a test about the wrong thing.
+// metrics recorder to exercise a sign-in rule is a test about the wrong thing.
 type metrics struct {
 	recorder Recorder
 }
@@ -85,11 +83,5 @@ type metrics struct {
 func (m metrics) count(ctx context.Context, name string, labels ...string) {
 	if m.recorder != nil {
 		m.recorder.IncrementCounter(ctx, name, labels...)
-	}
-}
-
-func (m metrics) record(ctx context.Context, name string, value float64, labels ...string) {
-	if m.recorder != nil {
-		m.recorder.RecordHistogram(ctx, name, value, labels...)
 	}
 }

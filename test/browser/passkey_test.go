@@ -12,7 +12,7 @@ import (
 	"github.com/chromedp/cdproto/webauthn"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // Passkeys are the one feature that cannot be tested by calling the API: the
@@ -175,11 +175,8 @@ func TestTheBuiltInAdministratorIsNotOfferedPasskeys(t *testing.T) {
 
 	p.readyAdmin()
 
-	// Waits for the password form rather than the working times, which this
-	// account no longer has: a daily target and a ceiling are figures nothing
-	// would measure against for somebody who records no time, so that card is
-	// gated on settings:write:own and the built-in administrator does not hold
-	// it. Waiting for it here was waiting for something that never arrives.
+	// Waits for the password form, which every account has, on the tab the
+	// passkeys are on.
 	p.run("open My account", chromedp.Click(`.tab[data-view="settings"]`, chromedp.ByQuery),
 		p.click(`#settings-tabs [data-card-tab="signin"]`),
 		chromedp.WaitVisible("#form-password", chromedp.ByID))
@@ -191,19 +188,6 @@ func TestTheBuiltInAdministratorIsNotOfferedPasskeys(t *testing.T) {
 	// And told so, where the card is, rather than left to wonder where it went.
 	if said := p.text("#passkey-elsewhere"); !p.visible("#passkey-elsewhere") || !strings.Contains(said, "built-in administrator") {
 		t.Errorf("the built-in administrator is not told why it has no passkeys: %q", said)
-	}
-
-	// And the reason this test now waits on something else, asserted rather than
-	// left as a comment - otherwise the next person to see the working times
-	// missing from this screen has no way to tell intent from regression.
-	// Working times are on another tab, so that tab, with the timezone beside them
-	// shown, before asking: on the sign-in tab they would be out of sight whatever
-	// the administrator's rights said.
-	p.run("open the working time", p.click(`#settings-tabs [data-card-tab="work"]`),
-		chromedp.WaitVisible("#form-my-timezone", chromedp.ByID))
-
-	if p.visible("#form-working-times") {
-		t.Error("the built-in administrator is offered working times, which it has no use for")
 	}
 }
 
@@ -383,7 +367,7 @@ func TestAPasskeySignsInWithoutTheSecondFactor(t *testing.T) {
 // createOrdinaryAccount adds an ordinary account through the API, since the point of
 // these tests is the passkey ceremony and not the staff form.
 func (p *page) createOrdinaryAccount(t *testing.T, email, password string) {
-	p.createAccount(t, email, password, "user")
+	p.createAccount(t, email, password, "agent")
 }
 
 // createAccount is the same for an account that holds a different role, which is
@@ -396,7 +380,7 @@ func (p *page) createAccount(t *testing.T, email, password, role string) {
 	p.run("create "+email, chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const r = await fetch('/api/v1/users', {
 				method: 'POST',

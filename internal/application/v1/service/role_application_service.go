@@ -5,9 +5,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // RoleService administers roles and their permissions.
@@ -23,14 +23,19 @@ type RoleService interface {
 // this application ships keeps its name, its rights and its description, and
 // cannot be deleted.
 type RoleApplicationService struct {
-	roles repository.RoleRepository
+	roles    repository.RoleRepository
+	contacts repository.ContactRepository
 }
 
-// NewRoleApplicationService works on the roles alone. That the built-in
-// administrator keeps a role able to administer is enforced where an account
-// is moved, not here.
-func NewRoleApplicationService(roles repository.RoleRepository) *RoleApplicationService {
-	return &RoleApplicationService{roles: roles}
+// NewRoleApplicationService works on the roles, and asks the contacts how many
+// of the accounts holding a role they sign in to the portal with. That the
+// built-in administrator keeps a role able to administer is enforced where an
+// account is moved, not here.
+func NewRoleApplicationService(
+	roles repository.RoleRepository,
+	contacts repository.ContactRepository,
+) *RoleApplicationService {
+	return &RoleApplicationService{roles: roles, contacts: contacts}
 }
 
 var _ RoleService = (*RoleApplicationService)(nil)
@@ -87,15 +92,13 @@ func (s *RoleApplicationService) UpdateRole(
 	// not given or taken a single permission.
 	//
 	// Narrowing was always refused - the application looks the role up by name, and
-	// stripping it would leave the installation unadministrable. Widening was allowed,
-	// on the reasoning that whoever may manage roles can reach anything anyway. That
-	// reasoning does not survive the arrangement this application has now: the built-in
-	// administrator exists to configure the installation and keep the accounts, and it
-	// does not record time. A right added here would hand a working day to the one
-	// account nobody chose, quietly, from the screen that administers roles.
+	// stripping it would leave the installation unadministrable. Widening was allowed
+	// once, on the reasoning that whoever may manage roles can reach anything anyway.
+	// That reasoning does not survive what the role holds: everything on the staff
+	// side already, so a right added here could only be one that is not the staff's -
+	// the customer portal, which means something only for an account linked to a
+	// contact - handed quietly to the one account nobody chose.
 	//
-	// The way to let somebody both work here and administer is to give a person the
-	// combined role. That is a decision about a colleague, which is the point.
 	// Every role this application ships with, not only the administrator's.
 	//
 	// It was the administrator's alone at first, on the reasoning that the other
@@ -157,6 +160,22 @@ func (s *RoleApplicationService) UpdateRole(
 		}
 
 		role.Permissions = clean
+
+		// The other way into a contact's account holding the installation: not
+		// moving the account to a role that administers, but ticking such a right
+		// on the role it already holds.
+		if role.Administers() {
+			linked, countErr := s.contacts.CountLinkedWithRole(ctx, role.ID)
+			if countErr != nil {
+				return nil, countErr
+			}
+
+			if linked > 0 {
+				return nil, apperror.Conflictf("%d account(s) holding %q sign in to the portal as contacts, and "+
+					"a right over the installation is not handed to them", linked, role.Name).
+					WithCode("roleHeldByPortalAccounts", role.Name, linked)
+			}
+		}
 	}
 
 	if role.Name == "" {

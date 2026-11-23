@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // A comment that names something names something that exists.
@@ -84,23 +84,19 @@ var namedOnPurpose = map[string]string{
 	"userAccountControl": "Active Directory's attribute, which a sign-in asks for by name",
 	"accountExpires":     "Active Directory's attribute, which a sign-in asks for by name",
 	"userPrincipalName":  "Active Directory's, the name@realm a Kerberos sign-in is also looked up by",
-	"iCalendar":          "the format's own name (RFC 5545), which the calendar feed is written in",
 	"iPad":               "Apple's tablet, whose windows the layout cases measure the interface in",
+	"fillAlpha":          "an Android vector drawable's attribute, how much of its colour a path is painted with",
 
 	// Gone on purpose, and the comment says so where it stood.
-	"mayShare":                  "retired with the shared project",
-	"requireMayWrite":           "retired with the shared project",
-	"requireMayDelete":          "retired with the shared project",
-	"parseYesNo":                "retired with the Category column",
-	"signInAsAuditor":           "retired with timesheets:read:all",
 	"defaultAutoCloseAfterDays": "the constant orphan_test.go was written after",
 
 	// An example of the shape a check looks for.
 	"requireAdministrator": "what doccomment_test.go means by a compound identifier",
 
 	// The history this check was written after, told above it.
-	"checkDailyLimit": "the name the daily cap's comment pointed at",
-	"toIcon":          "the name two comments gave imaging.ToIcon",
+	"checkDailyLimit":  "the name the daily cap's comment pointed at",
+	"checkDailyBudget": "the name the daily cap's history lived in, gone with the time recording",
+	"toIcon":           "the name two comments gave imaging.ToIcon",
 }
 
 type commentMention struct {

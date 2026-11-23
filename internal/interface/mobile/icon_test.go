@@ -2,8 +2,6 @@ package mobile
 
 import (
 	"regexp"
-	"slices"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -16,31 +14,22 @@ import (
 // once more as drawing code in Look.kt. Each drawable carries the SVG's own path
 // data and colours now, placed by a group, so each is held to the file here: a
 // figure the SVG gains, loses or moves that a drawable does not is reported
-// rather than found on somebody's home screen.
+// rather than found on somebody's home screen, and so is a drawable painting a
+// figure at a fillAlpha the SVG gives it no opacity for.
 func TestTheAppsIconsAreTheMark(t *testing.T) {
 	svg := read(t, "../web/asset/favicon.svg")
 
-	var figures []string
+	// Each figure's path, and how much of the white it is painted with: the
+	// SVG's opacity, a drawable's fillAlpha.
+	figures := map[string]string{}
 
-	for _, found := range regexp.MustCompile(`<path d="([^"]+)"`).FindAllStringSubmatch(svg, -1) {
-		figures = append(figures, found[1])
+	for _, found := range regexp.MustCompile(`<path d="([^"]+)"( opacity="([^"]+)")?`).FindAllStringSubmatch(svg, -1) {
+		figures[found[1]] = found[3]
 	}
 
-	hub := regexp.MustCompile(`<circle cx="([^"]+)" cy="([^"]+)" r="([^"]+)"/>`).FindStringSubmatch(svg)
-	if hub == nil || len(figures) == 0 {
-		t.Fatalf("favicon.svg has %d figures and a hub of %v, so this compares nothing", len(figures), hub)
+	if len(figures) == 0 {
+		t.Fatal("favicon.svg has no figures, so this compares nothing")
 	}
-
-	radius, err := strconv.ParseFloat(hub[3], 64)
-	if err != nil {
-		t.Fatalf("the hub's radius: %v", err)
-	}
-
-	// A drawable has no circles, so the hub is two arcs there: from its centre
-	// out to its left edge, then round and back.
-	across := strconv.FormatFloat(2*radius, 'f', -1, 64)
-	figures = append(figures, "M"+hub[1]+" "+hub[2]+"m-"+hub[3]+" 0a"+hub[3]+" "+hub[3]+" 0 1 0 "+across+
-		" 0a"+hub[3]+" "+hub[3]+" 0 1 0 -"+across+" 0Z")
 
 	var colours []string
 
@@ -53,15 +42,31 @@ func TestTheAppsIconsAreTheMark(t *testing.T) {
 	}
 
 	for _, name := range []string{"ic_launcher_foreground.xml", "ic_notification.xml", "ic_mark.xml"} {
-		var drawn []string
+		drawn := map[string]string{}
 
-		for _, found := range regexp.MustCompile(`android:pathData="([^"]+)"`).FindAllStringSubmatch(drawable(name), -1) {
-			drawn = append(drawn, found[1])
+		for _, path := range regexp.MustCompile(`(?s)<path\b.*?/>`).FindAllString(drawable(name), -1) {
+			data := regexp.MustCompile(`android:pathData="([^"]+)"`).FindStringSubmatch(path)
+			if data == nil {
+				continue
+			}
+
+			alpha := ""
+			if found := regexp.MustCompile(`android:fillAlpha="([^"]+)"`).FindStringSubmatch(path); found != nil {
+				alpha = found[1]
+			}
+
+			drawn[data[1]] = alpha
 		}
 
-		for _, figure := range figures {
-			if !slices.Contains(drawn, figure) {
+		for figure, opacity := range figures {
+			alpha, ok := drawn[figure]
+
+			switch {
+			case !ok:
 				t.Errorf("%s does not draw favicon.svg's figure %.48q", name, figure)
+			case alpha != opacity:
+				t.Errorf("%s paints favicon.svg's figure %.48q at fillAlpha %q, where the SVG has opacity %q",
+					name, figure, alpha, opacity)
 			}
 		}
 	}

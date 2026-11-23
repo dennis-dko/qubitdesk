@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // Every dictionary is written the one way - keys in order, two spaces, nothing
@@ -58,7 +58,7 @@ func TestEveryDictionaryIsWrittenTheOneWay(t *testing.T) {
 // lacks is a sentence that reader gets in English.
 func TestEveryDictionaryHasEveryKey(t *testing.T) {
 	german := i18n.Dictionary("de")
-	if len(german) < 1000 {
+	if len(german) < 800 {
 		t.Fatalf("the German dictionary has %d sentences; it is not being read", len(german))
 	}
 

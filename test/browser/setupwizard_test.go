@@ -7,7 +7,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // The setup wizard is shown on a first sign-in and has to be operable: it is

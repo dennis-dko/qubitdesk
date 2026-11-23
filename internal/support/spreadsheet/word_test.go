@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // Every word a workbook writes is in every dictionary - a sheet's name, its
@@ -19,7 +19,7 @@ import (
 func TestEveryWordAWorkbookWritesIsInEveryDictionary(t *testing.T) {
 	written := map[string]bool{}
 
-	for _, table := range []Table{timesheets, projects, users, roles, statement} {
+	for _, table := range tables() {
 		written[table.Key] = true
 
 		for _, heading := range table.Headings {
@@ -31,8 +31,8 @@ func TestEveryWordAWorkbookWritesIsInEveryDictionary(t *testing.T) {
 		written[word] = true
 	}
 
-	// And a word handed to translate as it is written, such as a statement's
-	// total.
+	// And a word handed to translate as it is written rather than taken from a
+	// table.
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestEveryWordAWorkbookWritesIsInEveryDictionary(t *testing.T) {
 		})
 	}
 
-	if !written["Total"] || len(written) < 25 {
+	if !written["Users"] || !written["yes"] || len(written) < 10 {
 		t.Fatalf("found %d words a workbook writes; this case is no longer reading them", len(written))
 	}
 

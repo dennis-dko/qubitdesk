@@ -1,6 +1,6 @@
 # Getting started
 
-Installing TimePulse, what its first start looks like, and what the
+Installing QubitDesk, what its first start looks like, and what the
 first sign-in asks for. Running it on a server is the subject of
 [`deploy/OPERATION.md`](../deploy/OPERATION.md).
 
@@ -22,7 +22,7 @@ containers; `task stage` runs the real deployment image against them. See
 **Installer.** With no database configured — no `DB_DIALECT` and no
 `configs/datasource.json` — the binary does not start the application. It serves
 an installer on the same port and waits, because there is nowhere to put an
-account, a project or an hour until a database exists.
+account, a ticket or a contact until a database exists.
 
 The connection is tested before it is accepted, written to
 `configs/datasource.json`, and then the application takes over the same port **in
@@ -30,16 +30,16 @@ the same process**. No restart: a container that exited to finish installing
 itself would look like one that crashed.
 
 The installer also asks what the new database starts with: nothing; demo data -
-four projects and eight weeks of bookings in the built-in administrator's
-account, to try TimePulse out with; or a backup another installation made,
-whichever database that one ran on. A backup is read whole on that page,
+customers and their tickets, a service level, a knowledge base and answer
+templates in the built-in administrator's name, to try QubitDesk out with; or a
+backup another installation made, whichever database that one ran on. A backup is read whole on that page,
 so a wrong passphrase or a file cut short is said there; the
 [operations manual](../deploy/OPERATION.md#restoring-a-backup) has the rest.
 
 It asks for a token, printed to the log when the process starts:
 
 ```text
-no database is configured, so TimePulse is serving its installer instead
+no database is configured, so QubitDesk is serving its installer instead
 open http://localhost:8000 to choose one - the application will not start until you do
 setup token: 782106f2d715eaebba8e1c4b93f0a2d1
 ```
@@ -69,7 +69,7 @@ password. Nothing has to be typed out of the documentation.
 
 It grants nothing that was not already granted. Whoever answered that screen read
 the setup token out of this process's log and decided where every account,
-project and hour will be kept — and the account they are handed is, until its
+ticket and contact will be kept — and the account they are handed is, until its
 password is changed, reachable by anybody who has read the table below. The
 handover is refused on an installation configured without the installer, and
 stops working the moment a real password is chosen.
@@ -84,7 +84,7 @@ stops working the moment a real password is chosen.
 That account **cannot be deleted**, cannot be moved to a role without
 administration rights, and is never authenticated against a directory — so an
 installation can never lock itself out, and nobody who controls the directory
-can take it over. Should its password be lost, `timepulse-web recover` on the
+can take it over. Should its password be lost, `qubitdesk-web recover` on the
 server prints a new one, once; see [A way back in](security.md#a-way-back-in).
 
 Until the initial password is replaced the server refuses the ordinary API,
@@ -114,27 +114,26 @@ sentence what the application is for, and offered a walk through it. The list of
 what you can do here is built from your own permissions, so nobody is promised
 something they cannot do.
 
-The walk itself covers booking time by hand and by stopwatch, the entry list and
-the calendar and correcting an entry from it, your
-own figures as charts, the overtime balance, projects including private ones,
-reports, tokens and the second factor, and appearance and language. Steps are
-dropped for anything your role cannot reach, so nobody is shown a tab they do not
+The walk itself covers the accounts and the roles, the ways of signing in -
+passkeys, a provider, the second factor and personal tokens - notifications,
+everything about you, and appearance and language, and for whoever administers
+every card on the *Settings* screen. Steps are dropped for anything your role
+cannot reach, so nobody is shown a tab they do not
 have, and the highlight points at the real control rather than a picture of one.
 
 It is offered once. Declining counts, the same way skipping does, and it can be
 restarted any time from *My account*. "Seen" is stored on the user, so a second
 device does not mean a second introduction.
 
-The **built-in administrator is not greeted**: that account arrives at the setup
-wizard, which is its own introduction, and a walk through booking time and reading
-an overtime balance would be a walk through somebody else's job. The card under
-*My account* still starts it on request.
+The **built-in administrator** is offered it too, once the setup wizard is done
+and a password chosen - never while the wizard is up, because being walked
+through the application by two things at once is worse than either alone, and the
+wizard is the one that has to happen first.
 
-On later visits there is a short **welcome back** instead, at the top of the first
-screen: what today already has booked on it, or a warning that you left a stopwatch
-running. Once per visit rather than per page load — a reload is not an arrival.
+On later visits the same screen says **welcome back** instead. Once per visit
+rather than per page load — a reload is not an arrival.
 
-**Live log.** The built-in administrator can read what the process has written,
+**Live log.** Whoever administers can read what the process has written,
 under *Settings*: filter by level, search the text, and set how often it
 refreshes in seconds — or pause it. Newest at the bottom, and it follows along
 only while you are already scrolled there, so reading something does not get
@@ -180,14 +179,14 @@ the mark off the file first — Windows attaches it to anything downloaded from 
 internet:
 
 ```powershell
-Unblock-File .\timepulse-web_v1.2.3_windows_amd64.exe
+Unblock-File .\qubitdesk-web_v1.2.3_windows_amd64.exe
 ```
 
 Check the download against the release's `SHA256SUMS` before doing either. That
 is the part that actually tells you the file is the one that was published:
 
 ```powershell
-Get-FileHash .\timepulse-web_v1.2.3_windows_amd64.exe -Algorithm SHA256
+Get-FileHash .\qubitdesk-web_v1.2.3_windows_amd64.exe -Algorithm SHA256
 ```
 
 **Properly, for everybody.** A code signing certificate, which costs money every

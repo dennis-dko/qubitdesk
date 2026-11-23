@@ -5,10 +5,10 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/internal/support/qrcode"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/qrcode"
 )
 
 // AuthHandler serves sign-in, sign-out and two-factor enrolment.
@@ -327,21 +327,4 @@ func permissionsOf(principal *service.Principal) []string {
 	}
 
 	return principal.Permissions
-}
-
-// SetReminders handles PUT /api/v1/me/reminders: both choices at once, as the
-// card under My account makes them.
-func (h *AuthHandler) SetReminders(c *gofr.Context) (any, error) {
-	var req RemindersRequest
-
-	id, err := h.askingWith(c, &req)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := h.sessions.SetReminders(c, id, req.UnbookedDay, req.TimerAlertHours); err != nil {
-		return nil, toHTTPError(err)
-	}
-
-	return RemindersResponse(req), nil
 }

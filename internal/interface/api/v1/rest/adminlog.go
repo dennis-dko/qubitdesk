@@ -13,8 +13,8 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // administrativeChanges is every change the administration log records: the route
@@ -38,12 +38,28 @@ var administrativeChanges = []struct {
 	{http.MethodGet, "/api/v1/settings/backups/{name}", "installation.backupDownloaded", ""},
 	{http.MethodDelete, "/api/v1/settings/backups/{name}", "installation.backupDeleted", ""},
 	{http.MethodPut, "/api/v1/settings/backups/plan", "settings.backup", ""},
-	{http.MethodPut, "/api/v1/users/{id}/managers", "user.managers", ""},
 	{http.MethodPost, "/api/v1/users/import", "users.imported", ""},
+	{http.MethodPut, "/api/v1/contacts/{id}/portal-access", "contact.portalGiven", ""},
+	{http.MethodDelete, "/api/v1/contacts/{id}/portal-access", "contact.portalTaken", ""},
 	{http.MethodPost, "/api/v1/roles", "role.created", "name"},
 	{http.MethodPut, "/api/v1/roles/{id}", "role.updated", "name"},
 	{http.MethodDelete, "/api/v1/roles/{id}", "role.deleted", ""},
 	{http.MethodPost, "/api/v1/roles/import", "roles.imported", ""},
+	{http.MethodPost, "/api/v1/general-catalog", "catalog.created", "name"},
+	{http.MethodPut, "/api/v1/general-catalog/{id}", "catalog.updated", "name"},
+	{http.MethodPost, "/api/v1/cmdb/classes/{id}/definitions", "classDefinition.created", ""},
+	{http.MethodPost, "/api/v1/queues", "queue.created", "name"},
+	{http.MethodPut, "/api/v1/queues/{id}", "queue.updated", "name"},
+	{http.MethodDelete, "/api/v1/queues/{id}", "queue.deleted", ""},
+	{http.MethodPost, "/api/v1/ticket-states", "state.created", "name"},
+	{http.MethodPut, "/api/v1/ticket-states/{id}", "state.updated", "name"},
+	{http.MethodDelete, "/api/v1/ticket-states/{id}", "state.deleted", ""},
+	{http.MethodPost, "/api/v1/ticket-priorities", "priority.created", "name"},
+	{http.MethodPut, "/api/v1/ticket-priorities/{id}", "priority.updated", "name"},
+	{http.MethodDelete, "/api/v1/ticket-priorities/{id}", "priority.deleted", ""},
+	{http.MethodPost, "/api/v1/ticket-types", "type.created", "name"},
+	{http.MethodPut, "/api/v1/ticket-types/{id}", "type.updated", "name"},
+	{http.MethodDelete, "/api/v1/ticket-types/{id}", "type.deleted", ""},
 	{http.MethodPut, "/api/v1/settings/maintenance", "settings.maintenance", "enabled"},
 	{http.MethodPut, "/api/v1/settings/branding", "settings.branding", ""},
 	{http.MethodPut, "/api/v1/settings/ldap", "settings.ldap", ""},
@@ -54,32 +70,61 @@ var administrativeChanges = []struct {
 	{http.MethodPut, "/api/v1/settings/holidays", "settings.holidays", ""},
 	{http.MethodPut, "/api/v1/settings/datasource", "settings.datasource", ""},
 	{http.MethodPut, "/api/v1/settings/telemetry", "settings.telemetry", ""},
-	{http.MethodPut, "/api/v1/settings/managers", "settings.managers", "enabled"},
 	{http.MethodPut, "/api/v1/settings/push", "settings.push", "enabled"},
 	{http.MethodPost, "/api/v1/settings/restart", "installation.restart", ""},
 	{http.MethodPost, "/api/v1/settings/update", "installation.update", ""},
 	{http.MethodPost, "/api/v1/setup/complete", "installation.setup", ""},
+	{http.MethodPost, "/api/v1/calendars", "calendar.created", "name"},
+	{http.MethodPut, "/api/v1/calendars/{id}", "calendar.updated", "name"},
+	{http.MethodDelete, "/api/v1/calendars/{id}", "calendar.deleted", ""},
+	{http.MethodPost, "/api/v1/service-levels", "serviceLevel.created", "name"},
+	{http.MethodPut, "/api/v1/service-levels/{id}", "serviceLevel.updated", "name"},
+	{http.MethodDelete, "/api/v1/service-levels/{id}", "serviceLevel.deleted", ""},
+	{http.MethodPut, "/api/v1/unlock-state-types", "unlockStateTypes.changed", ""},
+	{http.MethodPost, "/api/v1/macros", "macro.created", "name"},
+	{http.MethodPut, "/api/v1/macros/{id}", "macro.updated", "name"},
+	{http.MethodDelete, "/api/v1/macros/{id}", "macro.deleted", ""},
+	{http.MethodPost, "/api/v1/exec-plans", "execPlan.created", "name"},
+	{http.MethodPut, "/api/v1/exec-plans/{id}", "execPlan.updated", "name"},
+	{http.MethodDelete, "/api/v1/exec-plans/{id}", "execPlan.deleted", ""},
+	{http.MethodPost, "/api/v1/jobs", "job.created", "name"},
+	{http.MethodPut, "/api/v1/jobs/{id}", "job.updated", "name"},
+	{http.MethodDelete, "/api/v1/jobs/{id}", "job.deleted", ""},
+	{http.MethodPost, "/api/v1/jobs/{id}/run", "job.run", ""},
+	{http.MethodPost, "/api/v1/response-templates", "template.created", "name"},
+	{http.MethodPut, "/api/v1/response-templates/{id}", "template.updated", "name"},
+	{http.MethodDelete, "/api/v1/response-templates/{id}", "template.deleted", ""},
+	{http.MethodPost, "/api/v1/notification-definitions", "notification.created", "name"},
+	{http.MethodPut, "/api/v1/notification-definitions/{id}", "notification.updated", "name"},
+	{http.MethodDelete, "/api/v1/notification-definitions/{id}", "notification.deleted", ""},
+	{http.MethodPut, "/api/v1/settings/sysconfig/{name}", "sysconfig.set", ""},
+	{http.MethodDelete, "/api/v1/settings/sysconfig/{name}", "sysconfig.reset", ""},
 }
 
-// loggedRoute is one of administrativeChanges, ready to be matched.
+// loggedRoute is one of administrativeChanges, ready to be matched. A named
+// route is one whose path names what it changes rather than numbering it - an
+// option of the system configuration, a backup's file - and the name is what
+// the log keeps.
 type loggedRoute struct {
 	method, action, keeps string
 	path                  *regexp.Regexp
+	named                 bool
 }
 
-// loggedRoutes compiles the table once: "{id}" becomes the number it stands for,
-// the account or role the change was made to, and "{name}" one segment of the
-// path that names no record - a backup's file.
+// loggedRoutes compiles the table once: "{id}" becomes the number it stands
+// for, "{name}" the name a path gives instead - an option of the system
+// configuration, a backup's file.
 func loggedRoutes() []loggedRoute {
 	routes := make([]loggedRoute, 0, len(administrativeChanges))
 
 	for _, change := range administrativeChanges {
 		pattern := regexp.QuoteMeta(change.route)
 		pattern = strings.ReplaceAll(pattern, `\{id\}`, `(\d+)`)
-		pattern = "^" + strings.ReplaceAll(pattern, `\{name\}`, `[^/]+`) + "$"
+		pattern = strings.ReplaceAll(pattern, `\{name\}`, `([^/]+)`)
+
 		routes = append(routes, loggedRoute{
 			method: change.method, action: change.action, keeps: change.keeps,
-			path: regexp.MustCompile(pattern),
+			path: regexp.MustCompile("^" + pattern + "$"), named: strings.Contains(change.route, "{name}"),
 		})
 	}
 
@@ -104,7 +149,7 @@ func AdministrationLog(log *service.AdminLogService, logger errorLogger) func(ht
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			route, target, logged := matchLogged(routes, r)
+			route, target, name, logged := matchLogged(routes, r)
 			principal, signedIn := principalFromContext(r.Context())
 
 			if !logged || !signedIn || principal.User == nil {
@@ -145,7 +190,12 @@ func AdministrationLog(log *service.AdminLogService, logger errorLogger) func(ht
 				target = createdID(answer.body.Bytes())
 			}
 
-			err := log.Record(r.Context(), principal.User.ID, route.action, target, keptValue(sent, route.keeps))
+			kept := keptValue(sent, route.keeps)
+			if route.named {
+				kept = name
+			}
+
+			err := log.Record(r.Context(), principal.User.ID, route.action, target, kept)
 			if err != nil {
 				logger.Errorf("the administration log could not keep %s by account %d: %v",
 					route.action, principal.User.ID, err)
@@ -171,8 +221,9 @@ func changedNothing(c *gofr.Context) {
 	}
 }
 
-// matchLogged finds the logged route a request arrived on, and the id in its path.
-func matchLogged(routes []loggedRoute, r *http.Request) (loggedRoute, uint, bool) {
+// matchLogged finds the logged route a request arrived on, and the id or the
+// name in its path.
+func matchLogged(routes []loggedRoute, r *http.Request) (loggedRoute, uint, string, bool) {
 	for _, route := range routes {
 		if route.method != r.Method {
 			continue
@@ -183,6 +234,10 @@ func matchLogged(routes []loggedRoute, r *http.Request) (loggedRoute, uint, bool
 			continue
 		}
 
+		if route.named {
+			return route, 0, found[1], true
+		}
+
 		var target uint
 
 		// Read by the package's own reader, at the destination's width - see
@@ -190,16 +245,16 @@ func matchLogged(routes []loggedRoute, r *http.Request) (loggedRoute, uint, bool
 		if len(found) > 1 {
 			id, err := parseUint(found[1], "id")
 			if err != nil {
-				return route, 0, false
+				return route, 0, "", false
 			}
 
 			target = id
 		}
 
-		return route, target, true
+		return route, target, "", true
 	}
 
-	return loggedRoute{}, 0, false
+	return loggedRoute{}, 0, "", false
 }
 
 // answerRecorder notes the status a handler answered with, and keeps the body of

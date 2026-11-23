@@ -2,11 +2,10 @@ package service
 
 import (
 	"context"
-	"slices"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // roleForArrival is the role an account the directory brings in starts with.
@@ -32,7 +31,7 @@ func roleForArrival(
 		role, err := roles.GetByName(ctx, configured)
 
 		switch {
-		case err == nil && !roleAdministers(role):
+		case err == nil && !role.Administers():
 			return role, nil
 		case err != nil && apperror.KindOf(err) != apperror.KindNotFound:
 			return nil, err
@@ -40,18 +39,4 @@ func roleForArrival(
 	}
 
 	return roles.GetByName(ctx, fallback)
-}
-
-// roleAdministers reports whether a role holds rights over the installation
-// rather than over a working day: any of model.AdministeringPermissions.
-//
-// All three are asked about, because they are the same right a step or two
-// apart: settings:manage is the installation, roles:write can tick it on a role,
-// and users:write can hand that role - or the admin role itself - to its own
-// account. Guarding one without the others leaves the door beside the one that
-// was locked, and users:write was that door until 2026-11-14.
-func roleAdministers(role *model.Role) bool {
-	return slices.ContainsFunc(model.AdministeringPermissions(), func(right string) bool {
-		return slices.Contains(role.Permissions, right)
-	})
 }

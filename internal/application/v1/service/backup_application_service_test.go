@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/internal/support/backup"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/backup"
 )
 
 const backupPassphrase = "the server's own passphrase"
@@ -25,7 +25,7 @@ func backups(t *testing.T, passphrase string, zone *time.Location) (*service.Bac
 	clock := time.Date(2026, 11, 19, 2, 0, 0, 0, time.UTC)
 
 	dump := func(_ context.Context, w io.Writer) (int64, error) {
-		_, err := io.WriteString(w, `{"format":"timepulse-backup"}`+"\n")
+		_, err := io.WriteString(w, `{"format":"qubitdesk-backup"}`+"\n")
 
 		return 1, err
 	}
@@ -99,7 +99,7 @@ func TestABackupIsKeptAndTheOldestGoPastThePlan(t *testing.T) {
 		inside = string(read)
 
 		return err
-	}); err != nil || !strings.Contains(inside, "timepulse-backup") {
+	}); err != nil || !strings.Contains(inside, "qubitdesk-backup") {
 		t.Errorf("the kept file opens to %q, %v", inside, err)
 	}
 

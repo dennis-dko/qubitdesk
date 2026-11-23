@@ -3,9 +3,9 @@ package sqldb
 import (
 	"context"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 const pushSubscriptionColumns = "id, user_id, endpoint, p256dh, auth, origin, created_at"
@@ -24,8 +24,7 @@ func NewPushSubscriptionRepository(db DB, dialect string) *PushSubscriptionRepos
 var _ repository.PushSubscriptionRepository = (*PushSubscriptionRepository)(nil)
 
 // Save keeps the subscription over any with its endpoint - one statement in each
-// engine's own words, as a calendar feed is replaced - and hands it to whoever
-// subscribed it last.
+// engine's own words - and hands it to whoever subscribed it last.
 func (r *PushSubscriptionRepository) Save(ctx context.Context, sub *model.PushSubscription) error {
 	query := `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, origin, created_at) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh,
@@ -74,32 +73,6 @@ func (r *PushSubscriptionRepository) ForUser(ctx context.Context, userID uint) (
 	}
 
 	return subs, nil
-}
-
-func (r *PushSubscriptionRepository) Subscribed(ctx context.Context) ([]uint, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT DISTINCT user_id FROM push_subscriptions ORDER BY user_id")
-	if err != nil {
-		return nil, apperror.Internal(err)
-	}
-
-	defer func() { _ = rows.Close() }()
-
-	users := make([]uint, 0)
-
-	for rows.Next() {
-		var id uint
-		if err := rows.Scan(&id); err != nil {
-			return nil, apperror.Internal(err)
-		}
-
-		users = append(users, id)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, apperror.Internal(err)
-	}
-
-	return users, nil
 }
 
 func (r *PushSubscriptionRepository) Delete(ctx context.Context, userID uint, endpoint string) (bool, error) {

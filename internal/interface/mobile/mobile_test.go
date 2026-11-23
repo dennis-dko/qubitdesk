@@ -19,8 +19,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/dennis-dko/timepulse/internal/interface/web"
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/interface/web"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // sources are the app's Kotlin files, tests aside, by their path.
@@ -520,8 +520,9 @@ func TestTheWebViewIsAsTallAsItsPlace(t *testing.T) {
 }
 
 // A receiver the manifest does not name is never called, and nothing says so:
-// the alarm a reminder is set for goes off, and nothing in the app hears it. So
-// every BroadcastReceiver in the app's sources is a receiver of its manifest.
+// the alarm or the broadcast it was written for arrives, and nothing in the app
+// hears it. So every BroadcastReceiver in the app's sources is a receiver of its
+// manifest.
 func TestEveryReceiverOfTheAppIsInItsManifest(t *testing.T) {
 	manifest := read(t, "src/main/AndroidManifest.xml")
 	receiver := regexp.MustCompile(`\bclass\s+([A-Z][A-Za-z0-9]*)\s*(?:\([^)]*\))?\s*:\s*BroadcastReceiver\(\)`)

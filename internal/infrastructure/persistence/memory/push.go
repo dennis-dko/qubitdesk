@@ -5,8 +5,8 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
 )
 
 // PushSubscriptionRepository is an in-memory repository.PushSubscriptionRepository.
@@ -56,23 +56,6 @@ func (r *PushSubscriptionRepository) ForUser(_ context.Context, userID uint) ([]
 	slices.SortFunc(subs, func(a, b model.PushSubscription) int { return int(a.ID) - int(b.ID) })
 
 	return subs, nil
-}
-
-func (r *PushSubscriptionRepository) Subscribed(_ context.Context) ([]uint, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	users := make([]uint, 0)
-
-	for _, sub := range r.subs {
-		if !slices.Contains(users, sub.UserID) {
-			users = append(users, sub.UserID)
-		}
-	}
-
-	slices.Sort(users)
-
-	return users, nil
 }
 
 func (r *PushSubscriptionRepository) Delete(_ context.Context, userID uint, endpoint string) (bool, error) {

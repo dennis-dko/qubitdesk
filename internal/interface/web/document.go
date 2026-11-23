@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // isDocument reports whether this request is for the single page itself rather
@@ -38,7 +38,7 @@ type document struct {
 // titleMarkup is the exact string replaced. Kept as a constant beside the markup
 // it matches, because a change to index.html that misses this file should fail
 // loudly here rather than quietly serve a document with nothing substituted.
-const titleMarkup = "<title>TimePulse</title>"
+const titleMarkup = "<title>QubitDesk</title>"
 
 // newDocument splits index.html around the title.
 //

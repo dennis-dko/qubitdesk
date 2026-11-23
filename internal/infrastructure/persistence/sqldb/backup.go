@@ -24,23 +24,72 @@ var BackupTables = []string{
 	"roles",
 	"role_permissions",
 	"users",
-	"projects",
-	"timesheets",
-	"timesheet_revisions",
-	"running_timers",
-	"work_schedules",
-	"entry_templates",
-	"absences",
-	"vacation_entitlements",
-	"calendar_feeds",
-	"openid_identities",
-	"work_days",
 	"api_tokens",
 	"passkeys",
+	"openid_identities",
 	"push_subscriptions",
-	"managed_accounts",
 	"admin_events",
 	"directory_runs",
+	"general_catalog",
+	"ci_class_definitions",
+	"config_items",
+	"config_item_versions",
+	"changes",
+	"change_transitions",
+	"change_cip",
+	"work_orders",
+	"work_order_transitions",
+	"calendars",
+	"calendar_hours",
+	"calendar_free_days",
+	"service_levels",
+	"ticket_states",
+	"ticket_priorities",
+	"ticket_types",
+	"unlock_state_types",
+	"queues",
+	"queue_roles",
+	"user_queues",
+	"ticket_searches",
+	"response_templates",
+	"mail_accounts",
+	"organisations",
+	"contacts",
+	"tickets",
+	"articles",
+	"attachments",
+	"time_accounting",
+	"ticket_history",
+	"links",
+	"ticket_watchers",
+	"notification_definitions",
+	"notification_opt_outs",
+	"notification_messages",
+	"notifications",
+	"macros",
+	"macro_actions",
+	"exec_plans",
+	"jobs",
+	"job_macros",
+	"job_plans",
+	"job_runs",
+	"job_run_lines",
+	"faq_categories",
+	"faq_articles",
+}
+
+// SelfReferences are the columns that point at a row of their own table, by
+// table: a queue and a knowledge-base category at the one they are filed under,
+// a waiting state at the state it moves a ticket on to. Each can point at a row
+// made after it - a queue moved under a newer one, a closing state added later
+// and named as where a waiting state goes - so a restore
+// writes them only once every row of the table is in; inserted as they stood,
+// such a row would name an id not there yet, which a database enforcing its
+// keys refuses. test/backup_test.go holds this list against the migration chain.
+var SelfReferences = map[string]string{
+	"faq_categories": "parent_id",
+	"queues":         "parent_id",
+	"ticket_states":  "next_state_id",
 }
 
 // LeftOutOfBackups are the tables the chain creates that a backup does not
@@ -53,7 +102,7 @@ var LeftOutOfBackups = map[string]string{
 // backupFormat names the content of a backup, so a file of other JSON lines is
 // refused rather than half read.
 const (
-	backupFormat  = "timepulse-backup"
+	backupFormat  = "qubitdesk-backup"
 	backupVersion = 1
 )
 

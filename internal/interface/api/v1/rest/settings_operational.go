@@ -3,7 +3,7 @@ package rest
 import (
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // OperationalResponse carries the administered limits together with what the
@@ -28,11 +28,10 @@ type OperationalResponse struct {
 // timeout was in model.Limits and in the markup and missing from this, which is
 // what the screen reads for both halves of what it tells the reader. So the
 // placeholder that says what leaving a field empty will do was empty on that one
-// field, and the line naming what is in force named the other five.
+// field, and the line naming what is in force named the others.
 type OperationalLimits struct {
 	SessionLifetimeHours   float64 `json:"sessionLifetimeHours"`
 	SessionIdleMinutes     float64 `json:"sessionIdleMinutes"`
-	MaxDailyHours          float64 `json:"maxDailyHours"`
 	RateLimit              int     `json:"rateLimit"`
 	RateLimitWindowSeconds int     `json:"rateLimitWindowSeconds"`
 	LDAPSyncMaxDeleteRatio float64 `json:"ldapSyncMaxDeleteRatio"`
@@ -42,7 +41,6 @@ func newOperationalLimits(l model.Limits) OperationalLimits {
 	return OperationalLimits{
 		SessionLifetimeHours:   l.SessionLifetimeHours,
 		SessionIdleMinutes:     l.SessionIdleMinutes,
-		MaxDailyHours:          l.MaxDailyHours,
 		RateLimit:              l.RateLimit,
 		RateLimitWindowSeconds: l.RateLimitWindowSeconds,
 		LDAPSyncMaxDeleteRatio: l.LDAPSyncMaxDeleteRatio,

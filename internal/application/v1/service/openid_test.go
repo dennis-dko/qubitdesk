@@ -5,11 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/command"
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/memory"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/command"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/memory"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // fakeProvider answers as a provider does, for the application's half of a round:
@@ -54,7 +54,7 @@ func (p *fakeProvider) Check(context.Context, string) error { return nil }
 // codeFor is the code the fake provider sends a round back with.
 func codeFor(state string) string { return "code-for-" + state }
 
-// openIDFixture is the booking fixture with a provider to sign in through.
+// openIDFixture is the service fixture with a provider to sign in through.
 type openIDFixture struct {
 	*fixture
 
@@ -69,7 +69,7 @@ func newOpenIDFixture(t *testing.T) *openIDFixture {
 	f := &openIDFixture{
 		fixture:  newFixture(t),
 		provider: &fakeProvider{who: model.OpenIDClaims{Subject: "dennis-at-the-provider", Email: "dennis@example.com"}},
-		config:   model.OpenIDConfig{Enabled: true, Issuer: "https://id.example.com", ClientID: "timepulse"},
+		config:   model.OpenIDConfig{Enabled: true, Issuer: "https://id.example.com", ClientID: "qubitdesk"},
 	}
 
 	source := service.OpenIDConfigSource(func(context.Context) (model.OpenIDConfig, error) { return f.config, nil })
@@ -78,7 +78,7 @@ func newOpenIDFixture(t *testing.T) *openIDFixture {
 	return f
 }
 
-const callback = "https://time.example.com/sign-in/openid"
+const callback = "https://tickets.example.com/sign-in/openid"
 
 // link links an account to whoever the provider says, by the whole round.
 func (f *openIDFixture) link(t *testing.T, userID uint) error {
@@ -183,7 +183,7 @@ func TestARoundIsFinishedOnceByWhoBeganIt(t *testing.T) {
 	refusedWith(t, err, "attemptExpired")
 
 	colleague, err := f.users.CreateUser(ctx, command.CreateUserCommand{
-		Name: "Colleague", Email: "colleague@example.com", Role: model.RoleUser,
+		Name: "Colleague", Email: "colleague@example.com", Role: model.RoleAgent,
 	})
 	if err != nil {
 		t.Fatalf("create a colleague: %v", err)
@@ -270,7 +270,7 @@ func TestAnIdentityLinkedToSomebodyIsNotLinkedAgain(t *testing.T) {
 	}
 
 	colleague, err := f.users.CreateUser(ctx, command.CreateUserCommand{
-		Name: "Colleague", Email: "colleague@example.com", Role: model.RoleUser,
+		Name: "Colleague", Email: "colleague@example.com", Role: model.RoleAgent,
 	})
 	if err != nil {
 		t.Fatalf("create a colleague: %v", err)

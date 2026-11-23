@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	appservice "github.com/dennis-dko/timepulse/internal/application/v1/service"
-	appconfig "github.com/dennis-dko/timepulse/internal/infrastructure/config"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/internal/support/backup"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	appservice "github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/backup"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // pendingRestore is a backup the installer has opened once, to be sure it can
@@ -177,7 +177,7 @@ func backupRefusal(err error) error {
 	case errors.Is(err, backup.ErrWrongPassphrase):
 		return apperror.Invalidf("the passphrase does not open this backup").WithCode("backupWrongPassphrase")
 	case errors.Is(err, backup.ErrNewerFormat), errors.Is(err, sqldb.ErrNewerSchema):
-		return apperror.Invalidf("a newer version of TimePulse wrote this backup").WithCode("backupFromNewerVersion")
+		return apperror.Invalidf("a newer version of QubitDesk wrote this backup").WithCode("backupFromNewerVersion")
 	case errors.Is(err, sqldb.ErrCutShort):
 		return apperror.Invalidf("the backup ends before its last line: it was cut short on its way here, " +
 			"so download it again").WithCode("backupCutShort")
@@ -185,7 +185,7 @@ func backupRefusal(err error) error {
 		return apperror.Invalidf("the backup is larger than a backup may be").
 			WithCode("backupTooLarge", strconv.Itoa(backup.MaxFileSize>>20))
 	default:
-		return apperror.Invalidf("this is not a TimePulse backup").WithCode("notABackup")
+		return apperror.Invalidf("this is not a QubitDesk backup").WithCode("notABackup")
 	}
 }
 

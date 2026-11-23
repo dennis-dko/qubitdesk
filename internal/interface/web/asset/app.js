@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Single-page UI for the TimePulse API.
+ * Single-page UI for the QubitDesk API.
  *
  * Plain DOM APIs on purpose: the assets are embedded in the Go binary, so
  * keeping the UI build-step-free means `go build` is the only build there is.
@@ -13,7 +13,16 @@
 const API = '/api/v1';
 
 /** Cached lookups so tables can show names instead of raw ids. */
-const cache = { users: [], projects: [], roles: [], permissions: [] };
+const cache = {
+  users: [], roles: [], permissions: [], queues: [],
+  ticketQueues: [], states: [], priorities: [], types: [],
+  found: {}, sysconfig: [], calendars: [], levels: [],
+  macros: [], macroSteps: [], stepChoices: { queues: [], states: [], priorities: [], types: [], accounts: [] },
+  plans: [], planEvents: [], jobs: [],
+  notifying: notifyingNothing(),
+  templates: [], templateQueues: [], ticketTemplates: [],
+  faqCategories: [], faqVisibilities: [],
+};
 
 /**
  * The branding as it was last read.
@@ -39,14 +48,6 @@ let loadedVersion = null;
 
 /** The signed-in user, their permissions, and whether auth is on at all. */
 let me = { user: null, permissions: [], authEnabled: false };
-
-/**
- * The account whose time the screens show while it is not one's own: one of the
- * accounts a manager looks after, chosen in the picker under the tabs. null is
- * one's own, which is what every page starts on - a reload is not the moment to
- * find oneself looking at somebody else's time without having chosen to.
- */
-let viewingFor = null;
 
 // ---------------------------------------------------------------- transport
 
@@ -265,7 +266,7 @@ function refusalFrom(res, body) {
     // token is still good, and asks for a new token where it was taken back. Not
     // on signing out, which the app sees in the requests and answers by
     // disconnecting - told then too, it would sign straight back in.
-    window.TimePulseSession?.ended();
+    window.QubitDeskSession?.ended();
   }
 
   return err;
@@ -288,9 +289,9 @@ async function reach(url, options) {
   // A write that is already on its way is not sent a second time.
   //
   // A double click, or Enter held down, submits a form twice before the first
-  // answer has come back - and a booking sent twice is the same hours recorded
-  // twice, an import sent twice every row written twice. Measured: two entries,
-  // created in the same second, from one form pressed twice. Asked here because
+  // answer has come back - and a record sent twice is written twice, an import
+  // sent twice every row written twice. Measured: two entries, created in the
+  // same second, from one form pressed twice. Asked here because
   // every request passes through here, so no form has to remember it.
   const key = writeKey(url, options);
 
@@ -313,7 +314,7 @@ async function reach(url, options) {
     unreachable.refusal = { detail: err.message };
     unreachable.cause = err;
 
-    // Which a booking can wait out: see keepForLater.
+    // Which the sign-in screen tells apart from a refusal: see showSignInOffline.
     unreachable.unreachable = true;
 
     throw unreachable;
@@ -358,7 +359,7 @@ async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers ?? {}) };
 
   if (!SAFE_METHODS.has(method)) {
-    headers['X-CSRF-Token'] = readCookie('timepulse_csrf');
+    headers['X-CSRF-Token'] = readCookie('qubitdesk_csrf');
   }
 
   // A request this page makes by itself - a check on a timer - says so, and the
@@ -454,82 +455,143 @@ function errorMessage(body) {
  * Refusals name fields by their column names. German has field.<name> for each,
  * and English has no dictionary, so English is whatever the lookup falls back to -
  * which was the name itself: an English refusal read "Invalid field(s):
- * durationHours" about a box labelled Hours. The same arrangement as
- * PERMISSION_TITLES, for the same reason.
+ * sessionIdleMinutes" about a box labelled Sign out after inactivity. The same
+ * arrangement as PERMISSION_TITLES, for the same reason.
  */
 const FIELD_NAMES = {
-  actor: 'Caller',
+  access: 'Access',
+  address: 'Address',
   banner: 'Banner text',
+  body: 'Text',
+  builderId: 'Change builder',
   baseDn: 'Base DN',
+  channel: 'Channel',
+  class: 'Class',
+  classId: 'Class',
+  contactId: 'Contact',
   code: 'Code',
+  comment: 'Comment',
   companyName: 'Company',
   companyUrl: 'Company website',
   confirmed: 'Confirmed accounts',
   country: 'Country',
-  currency: 'Currency',
-  dailyTargetHours: 'Target h/day',
-  date: 'Date',
-  budgetHours: 'Hour budget',
   clientId: 'Client ID',
   issuer: 'Issuer address',
+  justification: 'Justification',
   label: 'Name on the sign-in form',
-  start: 'Start',
-  end: 'End',
-  breakMinutes: 'Breaks (minutes)',
-  day: 'Day',
-  days: 'Days of leave a year',
   defaultRole: 'Default role',
+  deploymentStateId: 'Deployment state',
   description: 'Description',
-  durationHours: 'Hours',
   email: 'Email',
-  everyDayCountsFrom: 'Every working day counts from',
-  endDate: 'End',
-  endedAt: 'Ended at',
   expiresInDays: 'Valid for (days)',
+  followUp: 'Answer to a closed ticket',
+  functionality: 'Functionality',
   footerText: 'Footer',
-  from: 'From',
-  fromYear: 'From the year',
   host: 'Host',
-  hours: 'Hours',
-  hourlyRate: 'Hourly rate',
   id: 'ID',
+  impactId: 'Impact',
+  incidentStateId: 'Incident state',
   keep: 'Backups kept',
-  kind: 'Reason',
   language: 'Language',
   ldapSyncMaxDeleteRatio: 'Deletion limit',
   legalNotice: 'Legal notice',
+  level: 'Level',
+  limit: 'Per page',
+  linkType: 'Kind of link',
   logLevel: 'Log level',
-  lowerBound: 'Lower bound of the balance',
-  maxDailyHours: 'Max h/day',
+  minutes: 'Minutes',
   name: 'Name',
+  note: 'Note',
+  number: 'Number',
+  object: 'Kind of record',
+  organisationId: 'Organisation',
+  ownerId: 'Owner',
+  page: 'Page',
+  parentId: 'Under',
+  password: 'Password',
+  pendingUntil: 'Pending until',
+  phone: 'Phone',
   port: 'Port',
-  projectId: 'Project',
-  q: 'Search',
+  priorityId: 'Priority',
+  queue: 'Queue',
+  queueId: 'Queue',
   region: 'State or region',
+  requestedAt: 'Requested for',
+  responsibleId: 'Responsible',
   rateLimit: 'Rate limit',
   rateLimitWindowSeconds: 'Rate limit window (seconds)',
   role: 'Role',
   schedule: 'Schedule',
   sessionIdleMinutes: 'Sign out after inactivity (minutes)',
   sessionLifetimeHours: 'Session lifetime (hours)',
-  startDate: 'Start',
-  startedAt: 'Started at',
-  status: 'Status',
+  stateId: 'State',
+  subject: 'Subject',
   syncSchedule: 'Schedule',
   tabTitle: 'Browser tab',
+  targetObject: 'To',
   theme: 'Appearance',
-  timerAlertHours: 'Mention the stopwatch after (hours)',
   timezone: 'Timezone',
   title: 'Title',
-  to: 'To',
   traceExporter: 'Trace exporter',
   tracerRatio: 'Share of traces recorded',
   tracerUrl: 'Collector',
-  upperBound: 'Upper bound of the balance',
+  type: 'Type',
+  typeId: 'Type',
+  unlockMinutes: 'Unlock after (minutes)',
+  url: 'Website',
   userFilter: 'User filter',
-  userId: 'User',
-  validFrom: 'Applies from',
-  year: 'Year',
+  value: 'Value',
+  zone: 'Timezone',
+  holidayPlace: 'Public holidays',
+  hours: 'Working hours',
+  freeDays: 'Free days',
+  calendarId: 'Calendar',
+  firstResponseMinutes: 'First response (minutes)',
+  updateMinutes: 'Between answers (minutes)',
+  solutionMinutes: 'Solution (minutes)',
+  sourceObject: 'From',
+  serviceLevelId: 'Service level',
+  actions: 'Steps',
+  weekdays: 'Weekdays',
+  times: 'Times',
+  events: 'Events',
+  types: 'State types',
+  nextStateId: 'Moves on to',
+  criteria: 'Which tickets',
+  macroIds: 'Macros',
+  managerId: 'Change manager',
+  intoId: 'Merge into',
+  agentId: 'Agent',
+  instruction: 'Instruction',
+  report: 'Report',
+  workOrderTypeId: 'Work order type',
+  plannedStartAt: 'Planned start',
+  plannedEndAt: 'Planned end',
+  actualStartAt: 'Actual start',
+  actualEndAt: 'Actual end',
+  plannedMinutes: 'Planned effort (minutes)',
+  planIds: 'Execution plans',
+  pendingMinutes: 'Waits for (minutes)',
+  locked: 'Locked',
+  customerVisible: 'The customer sees it',
+  recipients: 'Recipients',
+  messages: 'Texts',
+  switchedOff: 'Notifications you take',
+  followed: 'Queues you follow',
+  categoryId: 'Category',
+  keywords: 'Keywords',
+  visibility: 'Who may read it',
+  watched: 'Only tickets I watch',
+  overdue: 'Only overdue tickets',
+  createdTo: 'Opened until',
+  changedTo: 'Changed until',
+  text: 'Words in the ticket',
+  sort: 'Order',
+  order: 'Direction',
+  from: 'From',
+  to: 'To',
+  by: 'Counted by',
+  query: 'The search',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
@@ -643,23 +705,46 @@ function showRefusal(target, err) {
  * Which values of which refusal the screen writes in words of its own.
  *
  * fillIn writes a number the way the tables beside it do, and a string as it
- * arrives. Two kinds of string arrive in a form nobody on this screen reads: a day
- * in the order the wire uses, and a status as the word it is stored under. So a
- * German refusal said "am 2026-10-04" beside a form showing 04.10.2026, and "ist
- * completed" beside a badge saying "abgeschlossen" - a word the reader could look
- * for and find nowhere.
+ * arrives. Some strings arrive in a form nobody on this screen reads: a day in
+ * the order the wire uses, a state as the word it is stored under, the kind of
+ * record a "not found" names, a field by its name on the wire. So a German
+ * refusal would say "ist closed_successful" beside a badge saying "erfolgreich
+ * geschlossen" - a word the reader could look for and find nowhere.
  *
  * Named by code and position, because on the wire the values are plain strings
- * and stay so: an API client reads them too. Which of them is a day or a status is
+ * and stay so: an API client reads them too. Which of them is a day or a state is
  * known here, beside the sentences, and in the call that sends it.
  * TestARefusalWritesItsValuesTheWayTheScreenDoes reads every such call and fails
  * on one this does not name.
  */
 const REFUSAL_VALUES = {
-  archiveNeedsCompleted: { 0: statusName },
   notFound: { 0: entityName },
-  overDailyLimit: { 2: fmtDate },
-  projectClosedForBooking: { 1: statusName },
+  stateShipped: { 0: statusName },
+  stateInUse: { 0: statusName },
+  stateRetired: { 0: statusName },
+  stateEndsAWait: { 0: statusName },
+  priorityShipped: { 0: priorityName },
+  priorityInUse: { 0: priorityName },
+  priorityRetired: { 0: priorityName },
+  typeShipped: { 0: ticketTypeName },
+  typeInUse: { 0: ticketTypeName },
+  typeRetired: { 0: ticketTypeName },
+  systemRoleUnrenamable: { 0: roleTitle },
+  systemRoleRightsFixed: { 0: roleTitle },
+  systemRoleDescriptionFixed: { 0: roleTitle },
+  systemRoleUndeletable: { 0: roleTitle },
+  defaultRoleUndeletable: { 0: roleTitle },
+  roleStillAssigned: { 0: roleTitle },
+  directoryRoleAdministers: { 0: roleTitle },
+  adminRoleMustAdminister: { 0: roleTitle },
+  portalAccountAdministers: { 1: roleTitle },
+  roleHeldByPortalAccounts: { 0: roleTitle },
+  macroStepInvalid: { 1: fieldName },
+  catalogValueRetired: { 0: catalogValueTitle },
+  configItemClassRetired: { 0: catalogValueTitle },
+  configItemNoDefinition: { 0: catalogValueTitle },
+  changeStateNotAllowed: { 0: catalogValueTitle, 1: catalogValueTitle },
+  workOrderStateNotAllowed: { 0: catalogValueTitle, 1: catalogValueTitle },
 };
 
 /** The values of one refusal, each written the way the rest of the screen writes it. */
@@ -719,18 +804,11 @@ const LANGUAGES = (() => {
   return typeof offered.en === 'string' ? offered : { en: 'English' };
 })();
 
-/**
- * Whether the signed-in user holds at least one of the given permissions.
- *
- * While the screens show an account a manager looks after, an own right counts only
- * where the manager may do the same for that account - see TEAM_COUNTERPARTS - so
- * the screens offer for somebody else exactly what the server takes.
- */
+/** Whether the signed-in user holds at least one of the given permissions. */
 function can(...permissions) {
   if (!me.authEnabled) return true;
 
-  return permissions.some((p) => me.permissions.includes(p)
-    && (!viewingFor || !(p in TEAM_COUNTERPARTS) || viewingFor.rights.includes(TEAM_COUNTERPARTS[p])));
+  return permissions.some((p) => me.permissions.includes(p));
 }
 
 /**
@@ -1682,9 +1760,16 @@ function holdFocus(button) {
   };
 }
 
-/** What a project's status is called, in the reader's language. */
+/**
+ * What a ticket's state is called, in the reader's language.
+ *
+ * The states that ship are named by identifiers - pending-reminder - which the
+ * dictionaries translate and SHIPPED_STATE_TITLES gives the English of; a state
+ * an installation adds is shown as it was typed, which is the only sensible
+ * answer for a word this application has never seen.
+ */
 function statusName(status) {
-  return t(`status.${status}`, status);
+  return t(`status.${status}`, SHIPPED_STATE_TITLES[status] ?? status);
 }
 
 /**
@@ -1696,10 +1781,13 @@ function entityName(entity) {
   return t(`entity.${entity}`, entity);
 }
 
-function statusBadge(status) {
-  // The class keeps the raw status so the colour rules still match; only the
-  // label is translated.
-  return el('span', { class: `status status-${status}`, text: statusName(status) });
+/**
+ * A ticket's state as a badge: named in the reader's language, coloured by its
+ * type - an installation names its own states, and a colour rule written for a
+ * name would know none of them.
+ */
+function statusBadge(name, type) {
+  return el('span', { class: `status status-${type}`, text: statusName(name) });
 }
 
 /**
@@ -2174,8 +2262,8 @@ function fmtDate(iso) {
  * A moment - a day and a time of day - in the reader's own convention.
  *
  * Deliberately not fmtDate, and the difference is not cosmetic. That one renders a
- * calendar day and pins the zone to UTC, because a booking's day carries no zone
- * and must not be shifted by one. These are instants, and the question they answer
+ * calendar day and pins the zone to UTC, because a stored day carries no zone and
+ * must not be shifted by one. These are instants, and the question they answer
  * - when was this credential last used - only means anything in the zone the
  * reader lives in.
  *
@@ -2225,19 +2313,6 @@ function fmtNumber(n) {
 }
 
 /**
- * An amount of money in its own currency, written the way the reader writes it:
- * 1.068,75 € on a German screen, €1,068.75 on an English one. A code the runtime
- * does not know is still written, as the figure beside the code. Display only.
- */
-function fmtMoney(amount, currency) {
-  try {
-    return new Intl.NumberFormat(activeLocale(), { style: 'currency', currency }).format(amount);
-  } catch {
-    return `${fmtNumber(amount)} ${currency}`;
-  }
-}
-
-/**
  * A share between none and all, written the way the reader writes a number and
  * in full.
  *
@@ -2261,19 +2336,6 @@ function fmtShare(n) {
  * language that abbreviates hours differently has somewhere to say so.
  */
 const fmtHours = (n) => `${fmtNumber(n)} ${t('unit.hours', 'h')}`;
-
-/** A balance in hours with its sign, which a credit carries as a plus. */
-const fmtSignedHours = (n) => `${n > 0 ? '+' : ''}${fmtHours(n)}`;
-
-/** Renders a signed balance, coloured as a credit or a debt. */
-function balanceCell(value) {
-  return el('td', {
-    class: `num ${value > 0 ? 'plus' : value < 0 ? 'minus' : ''}`,
-    text: fmtSignedHours(value),
-  });
-}
-
-const projectName = (id) => cache.projects.find((p) => p.id === id)?.name ?? `#${id}`;
 
 /** Replaces a tbody with rows, or a single "empty" row when there are none. */
 function fillTable(tbody, rows, columnCount, emptyText) {
@@ -2313,11 +2375,9 @@ function bulkBarOf(table) {
  * deletion, plus the bar that acts on them.
  *
  * Driven entirely by what the rows contain, so there is no list anywhere of which
- * tables have this. A table of rows nobody may delete - a report, an overtime
- * balance, the preview of a file about to be imported - is left exactly as it was,
- * and a table that grows a delete button later gets this without being told. The
- * calendar day gets it, without being mentioned anywhere, because its rows are time
- * entries and carry the same delete button the list does.
+ * tables have this. A table of rows nobody may delete - the preview of a file about
+ * to be imported, the runs of the directory synchronisation - is left exactly as it
+ * was, and a table that grows a delete button later gets this without being told.
  *
  * Returns whether the column is there, because the empty row's colspan has to
  * know.
@@ -2423,16 +2483,6 @@ function ensureBulkBar(table) {
       onclick: () => runBulkDelete(table),
     }));
 
-  // Time entries can be given a project together as well - the other half of
-  // recording hours first and categorising them later, which was otherwise one
-  // entry at a time. Their words are written by refreshBulkBar, like the
-  // delete button's.
-  if (table.dataset.assigns !== undefined && can('timesheets:transfer')) {
-    bar.append(
-      el('select', { class: 'bulk-project' }),
-      el('button', { type: 'button', class: 'secondary bulk-assign', onclick: () => runBulkAssign(table) }));
-  }
-
   // Above the table rather than below it: in a long table the bar would be off
   // the screen, and the rows being ticked start at the top.
   wrap.parentElement.insertBefore(bar, wrap);
@@ -2451,17 +2501,6 @@ function refreshBulkBar(table) {
   bar.querySelector('.bulk-count').textContent = t('bulk.count', '{n} selected')
     .replace('{n}', String(picked.length));
   bar.querySelector('button.danger').textContent = t('bulk.delete', 'Delete selected');
-
-  const assign = bar.querySelector('.bulk-assign');
-
-  if (assign) {
-    const choice = bar.querySelector('.bulk-project');
-
-    fillSelect(choice, cache.projects.filter((project) => project.status === 'active'),
-      { placeholder: t('bulk.assignTo', 'Assign to a project …') });
-    choice.setAttribute('aria-label', t('bulk.assignTo', 'Assign to a project …'));
-    assign.textContent = t('bulk.assign', 'Assign');
-  }
 
   const all = table.querySelector('thead .pick-all');
   if (all) {
@@ -2529,58 +2568,6 @@ async function runBulkDelete(table) {
 }
 
 /**
- * Gives every ticked time entry the project chosen in the bar, one after another.
- *
- * Through the single entry's own transfer, for the reason the batch deletion uses
- * the single deletion: each entry is held to the rules one is held to alone - that
- * it is the reader's, and that the project is theirs and open - so a batch can do
- * nothing a press on one row could not. A refusal partway does not undo the rest;
- * it is named, as the deletion names its own.
- *
- * Nothing is asked first. Unlike a deletion, an entry given the wrong project is
- * given the right one the same way.
- */
-async function runBulkAssign(table) {
-  const choice = bulkBarOf(table)?.querySelector('.bulk-project');
-  const projectId = Number(choice?.value);
-
-  // The row's own address, which is what a deletion is sent to and what its
-  // transfer hangs off.
-  const picked = [...table.querySelectorAll('tbody .row-pick')]
-    .filter((box) => box.checked)
-    .map((box) => box.deletes);
-
-  if (picked.length === 0) return;
-
-  if (!projectId) {
-    choice?.focus();
-
-    return;
-  }
-
-  const refused = [];
-  let done = 0;
-
-  for (const item of picked) {
-    try {
-      await api(`${item.path}/transfer`, { method: 'POST', body: JSON.stringify({ projectId }) });
-      done += 1;
-    } catch (err) {
-      refused.push(`${item.label}: ${err.message}`);
-    }
-  }
-
-  if (refused.length > 0) {
-    toast(`${fillIn(t('bulk.assignRefused', '{0} could not be assigned'), [refused.length])}`
-      + ` – ${refused[0]}`, 'error');
-  } else {
-    toast(fillIn(t('bulk.assigned', '{0} assigned to {1}'), [done, projectName(projectId)]), 'ok');
-  }
-
-  await reloadTimeViews();
-}
-
-/**
  * The "delete" button of a single row - and with it the row's ticket to being
  * deleted in a batch.
  *
@@ -2636,9 +2623,9 @@ function fillSelect(select, items, { placeholder, labelKey = 'name', valueKey = 
  * What each right is called, in words.
  *
  * The identifiers are what the API takes and what a role's rights are stored as -
- * "timesheets:write:own" - and they were what the ticking boxes said. That asks
+ * "tickets:write" - and they were what the ticking boxes said. That asks
  * somebody deciding what a colleague may do to read a namespace: the difference
- * between "projects:write" and "projects:archive" is plain once you know the
+ * between "tickets:create" and "tickets:write" is plain once you know the
  * system and a guess before that.
  *
  * The identifier stays beside the words rather than being replaced by them. It is
@@ -2655,46 +2642,58 @@ const PERMISSION_TITLES = {
   'roles:read': 'See roles',
   'roles:write': 'Create and change roles',
   'settings:manage': 'Administer the installation',
-  'projects:read': 'See projects',
-  'projects:write': 'Create and change projects',
-  'projects:delete': 'Delete projects',
-  'projects:archive': 'Archive projects',
-  'timesheets:read:own': 'See own time',
-  'timesheets:write:own': 'Record own time',
-  'timesheets:transfer': 'Move time between projects',
-  'reports:read:own': 'Evaluate own hours',
-  'settings:write:own': 'Change own settings',
-  'timesheets:read:team': 'See the time of assigned accounts',
-  'timesheets:write:team': 'Record time for assigned accounts',
-  'projects:write:team': 'Keep the projects of assigned accounts',
+  'queues:write': 'Set up queues',
+  'automation:write': 'Set up the automation',
+  'communication:write': 'Set up communication',
+  'tickets:read': 'See tickets',
+  'tickets:create': 'Open tickets',
+  'tickets:write': 'Work on tickets',
+  'tickets:delete': 'Delete tickets',
+  'customers:read': 'See customers',
+  'customers:write': 'Create and change customers',
+  'faq:read': 'Read the knowledge base',
+  'faq:write': 'Write the knowledge base',
+  'reports:read': 'Evaluate tickets',
+  'catalog:write': 'Set up the general catalog',
+  'assets:read': 'See the configuration items',
+  'assets:write': 'Create and change configuration items',
+  'changes:read': 'See the changes',
+  'changes:write': 'Create, move and change changes',
+  'portal:use': 'Use the customer portal',
 };
 
 /**
  * What each right actually allows, for the legend.
  *
- * One sentence, and specific: "See accounts" leaves open whether that includes
- * their recorded time, which is exactly the question somebody handing out rights
+ * One sentence, and specific: "See tickets" leaves open whether that is every
+ * ticket there is, which is exactly the question somebody handing out rights
  * is trying to answer.
  */
 const PERMISSION_DETAILS = {
-  'users:read': 'The list of accounts, their addresses and which role each holds. Not their recorded time - that takes a team right, for an account assigned to whoever holds it.',
+  'users:read': 'The list of accounts, their addresses and which role each holds.',
   'users:write': 'Add an account, change a name or an address, assign a role. Not the initial password of an account somebody else set up.',
-  'users:delete': 'Remove an account. Its recorded time goes with it.',
+  'users:delete': 'Remove an account. The tickets it owned stay and lose their owner, and what it wrote in them stays without its name.',
   'roles:read': 'The roles on this screen and what each grants.',
   'roles:write': 'Make a role, change what it grants, remove one nobody holds. The roles shipped with the application stay as they are.',
-  'settings:manage': 'The installation itself: the database connection, the directory, appearance, maintenance mode, telemetry, the log and the restart. This is the right that makes somebody an administrator.',
-  'projects:read': 'The list of projects and what each is called.',
-  'projects:write': 'Make a project and change one.',
-  'projects:delete': 'Remove a project. Time booked on it keeps its hours and loses the project.',
-  'projects:archive': 'Close a project to new bookings without deleting what is on it.',
-  'timesheets:read:own': 'One\u2019s own entries, calendar and balance. Somebody else\u2019s only through a team right, for an account an administrator assigned.',
-  'timesheets:write:own': 'Record, correct and delete one\u2019s own time, by hand or with the stopwatch.',
-  'timesheets:transfer': 'Move one\u2019s own entries from one project to another, in bulk.',
-  'reports:read:own': 'The report and the charts, over one\u2019s own hours.',
-  'settings:write:own': 'One\u2019s own account: password, language, appearance, timezone, working times, two-factor.',
-  'timesheets:read:team': 'As a manager: the entries, calendar, balance and evaluations of the accounts an administrator assigned - that a day was away, never why. Only while managers are switched on under Settings, and only beside the right to see one\u2019s own.',
-  'timesheets:write:team': 'As a manager: book, correct, move and delete time for the accounts an administrator assigned, each change named as one\u2019s own beside the entry. Only while managers are switched on, and only beside the right to record one\u2019s own.',
-  'projects:write:team': 'As a manager: make and change the projects of the accounts an administrator assigned, and archive or delete them as far as the role allows that for one\u2019s own. Only while managers are switched on.',
+  'settings:manage': 'The installation itself: the database connection, the directory, the mailboxes tickets arrive through, appearance, maintenance mode, telemetry, the log and the restart. This is the right that makes somebody an administrator.',
+  'queues:write': 'Make and change queues and decide which role reaches each - and with them the states, priorities and types tickets are sorted by and the service levels. Whoever holds it reaches every queue.',
+  'automation:write': 'Make and change the macros and what runs them. A macro acts as the application on every ticket it is given, in any queue and deleting included - so this reaches further than any right on tickets.',
+  'communication:write': 'Make and change the notifications the agents around a ticket are told and the answer templates an article starts from - and the mailboxes still to come.',
+  'tickets:read': 'The tickets in the queues this role reaches, with everything written in them. A queue the role does not reach is not there for it.',
+  'tickets:create': 'Open a ticket for a customer - one who called, or one to write to - in a queue this role may work in.',
+  'tickets:write': 'Answer, note, change state and priority, take a ticket and hand it over, move it to another queue - in the queues this role may work in.',
+  'tickets:delete': 'Remove a ticket for good, with everything written in it. For what should never have been one; a ticket that is done is closed instead.',
+  'customers:read': 'The organisations and the contacts tickets come from.',
+  'customers:write': 'Add and change organisations and contacts, and give a contact access to the customer portal.',
+  'faq:read': 'The knowledge base, its internal articles included.',
+  'faq:write': 'Write, change and remove knowledge base articles, and decide who may read each.',
+  'reports:read': 'Figures over the tickets of the queues this role reaches: how many arrived, how many were closed, how long they took.',
+  'catalog:write': 'Add to and change the general catalog - the classes a configuration item can be of, its deployment and incident states and what each means, and the lists its details pick from - and retire a value nobody should pick any more.',
+  'assets:read': 'Every configuration item and every version of it, whatever its class.',
+  'assets:write': 'Create a configuration item, write its next version and delete it.',
+  'changes:read': 'Every change and its work orders, whatever it is about and whoever manages it - and report on a work order given to the account: what was done, its state, when it ran and how long it took.',
+  'changes:write': 'Create a change, correct it, move it on as its states allow, and delete it - and plan, hand out and correct its work orders.',
+  'portal:use': 'As a customer: open tickets, read and answer one’s own, and read the public knowledge base. Nothing of anybody else’s.',
 };
 
 /** The areas rights are grouped under, in the order they are shown. */
@@ -2702,9 +2701,17 @@ const PERMISSION_GROUPS = {
   users: 'Accounts',
   roles: 'Roles',
   settings: 'Settings',
-  projects: 'Projects',
-  timesheets: 'Time',
+  queues: 'Queues',
+  automation: 'Automation',
+  communication: 'Communication',
+  tickets: 'Tickets',
+  customers: 'Customers',
+  faq: 'Knowledge base',
   reports: 'Evaluations',
+  catalog: 'General catalog',
+  assets: 'Configuration items',
+  changes: 'Changes',
+  portal: 'Customer portal',
 };
 
 /** What a right is called, in the reader's language. */
@@ -2724,40 +2731,31 @@ function permissionGroup(right) {
   return { key: area, label: t(`perm.group.${area}`, PERMISSION_GROUPS[area] ?? area) };
 }
 
-// The role somebody gets when nobody has said otherwise: the one that records
-// time and administers nothing.
-const ORDINARY_ROLE = 'user';
-
-/**
- * The shipped role that administers and has no working day, for the places that
- * have to name it to somebody: whose the directory run is. Only ever shown, never
- * compared - administersOnly asks for the shape, because an installation may have
- * built a role of its own with it.
- */
-const ADMINISTERING_ROLE = 'admin';
+// The role somebody gets when nobody has said otherwise: the one that works on
+// tickets and administers nothing.
+const ORDINARY_ROLE = 'agent';
 
 /**
  * The English titles of the roles that ship.
  *
  * These are what an English reader sees, because English is what a t() fallback is for.
- * Without them the fallback would be the identifier itself, and "user-admin" is not a
- * thing to put in front of somebody deciding what a colleague may do.
+ * Without them the fallback would be the identifier itself, which is not a thing to
+ * put in front of somebody deciding what a colleague may do.
  *
  * A role an installation named itself is not in here and falls back to the name it was
  * given, which is the only sensible answer for a word this application has never seen.
  */
 const SHIPPED_ROLE_TITLES = {
   admin: 'Administrator',
-  user: 'User',
-  'user-admin': 'User & administrator',
-  manager: 'Manager',
+  agent: 'Agent',
+  customer: 'Customer',
 };
 
 /**
  * What a role is called, in the reader's language.
  *
  * The name in the database is an identifier: lowercase, hyphenated, English - admin,
- * user, user-admin. It is what the API takes, what the directory configuration stores
+ * agent, customer. It is what the API takes, what the directory configuration stores
  * and what the role editor edits. It is not what somebody choosing a colleague's role
  * should have to read, and it was: the dropdown, the account list, the greeting and the
  * confirmation before deleting a role all showed it raw, so a German reader picked
@@ -2787,9 +2785,9 @@ function roleDescription(role) {
 /**
  * The roles as something to choose from, each with what it is for.
  *
- * A dropdown of bare identifiers asks somebody to guess: "user-admin" against "user" is
- * a difference you can only infer, and the difference is whether that person can
- * administer the installation. The list on the Roles screen has always shown the
+ * A dropdown of bare identifiers asks somebody to guess: "agent" against "customer" is
+ * a difference you can only infer, and the difference is whether that person works on
+ * the staff side or only reaches the portal. The list on the Roles screen has always shown the
  * descriptions; the place where the choice is actually made did not.
  *
  * The value stays the identifier, because that is what the API takes.
@@ -2823,9 +2821,9 @@ function roleChoices() {
  * would arrive holding the installation, so offering it would be offering a
  * refusal. The rights are the server's model.AdministeringPermissions, copied
  * because the page cannot ask for them and held to them by a test. Without the
- * role list - which somebody holding settings:manage but not roles:read never
- * loads - the ordinary role is the only one known not to administer, so it is
- * the one choice.
+ * role list - which somebody holding settings:manage but
+ * not roles:read never loads - the ordinary role is the only one known not to
+ * administer, so it is the one choice.
  */
 function directoryRoleChoices() {
   const administering = ['settings:manage', 'roles:write', 'users:write'];
@@ -2859,7 +2857,7 @@ function directoryRoleChoices() {
  * typed it and this application does not leave one person's half-written work on
  * screen for the next.
  */
-const DRAFT_PREFIX = 'timepulse.draft.';
+const DRAFT_PREFIX = 'qubitdesk.draft.';
 
 /**
  * Where one account's drafts are kept, apart from anybody else's.
@@ -2905,8 +2903,9 @@ function draftableFields(form) {
  *
  * A form exposes its controls as named properties of itself, and those come
  * first: a form holding <input name="id"> answers form.id with that input. Two
- * forms here do - the time entry and the role - so both wrote their draft under
- * the key "timepulse.draft.[object HTMLInputElement]", which is one key for two forms.
+ * forms did - the role's, and a time entry's in the time recording this was cloned
+ * from - so both wrote their draft under
+ * the key "qubitdesk.draft.[object HTMLInputElement]", which is one key for two forms.
  * They overwrote each other, and on the way back in the first of them restored
  * whatever the other had left, then wrote its own emptiness over the top.
  *
@@ -3054,62 +3053,6 @@ function forgetEveryDraft() {
 }
 
 /**
- * Where controls that hold typed work but belong to no form are kept.
- *
- * Almost everything somebody fills in here is in a form, and a form is what a
- * draft is filed under. The timer is not: its project and its description sit
- * beside the clock rather than in a form, because starting a timer is a button
- * rather than a submission - and until the timer is started they are the only
- * copy of what somebody has typed. Once it is running the server holds both and
- * gives them back on its own.
- *
- * Declared in the markup with data-keep rather than swept up by selector, so
- * what is carried across a load is a decision somebody made about that control
- * and not a consequence of where it happens to sit. A search box or a filter is
- * a question being asked, not work: they are left out.
- */
-const LOOSE_DRAFT_NAME = '(loose)';
-
-/** Writes down the controls marked to be kept. */
-function rememberLooseDraft() {
-  const values = {};
-
-  for (const field of $$('[data-keep]')) {
-    if (field.id && !field.disabled) values[field.id] = field.value;
-  }
-
-  try {
-    window.sessionStorage.setItem(draftsOf() + LOOSE_DRAFT_NAME, JSON.stringify(values));
-  } catch {
-    // Storage refused, or full. The screen is unaffected.
-  }
-}
-
-/** Puts them back. */
-function restoreLooseDraft() {
-  let values = null;
-
-  try {
-    values = JSON.parse(window.sessionStorage.getItem(draftsOf() + LOOSE_DRAFT_NAME) ?? 'null');
-  } catch {
-    // Unreadable or not there.
-  }
-
-  if (!values) return;
-
-  for (const field of $$('[data-keep]')) {
-    // Disabled means the screen has put it beyond reach and something else is
-    // deciding it - a running timer is filled from the server, and its own
-    // answer outranks anything typed before it started.
-    if (!field.id || field.disabled || !(field.id in values)) continue;
-
-    field.value = values[field.id];
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-    field.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-}
-
-/**
  * Puts back what was in the forms when this tab was last loaded.
  *
  * After the loaders and not before: they fill every form from the server, so a
@@ -3126,8 +3069,6 @@ function restoreDrafts() {
   // there is nothing to put back - see draftsOf.
   const mine = draftsOf();
   if (!mine) return;
-
-  restoreLooseDraft();
 
   for (const form of $$('form')) {
     const key = formKey(form);
@@ -3168,9 +3109,8 @@ function restoreDrafts() {
 
     for (const field of draftableFields(form)) {
       // A disabled control is not somebody's unsaved work; it is something the
-      // screen has put beyond reach - a shipped role's rights, the project a
-      // running timer is already booked against - and putting a draft into one
-      // would be writing over what the server said.
+      // screen has put beyond reach - a shipped role's rights - and putting a
+      // draft into one would be writing over what the server said.
       if (field.disabled || !(field.name in draft.values)) continue;
 
       const was = draft.values[field.name];
@@ -3221,12 +3161,12 @@ function restoreDrafts() {
  * Both are always filled now:
  *
  *   middle  the application's own mark, beside the title, always
- *   left    the uploaded logo, or a chip with TimePulse's T where there is none
+ *   left    the uploaded logo, or a chip with QubitDesk's Q where there is none
  *
  * The chip carried the first letter of the configured title while that title
- * was the installation's whole name. Every installation is called TimePulse now
+ * was the installation's whole name. Every installation is called QubitDesk now
  * and the title only follows it, so the first letter of the title was a letter
- * of the addition - an H beside TimePulse | htp.net - and the chip carries the
+ * of the addition - an H beside QubitDesk | htp.net - and the chip carries the
  * name's own initial instead. It still never reads as a picture that failed to
  * load, which is what a generic glyph would.
  */
@@ -3353,6 +3293,15 @@ function wireValidityMessages() {
 }
 
 /**
+ * HOURS_PATTERN is what a calendar's box for a weekday takes: stretches such as
+ * 08:00–12:00, either kind of dash, apart by commas, or nothing for a day off.
+ * The dash is escaped because the browser reads a pattern in its v mode, where
+ * an unescaped one in a class is no pattern at all - and an unreadable pattern
+ * is ignored, which would let anything through.
+ */
+const HOURS_PATTERN = '\\d{2}:\\d{2}\\s*[\\-–]\\s*\\d{2}:\\d{2}(\\s*,\\s*\\d{2}:\\d{2}\\s*[\\-–]\\s*\\d{2}:\\d{2})*';
+
+/**
  * What each pattern a field is held to asks for, in words. The browser can only
  * call a pattern "the requested format", which says nothing about what to type,
  * and says it in its own language rather than the screen's - so every pattern
@@ -3360,8 +3309,10 @@ function wireValidityMessages() {
  * one that is not.
  */
 const PATTERN_MESSAGES = {
+  [HOURS_PATTERN]: () => t('calendar.hoursFormat', 'Write the hours as 08:00–12:00, 13:00–17:00.'),
   '[0-9]{6}': () => t('valid.code', 'Please enter the six digits your authenticator app shows.'),
   '[A-Za-z]{3}': () => t('valid.currency', 'Please enter the three letters of a currency, such as EUR.'),
+  '[0-9]{2}:[0-9]{2}( *, *[0-9]{2}:[0-9]{2})*': () => t('plan.timesFormat', 'Write the times as 08:00, 12:30.'),
 };
 
 /** What a field's rule says about its value, or nothing where it has no objection. */
@@ -3428,42 +3379,6 @@ function formData(form) {
     const value = typeof raw === 'string' ? raw.trim() : raw;
     if (value !== '') out[key] = value;
   }
-  return out;
-}
-
-/**
- * A form read for a correction, where a box somebody emptied is a change.
- *
- * formData drops an empty value. That is right for creating something and wrong
- * for correcting it: the server tells "there is none any more" from "I said
- * nothing about it" by whether the field arrived at all, and says so where it
- * reads an end date - "an empty string is how a form field that has been cleared
- * arrives". Dropped, it never arrives, and an emptied box saves as no change.
- *
- * The fields that may be emptied are named rather than inferred, because the
- * other kind sits in the same forms. A start date, a day, a duration are facts
- * the record must have; an empty one is somebody clearing a box rather than
- * removing a fact, and sending it would be refused. Those keep being dropped.
- *
- * One function because two forms needed it and only one had it. The project form
- * wrote its own object out by hand with a comment explaining exactly this, and
- * the booking form went on using formData - so an emptied description saved as no
- * change, and so did taking the project off an entry, which is how an entry stops
- * being categorised at all.
- *
- * id is never sent: it is the form's own identity and travels in the path.
- */
-function correctionFrom(form, emptiable) {
-  const out = {};
-
-  for (const [key, raw] of new FormData(form).entries()) {
-    if (key === 'id') continue;
-
-    const value = typeof raw === 'string' ? raw.trim() : raw;
-
-    if (value !== '' || emptiable.includes(key)) out[key] = value;
-  }
-
   return out;
 }
 
@@ -3827,11 +3742,11 @@ async function applyLanguage(language) {
  *
  * Everything above translates the markup, which is most of the interface and not
  * the part that goes wrong. What goes wrong is what the script has already
- * written into the page: an evaluation, an overtime balance, an import preview.
- * Those are drawn once, from an answer that arrived once, and nothing translated
- * them again - so switching the language left a screen whose table heading said
- * "Zeitraum" above a cell saying 07/14/2026, beside a total reading "5.01 h in
- * total". Every key was translated; none of them was looked up a second time.
+ * written into the page: an import preview, a synchronisation's preview, the
+ * version check. Those are drawn once, from an answer that arrived once, and
+ * nothing translated them again - so switching the language left a screen whose
+ * table heading was German beside a total still reading "5.01 h in total". Every
+ * key was translated; none of them was looked up a second time.
  *
  * The screens that refreshAll reloads do not need this - they are drawn again
  * from a new request. These are the ones nobody asked to reload, and re-fetching
@@ -3872,9 +3787,9 @@ function stopRedrawing(key) {
  * Forgets every screen drawn for whoever just signed out.
  *
  * Each draw keeps the answer it was made from, and the sign-out applies the
- * language to the screen it hands back - which redrew them all: the evaluation,
- * the balance and the import verdicts went back into the tables just emptied,
- * and stood there for whoever signed in next.
+ * language to the screen it hands back - which redrew them all: the import
+ * verdicts went back into the tables just emptied, and stood there for whoever
+ * signed in next.
  */
 function forgetEveryRedraw() {
   for (const key of [...redraws.keys()]) {
@@ -4048,7 +3963,7 @@ function t(key, fallback) {
  * kept behind this - see adoptBrowserDefaults.
  */
 function adoptionMarker(userID) {
-  return `timepulse.adopted.${userID}`;
+  return `qubitdesk.adopted.${userID}`;
 }
 
 /**
@@ -4057,8 +3972,8 @@ function adoptionMarker(userID) {
  * The browser knows two things the server cannot: which zone the person is
  * actually in, and which language they read. Until this, the language was
  * detected for the current page and thrown away on every load, and the zone was
- * not detected at all - so somebody in Vancouver saw their evening bookings land
- * on the instance's tomorrow until they found the setting.
+ * not detected at all - so somebody in Vancouver saw their evening's work land on
+ * the instance's tomorrow until they found the setting.
  *
  * The two are not decided the same way, and the difference is the point.
  *
@@ -4199,257 +4114,16 @@ function keepTheShell() {
   });
 }
 
-/** Where this account's bookings made without a connection wait on this device. */
-const OUTBOX_PREFIX = 'timepulse_outbox_';
-
 /**
- * Whose outbox this page reads, or none before anybody is signed in.
- *
- * Per account, as drafts are, so another account signing in on the same device
- * neither sees them nor sends them as its own.
- */
-function outboxKey() {
-  const who = me.user?.id;
-
-  return who ? `${OUTBOX_PREFIX}${who}` : '';
-}
-
-/** The bookings waiting on this device, oldest first. */
-function readOutbox() {
-  const key = outboxKey();
-  if (!key) return [];
-
-  try {
-    return JSON.parse(localStorage.getItem(key) ?? '[]');
-  } catch {
-    return [];
-  }
-}
-
-/** Keeps what waits, and says so on the banner. */
-function writeOutbox(items) {
-  const key = outboxKey();
-
-  if (key) {
-    try {
-      if (items.length) localStorage.setItem(key, JSON.stringify(items));
-      else localStorage.removeItem(key);
-    } catch {
-      // Storage refused - a private window, a full disk. What is drawn below is
-      // still true of this page, which is all that is left to say it to.
-    }
-  }
-
-  drawOutbox(items);
-}
-
-/**
- * Keeps a booking the installation could not be reached for, to send once it can.
- *
- * Only a new booking. A correction or a deletion acts on what the server holds
- * now, and done blind from a device that has not heard from it for an hour it
- * could undo what was done elsewhere in the meantime; a booking adds an entry and
- * replaces nothing, so it is the one write that can wait.
- */
-function keepForLater(body) {
-  const kept = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    body,
-    keptAt: new Date().toISOString(),
-  };
-
-  writeOutbox([...readOutbox(), kept]);
-}
-
-/** Changes one booking in the outbox as it is now, or takes it out with null. */
-function changeKept(id, change) {
-  writeOutbox(readOutbox().flatMap((item) => {
-    if (item.id !== id) return [item];
-
-    return change ? [{ ...item, ...change }] : [];
-  }));
-}
-
-/**
- * Whether a booking a page began sending, and did not live to say had arrived,
- * is on the server already: the same day, project, hours and description, booked
- * after it was kept. Asked rather than sent again, because sent again it would be
- * booked twice - which is what this did, measured, whenever the page that sent it
- * was replaced before it could say so.
- */
-async function alreadyBooked(kept) {
-  const day = kept.body.date;
-  const answer = await api(`/timesheets?${new URLSearchParams({ from: day, to: day, limit: '500' })}`);
-
-  return (answer?.items ?? []).some((entry) => entry.durationHours === Number(kept.body.durationHours)
-    && (entry.projectId ?? 0) === Number(kept.body.projectId || 0)
-    && (entry.description ?? '') === (kept.body.description ?? '')
-    && Date.parse(entry.createdAt) >= Date.parse(kept.keptAt));
-}
-
-/** The name the outbox is sent under, one page at a time across every tab. */
-const OUTBOX_LOCK = 'timepulse-outbox';
-
-/** Whether this page is sending the outbox now, where tabs cannot be asked. */
-let sendingOutbox = false;
-
-/**
- * Sends what waits, oldest first, once the installation can be reached.
- *
- * One page at a time, across every tab of this installation, through a lock the
- * browser holds for all of them: two tabs sending the same outbox would book
- * everything in it twice. Each booking is marked as on its way before it goes and
- * taken out the moment it has arrived, so a page replaced in between leaves one
- * that alreadyBooked asks about rather than one sent again.
- *
- * A booking the installation refuses - its project closed in the meantime, the day
- * full - stays with the reason until somebody corrects it: hours that vanished
- * because of a rule nobody saw are hours lost. One that cannot reach it stops the
- * round, and the rest wait with it, because they would only fail the same way.
- */
-async function sendOutbox() {
-  if (!me.user || !navigator.onLine || !readOutbox().some((item) => !item.refused)) return;
-
-  const round = async () => {
-    let sent = 0;
-
-    for (const item of readOutbox()) {
-      if (item.refused) continue;
-
-      try {
-        if (item.sending && await alreadyBooked(item)) {
-          changeKept(item.id, null);
-
-          continue;
-        }
-
-        changeKept(item.id, { sending: true });
-
-        await api('/timesheets', { method: 'POST', body: JSON.stringify(item.body) });
-
-        changeKept(item.id, null);
-        sent += 1;
-      } catch (err) {
-        if (err.unreachable) {
-          changeKept(item.id, { sending: false });
-
-          break;
-        }
-
-        changeKept(item.id, { sending: false, refused: err.message });
-      }
-    }
-
-    if (sent) {
-      toast(fillIn(t('outbox.sent', 'Sent what was booked without a connection: {0}'), [sent]), 'ok');
-      await reloadTimeViews();
-    }
-  };
-
-  if (navigator.locks) {
-    await navigator.locks.request(OUTBOX_LOCK, round);
-
-    return;
-  }
-
-  if (sendingOutbox) return;
-
-  sendingOutbox = true;
-
-  try {
-    await round();
-  } finally {
-    sendingOutbox = false;
-  }
-}
-
-/** Puts a refused booking back into the form, and out of the outbox. */
-function correctKept(kept) {
-  changeKept(kept.id, null);
-
-  const form = $('#form-timesheet');
-  if (!form) return;
-
-  switchView('timesheets');
-  openTheTabOf(form);
-
-  setDateField(form.elements.date, kept.body.date ?? '');
-  form.elements.durationHours.value = kept.body.durationHours ?? '';
-  form.elements.description.value = kept.body.description ?? '';
-  form.elements.projectId.value = kept.body.projectId ? String(kept.body.projectId) : '';
-
-  form.scrollIntoView({ block: 'nearest' });
-  form.elements.durationHours.focus();
-}
-
-/**
- * Says what waits and what was refused, and that there is no connection while
- * there is none. A banner, because each is a state: true until the bookings are
- * sent or corrected, and gone the moment they are.
- */
-function drawOutbox(items = readOutbox()) {
-  const banner = $('#outbox-banner');
-  if (!banner) return;
-
-  const waiting = items.filter((item) => !item.refused);
-  const refused = items.filter((item) => item.refused);
-
-  const lines = [];
-
-  if (!navigator.onLine) {
-    lines.push(t('outbox.offline',
-      'No connection to the installation. New bookings stay on this device and are sent once it is back.'));
-  }
-
-  if (waiting.length) {
-    lines.push(fillIn(t('outbox.waiting',
-      'Booked without a connection and waiting on this device: {0}. They are sent once it is back.'),
-    [waiting.length]));
-  }
-
-  if (refused.length) {
-    lines.push(t('outbox.refused',
-      'The installation refused these bookings made without a connection. Correct them to book them again:'));
-  }
-
-  $('#outbox-text').textContent = lines.join(' ');
-
-  const list = $('#outbox-refused');
-  list.replaceChildren(...refused.map((item) => el('li', {},
-    [fmtDate(item.body.date), fmtHours(Number(item.body.durationHours)), item.body.description]
-      .filter(Boolean).join(' · ') + ` - ${item.refused} `,
-    el('button', {
-      type: 'button',
-      class: 'link-button',
-      text: t('outbox.correct', 'correct'),
-      onclick: () => correctKept(item),
-    }))));
-  list.hidden = refused.length === 0;
-
-  banner.hidden = lines.length === 0 || !me.user;
-}
-
-/**
- * The page's side of being offline: the banner follows the connection, what
- * waits is sent the moment it is back, and a page that could not even load for
- * want of one starts again by itself.
+ * The page's side of being offline: the sign-in screen says so while there is no
+ * connection, and a page that could not even load for want of one starts again
+ * by itself once it is back.
  */
 function wireOffline() {
-  window.addEventListener('offline', () => {
-    drawOutbox();
-    showSignInOffline(true);
-  });
+  window.addEventListener('offline', () => showSignInOffline(true));
 
   window.addEventListener('online', () => {
-    drawOutbox();
-
-    if (!$('#login-offline')?.hidden) {
-      startAgain();
-
-      return;
-    }
-
-    mutate(sendOutbox, null, null);
+    if (!$('#login-offline')?.hidden) startAgain();
   });
 }
 
@@ -4505,266 +4179,9 @@ function showSignInOffline(unreachable) {
   }, REACH_AGAIN_MS);
 }
 
-// ------------------------------------------------------------------ managers
+// ------------------------------------------------------- push notifications
 
-/**
- * The accounts this account looks after as a manager, from /me/team: each with its
- * id, its name and the team rights the manager's role gives over it. Empty for
- * everybody else, and for everybody while the installation has no managers.
- */
-let myTeam = [];
-
-/** The three team rights, which only ever reach an account a manager was assigned. */
-const TEAM_RIGHTS = ['timesheets:read:team', 'timesheets:write:team', 'projects:write:team'];
-
-/**
- * The team right that carries an own right over to an account a manager looks
- * after.
- *
- * While the screens show such an account, an own right counts only where the
- * manager's role gives its counterpart over that account - see can - so a control
- * is offered exactly where the server would take it. projects:read has none: any
- * team right lists the account's projects, and the account is only in the team
- * because the manager holds one.
- */
-const TEAM_COUNTERPARTS = {
-  'timesheets:read:own': 'timesheets:read:team',
-  'reports:read:own': 'timesheets:read:team',
-  'timesheets:write:own': 'timesheets:write:team',
-  'timesheets:transfer': 'timesheets:write:team',
-  'projects:write': 'projects:write:team',
-  'projects:archive': 'projects:write:team',
-  'projects:delete': 'projects:write:team',
-};
-
-/** The account the time on screen belongs to: the one being looked after, or one's own. */
-function subjectID() {
-  return viewingFor?.id ?? me.user?.id;
-}
-
-/**
- * A read of time, with userId while the screens show somebody a manager looks
- * after - so every screen asks the server about the same account, and none of
- * them about the manager by accident.
- */
-function forSubject(params = {}) {
-  const query = new URLSearchParams(params);
-
-  if (viewingFor) query.set('userId', String(viewingFor.id));
-
-  return query;
-}
-
-/** Somebody who acted in another's name: their name, or their number once they are gone. */
-function actorName(actor) {
-  return actor.name || `#${actor.id}`;
-}
-
-/**
- * Who booked or last changed an entry in its owner's name, as lines under what it
- * says - shown to the owner and to the manager alike, which is why it is kept.
- */
-function actedByLines(entry) {
-  return [
-    entry.recordedBy ? el('span', {
-      class: 'acted-by',
-      text: fillIn(t('team.recordedBy', 'booked by {0}'), [actorName(entry.recordedBy)]),
-    }) : null,
-    entry.updatedBy ? el('span', {
-      class: 'acted-by',
-      text: fillIn(t('team.updatedBy', 'changed by {0}'), [actorName(entry.updatedBy)]),
-    }) : null,
-  ];
-}
-
-/**
- * Reads whom this account looks after, and draws the picker under the tabs.
- *
- * The account on screen goes back to one's own once it is no longer in the list -
- * an assignment taken back, managers switched off - rather than going on asking
- * the server about an account it now refuses.
- */
-async function loadTeam() {
-  myTeam = me.authEnabled && me.user && !me.user.mustChangePassword
-    ? (await api('/me/team'))?.items ?? []
-    : [];
-
-  if (viewingFor) viewingFor = myTeam.find((member) => member.id === viewingFor.id) ?? null;
-
-  const picker = $('#viewing-for-picker');
-  if (picker) {
-    picker.replaceChildren(
-      el('option', { value: '', text: t('team.mine', 'Mine') }),
-      ...myTeam.map((member) => el('option', { value: String(member.id), text: member.name })),
-    );
-    picker.value = viewingFor ? String(viewingFor.id) : '';
-  }
-
-  const holder = $('#viewing-for');
-  if (holder) holder.hidden = myTeam.length === 0;
-
-  showViewingFor();
-}
-
-/**
- * Lets every screen follow whose time is on it: the banner that says so, the cards
- * that are always one's own, and the rights each control is offered by.
- */
-function showViewingFor() {
-  if (viewingFor) document.documentElement.dataset.viewingFor = String(viewingFor.id);
-  else delete document.documentElement.dataset.viewingFor;
-
-  const banner = $('#viewing-banner');
-  if (banner) banner.hidden = !viewingFor;
-
-  if (viewingFor) {
-    redrawable('viewingFor', () => {
-      $('#viewing-text').textContent = fillIn(t('team.viewingText',
-        'You are looking at the time of {0}. What you book or change here carries your name '
-        + 'beside the entry, and {0} sees it.'), [viewingFor.name]);
-    });
-  } else {
-    stopRedrawing('viewingFor');
-  }
-
-  applyPermissionVisibility();
-
-  // A screen that is always one's own is no place to be looking at somebody else's from.
-  const current = $('.tab[aria-current="true"]');
-  if (viewingFor && current?.hasAttribute('data-own-only')) switchView('timesheets');
-}
-
-/** Turns every screen to the time of an account this one looks after, or back to its own. */
-async function viewTimeOf(id) {
-  viewingFor = myTeam.find((member) => String(member.id) === String(id)) ?? null;
-
-  // What was evaluated a moment ago was another account's period.
-  for (const result of ['#overtime-result', '#report-result']) {
-    const card = $(result);
-    if (card) card.hidden = true;
-  }
-
-  showViewingFor();
-  await refreshAll();
-}
-
-/**
- * Asks which accounts look after somebody, and saves the answer.
- *
- * Offered only the accounts whose role gives a team right, because the server
- * refuses anybody else as a manager - and never the account itself. Without the
- * roles to tell, everybody else is offered and the server is the one to say no.
- */
-async function assignManagers(user) {
-  const assigned = (await api(`/users/${user.id}/managers`))?.managerIds ?? [];
-
-  const looksAfter = (roleName) => {
-    const role = cache.roles.find((known) => known.name === roleName);
-
-    return !role || (role.permissions ?? []).some((right) => TEAM_RIGHTS.includes(right));
-  };
-
-  const candidates = cache.users.filter((other) => other.id !== user.id && !other.isSystem
-    && looksAfter(other.role));
-
-  const chosen = await confirmDialog({
-    title: t('team.assignTitle', 'Managers'),
-    text: fillIn(t('team.assignText',
-      'Who looks after the time of {0}? They will see it, and {0} sees who they are.'), [user.name]),
-    confirmLabel: t('action.save', 'Save'),
-    danger: false,
-    choices: candidates.map((candidate) => ({
-      value: candidate.id,
-      label: candidate.name,
-      checked: assigned.includes(candidate.id),
-    })),
-    empty: t('team.noCandidates',
-      'Nobody holds a role that looks after other accounts yet. Give somebody the role "Manager" first.'),
-  });
-
-  if (!chosen) return;
-
-  await patch(`/users/${user.id}/managers`, { managerIds: chosen.map(Number) },
-    t('team.assigned', 'Managers assigned'), refreshAll);
-}
-
-/**
- * Whether a right belongs on the roles screen: every right, except the team rights
- * while the installation has no managers - they would reach nobody, and a switch
- * that does nothing is worse than none. A role holding one anyway shows it, so
- * what a role grants is never hidden from whoever is reading it.
- */
-function offeredRight(permission, held = []) {
-  return me.managersEnabled || !TEAM_RIGHTS.includes(permission) || held.includes(permission);
-}
-
-/** Says who may see this account's time, and what each of them may do with it. */
-async function loadMyManagers() {
-  const card = $('#managers-card');
-  if (!card) return;
-
-  card.hidden = !me.authEnabled;
-  if (!me.authEnabled || me.user?.mustChangePassword) return;
-
-  const managers = (await api('/me/managers'))?.items ?? [];
-
-  redrawable('myManagers', () => {
-    $('#managers-list').replaceChildren(...managers.map((manager) => el('li', {},
-      el('strong', { text: manager.name }),
-      el('span', { class: 'muted', text: manager.rights.map(permissionTitle).join(' · ') }))));
-    $('#managers-list').hidden = managers.length === 0;
-    $('#managers-nobody').hidden = managers.length > 0;
-  });
-}
-
-/** The installation's switch, as the server last said it - unless it is being changed. */
-async function loadManagersSwitch() {
-  const form = $('#form-managers');
-  if (!form || beingEdited(form)) return;
-
-  const state = await api('/settings/managers');
-
-  form.elements.enabled.checked = Boolean(state.enabled);
-  form.elements.enabled.defaultChecked = Boolean(state.enabled);
-}
-
-function wireManagers() {
-  const form = $('#form-managers');
-
-  form?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-
-    const enabled = form.elements.enabled.checked;
-
-    // Asked about only when switching them on, which is the direction in which
-    // somebody starts seeing a colleague's time. Off needs no question.
-    if (enabled && !form.elements.enabled.defaultChecked) {
-      const proceed = await confirmDialog({
-        title: t('team.switchTitle', 'Managers'),
-        text: t('team.switchConfirm',
-          'Switch managers on? Whoever is a manager then sees the time of the accounts an '
-          + 'administrator assigned to them - and those people see who.'),
-        confirmLabel: t('team.switchOn', 'Switch on'),
-        danger: false,
-      });
-
-      if (!proceed) {
-        form.elements.enabled.checked = false;
-
-        return;
-      }
-    }
-
-    saveForm(form, () => api('/settings/managers', {
-      method: 'PUT', body: JSON.stringify({ enabled }),
-    }), t('team.switchSaved', 'Managers saved'), refreshAll);
-  });
-
-  $('#viewing-for-picker')?.addEventListener('change', (event) => mutate(
-    () => viewTimeOf(event.target.value), null, null));
-}
-
-/** Whether the installation pushes reminders, as the server last said it - unless it is being changed. */
+/** Whether the installation pushes notifications, as the server last said it - unless it is being changed. */
 async function loadPushSwitch() {
   const form = $('#form-push');
   if (!form || beingEdited(form)) return;
@@ -4778,14 +4195,14 @@ async function loadPushSwitch() {
 /**
  * Whether this browser can be pushed to at all: a service worker to show what
  * arrives, and a push manager to subscribe through. The Android app's WebView
- * has neither, and shows the reminders as notifications of its own instead.
+ * has neither.
  */
 function pushable() {
   return 'serviceWorker' in navigator && 'PushManager' in window;
 }
 
 /**
- * The Reminders card's part about pushing to this browser: offered where the
+ * The notification card's part about pushing to this browser: offered where the
  * installation pushes and the browser can be pushed to, and saying so where this
  * browser is already among the reader's subscribed ones.
  */
@@ -4798,9 +4215,9 @@ async function drawPushState() {
   pushed.hidden = true;
 
   // Where it cannot be asked, nothing is offered that could only fail; the
-  // Reminders card's other parts stand either way.
+  // card's other parts stand either way.
   try {
-    const state = pushable() && can('timesheets:read:own') ? await api('/me/push') : null;
+    const state = pushable() && can('tickets:read') ? await api('/me/push') : null;
     if (!state?.enabled) return;
 
     const registration = await navigator.serviceWorker.getRegistration();
@@ -4866,7 +4283,7 @@ async function unsubscribeThisBrowser() {
 
 /**
  * Takes the browser out of the pushes when somebody signs out of it, so whoever
- * uses it next is not pushed the reminders of whoever left. A sign-out goes
+ * uses it next is not pushed the notifications of whoever left. A sign-out goes
  * ahead whatever this answers.
  */
 async function forgetThisBrowsersPush() {
@@ -4897,24 +4314,11 @@ function wirePush() {
     () => unsubscribeThisBrowser(), null, drawPushState));
 }
 
+// ------------------------------------------------------- accounts and roles
+
 async function loadUsers() {
-  // Listing accounts is a permission, and administering them is the only thing this
-  // list is for now.
-  //
-  // It used to be loaded for everybody, including whoever may not list accounts - who
-  // got a list of exactly one entry, themselves. That was to fill four dropdowns of
-  // colleagues: the booking form, the entry filter, the calendar and the overtime
-  // form. They were built when a role could hold timesheets:read:all, and they never
-  // worked as they read - the built-in administrator administers accounts and does not
-  // read what people recorded in them, so it was offered every colleague and every
-  // choice but itself came back 403. The filter was worse: "All users" quietly showed
-  // only your own entries, because the server pins the scope and the label did not
-  // know.
-  //
-  // A dropdown holding a single name is a question with one answer, so all four are
-  // gone, and with them the two rights they existed to use. Whose time it is is not a
-  // choice any more, it is who is signed in - except for a manager, whose one picker
-  // under the tabs lists only the accounts an administrator assigned to them.
+  // Listing accounts is a permission, and administering them is what this list
+  // is for.
   //
   // Emptied rather than left alone on the way out: a session that loses the right -
   // its role changed while it was signed in - must not go on showing the accounts it
@@ -4981,18 +4385,6 @@ async function loadUsers() {
         'data-action': 'remove-second-factor',
         text: t('user.removeFactor', 'remove second factor'),
         onclick: () => removeSecondFactor(u),
-      }));
-    }
-
-    // Who looks after this account, while the installation has managers - an
-    // assignment then reaches nothing, and a control that does nothing is worse
-    // than none. Not the built-in administrator, which keeps no time to look after.
-    if (can('users:write') && me.managersEnabled && !u.isSystem) {
-      actions.append(el('button', {
-        class: 'link',
-        'data-action': 'managers',
-        text: t('team.assign', 'managers'),
-        onclick: () => mutate(() => assignManagers(u), null, null),
       }));
     }
 
@@ -5078,13 +4470,11 @@ async function loadUsers() {
             'Managed in LDAP. The password lives there, and removing the entry there removes this account.')
           : '',
       }),
-      el('td', { class: 'num', text: u.dailyTargetHours ? fmtHours(u.dailyTargetHours) : t('field.default', 'default') }),
-      el('td', { class: 'num', text: u.maxDailyHours ? fmtHours(u.maxDailyHours) : t('field.default', 'default') }),
       actions,
     );
   });
 
-  fillTable($('#table-users tbody'), rows, 7, t('user.empty', 'No users yet.'));
+  fillTable($('#table-users tbody'), rows, 5, t('user.empty', 'No users yet.'));
 }
 
 /**
@@ -5291,9 +4681,9 @@ async function loadRoles() {
  * The rights to tick, and whether they can be ticked at all.
  *
  * fixed is for a system role. Its permissions cannot be changed - neither given nor
- * taken - because that role belongs to the built-in account, which configures the
- * installation and records no time; a right added here would hand it a working day from
- * the screen that administers roles.
+ * taken - because that role belongs to the built-in account, which holds everything on
+ * the staff side already; a right added here could only be the customer portal, handed
+ * to the one account nobody chose from the screen that administers roles.
  *
  * Shown as unavailable rather than left clickable and refused on save. The name of a
  * system role has always been read-only in this form for the same reason: a control
@@ -5309,8 +4699,6 @@ function renderPermissionCheckboxes(selected = [], { fixed = false } = {}) {
   let group = '';
 
   for (const permission of cache.permissions) {
-    if (!offeredRight(permission, selected)) continue;
-
     const area = permissionGroup(permission);
 
     if (area.key !== group) {
@@ -5359,7 +4747,7 @@ function renderPermissionLegend() {
 
   for (const permission of cache.permissions) {
     const detail = permissionDetail(permission);
-    if (!detail || !offeredRight(permission)) continue;
+    if (!detail) continue;
 
     list.append(el('dt', {},
       el('span', { text: permissionTitle(permission) }),
@@ -5453,281 +4841,6 @@ function resetRoleForm() {
   swapTheLabel($('#role-form-title'), 'role.create', 'Create role');
 }
 
-async function loadProjects() {
-  if (!can('projects:read')) return;
-
-  // A manager books on the projects of the account on screen and keeps them, so
-  // every list below is that account's while it is there.
-  const owner = viewingFor ? `?ownerId=${viewingFor.id}` : '';
-  cache.projects = (await api(`/projects${owner}`))?.items ?? [];
-
-  const bookable = cache.projects.filter((p) => p.status === 'active');
-  // A blank first option is what lets time be booked without a project, and it
-  // is named the same in both places. The stopwatch called it "Project
-  // (optional)" while the form beside it called it "No project" - two names for
-  // the same choice, on one screen.
-  fillSelect($('#timer-project'), bookable,
-    { placeholder: t('ts.noProject', 'No project') });
-  fillSelect($('#timer-switch-project'), bookable,
-    { placeholder: t('ts.noProject', 'No project') });
-  fillSelect($('#form-timesheet select[name=projectId]'), bookable,
-    { placeholder: t('ts.noProject', 'No project') });
-  // An evaluation covers all projects, one of them, or the hours that belong to
-  // none - so this select carries two options that are not projects. The picker
-  // used to be required and offer only real ones, which made the two questions
-  // people ask most often the two the screen could not answer.
-  //
-  // "none" is appended after the projects and the choice restored by hand,
-  // because fillSelect restores before it exists and would drop it every reload.
-  const reportProject = $('#form-report select[name=projectId]');
-  const chosenScope = reportProject.value;
-
-  fillSelect(reportProject, cache.projects,
-    { placeholder: t('filter.allProjects', 'All projects') });
-  reportProject.append(el('option', {
-    value: 'none', text: t('report.noProject', 'No project'),
-  }));
-  reportProject.value = chosenScope;
-  // The same three choices the evaluation offers, and for the same reason: the
-  // hours that never got a project are the ones somebody goes looking for, and
-  // "all projects" cannot narrow to them.
-  //
-  // Appended after the projects and the choice restored by hand, because
-  // fillSelect restores before this option exists and would drop it every reload.
-  const timesheetProject = $('#filter-ts-project');
-  const chosenProject = timesheetProject.value;
-
-  fillSelect(timesheetProject, cache.projects,
-    { placeholder: t('filter.allProjects', 'All projects') });
-
-  timesheetProject.append(el('option', {
-    value: 'none', text: t('report.noProject', 'No project'),
-  }));
-
-  timesheetProject.value = chosenProject;
-
-  const rows = cache.projects.map((p) => {
-    const actions = el('td', { class: 'actions' });
-
-    // Every project belongs to somebody, and the only ones anybody is handed are
-    // their own - so this is true of every row here. It stays because it is the
-    // question the delete button is really asking: you may remove your own way of
-    // organising your hours whatever your project permissions say.
-    const mine = me.user && p.ownerId === subjectID();
-
-    // Offered whatever the status. An archived project is a closed record and a
-    // name typed wrongly is still typed wrongly in it - and the server does not
-    // refuse the change, so a screen that hid the button would be inventing a
-    // rule of its own rather than reflecting one.
-    if (can('projects:write')) {
-      actions.append(el('button', {
-        class: 'link',
-        'data-action': 'edit',
-        text: t('action.edit', 'edit'),
-        onclick: () => editProject(p),
-      }));
-    }
-
-    if (can('projects:write') && p.status === 'active') {
-      actions.append(el('button', {
-        class: 'link',
-        text: t('action.complete', 'complete'),
-        onclick: () => patch(`/projects/${p.id}`, { status: 'completed' }, t('msg.projectCompleted', 'Project completed'), refreshAll),
-      }));
-    }
-
-    if (can('projects:archive') && p.status === 'completed') {
-      actions.append(el('button', {
-        class: 'link',
-        text: t('action.archive', 'archive'),
-        onclick: () => post(`/projects/${p.id}/archive`, null, t('msg.projectArchived', 'Project archived'), refreshAll),
-      }));
-    }
-
-    if (can('projects:delete') || mine) {
-      actions.append(deleteButton({
-        label: `${t('field.project', 'Project')} "${p.name}"`,
-        path: `/projects/${p.id}`,
-        message: t('msg.projectDeleted', 'Project deleted'),
-        after: refreshAll,
-      }));
-    }
-
-    const period = `${fmtDate(p.startDate)} – ${p.endDate ? fmtDate(p.endDate) : t('project.open', 'open')}`;
-
-    const name = el('td', { class: 'text', text: p.name });
-    if (p.budgetHours) name.append(budgetLine(p));
-    if (p.billable) name.append(rateLine(p));
-    // No "this one is yours" shade: they all are, and a table shaded from top to
-    // bottom says nothing that an unshaded one does not.
-    return el('tr', {},
-      name,
-      // A project needs no period, so the column stays quiet when there is none:
-      // it is one person's way of organising their hours, not a plan.
-      el('td', { class: p.startDate ? '' : 'empty', text: p.startDate ? period : '–' }),
-      el('td', { class: 'text', text: p.description || '–' }),
-      el('td', {}, statusBadge(p.status)),
-      actions,
-    );
-  });
-
-  fillTable($('#table-projects tbody'), rows, 5, t('project.empty', 'No projects yet.'));
-
-  // The templates name projects by number, and whether one can still be chosen
-  // depends on its project being open - which is what just changed.
-  if (entryTemplates.length) drawTemplates();
-}
-
-/** Opens an existing project in the form above the table. */
-function editProject(project) {
-  const form = $('#form-project');
-  if (!form) return;
-
-  form.elements.id.value = String(project.id);
-  form.elements.name.value = project.name;
-  form.elements.description.value = project.description ?? '';
-
-  // Through setDateField, because the visible box beside a date input is a second
-  // field kept in step with it: writing the value straight in changes the one
-  // nobody looks at and leaves the one everybody does reading the old date.
-  setDateField(form.elements.startDate, project.startDate ?? '');
-  setDateField(form.elements.endDate, project.endDate ?? '');
-  form.elements.budgetHours.value = project.budgetHours ?? '';
-  form.elements.billable.checked = Boolean(project.billable);
-  form.elements.hourlyRate.value = project.hourlyRate ?? '';
-  form.elements.currency.value = project.currency ?? '';
-
-  swapTheLabel($('#project-form-title'), 'project.edit', 'Edit project');
-  swapTheLabel($('#project-submit'), 'action.save', 'Save');
-  $('#project-cancel').hidden = false;
-
-  switchView('projects');
-  form.scrollIntoView({ block: 'nearest' });
-  form.elements.name.focus();
-}
-
-/** What a billable project's hours are charged at, as a line under its name. */
-function rateLine(project) {
-  return el('span', {
-    class: 'rate-line',
-    text: project.hourlyRate
-      ? fillIn(t('project.ratePerHour', 'billable at {0} an hour'), [fmtMoney(project.hourlyRate, project.currency)])
-      : t('project.noRate', 'billable, no rate yet'),
-  });
-}
-
-/**
- * How much of a project's budget is booked, as a line under its name: marked from
- * four fifths and again past the whole, with the share written out so the mark is
- * never the only thing saying it.
- */
-function budgetLine(project) {
-  const share = project.bookedHours / project.budgetHours;
-
-  return el('span', {
-    class: `budget-line ${share >= 1 ? 'over' : share >= 0.8 ? 'near' : ''}`,
-    text: fillIn(t('project.budgetUsed', '{0} of {1} booked · {2} %'),
-      [fmtHours(project.bookedHours), fmtHours(project.budgetHours), Math.round(share * 100)]),
-  });
-}
-
-/**
- * Says so when the hours booked take a project past four fifths of its budget or
- * past the whole of it. News, so a notice: the line in the project list says it
- * for as long as it stays true.
- *
- * Measured against the hours the screen last had, which is what the person was
- * last shown. With no budget anywhere this costs not even the request.
- */
-async function noticeBudgets() {
-  const before = new Map(cache.projects.filter((p) => p.budgetHours).map((p) => [p.id, p.bookedHours]));
-  if (before.size === 0) return;
-
-  await loadProjects();
-
-  for (const project of cache.projects) {
-    const was = before.get(project.id);
-    if (was === undefined || !project.budgetHours) continue;
-
-    const crossed = [1, 0.8].find((share) => was < project.budgetHours * share
-      && project.bookedHours >= project.budgetHours * share);
-
-    if (crossed === 1) {
-      toast(fillIn(t('project.budgetReached', '{0} has used its whole budget of {1}.'),
-        [project.name, fmtHours(project.budgetHours)]), 'ok');
-    } else if (crossed) {
-      toast(fillIn(t('project.budgetNear', '{0} has used four fifths of its budget of {1}.'),
-        [project.name, fmtHours(project.budgetHours)]), 'ok');
-    }
-  }
-}
-
-/** Puts the form back to making one. */
-function resetProjectForm() {
-  const form = $('#form-project');
-  if (!form) return;
-
-  form.reset();
-  form.elements.id.value = '';
-
-  // Emptied through setDateField for the same reason they were filled through it,
-  // and only then today back into the start: reset empties it, and making a
-  // second project should ask no more than the first one did.
-  setDateField(form.elements.startDate, '');
-  setDateField(form.elements.endDate, '');
-  fillToday(form.elements.startDate);
-
-  swapTheLabel($('#project-form-title'), 'project.create', 'Create project');
-  swapTheLabel($('#project-submit'), 'action.create', 'Create');
-  $('#project-cancel').hidden = true;
-}
-
-/**
- * Whether this caller may change this entry's figures.
- *
- * Whose it is and whether they may write their own time, and nothing else. It used
- * to also say that an approved entry is refused by the API however it is reached -
- * a rule that went with the review path, and a comment that outlived it by
- * describing a refusal the server no longer makes.
- *
- * The answer lives here so the list, the calendar and the row click cannot
- * disagree about it.
- */
-function mayEditTimesheet(entry) {
-  const mine = me.user && entry.userId === subjectID();
-
-  return Boolean(mine) && can('timesheets:write:own');
-}
-
-/**
- * Opens an existing entry in the booking form.
- *
- * The API has taken a full update since the beginning, but nothing in the
- * interface offered one: the only way to correct a typed figure was to delete the
- * entry and type it again. The form doubles as the editor rather than being
- * duplicated, so the field rules - step="any", the 24 hour ceiling, the
- * description bound - hold for a correction exactly as they do for a new booking.
- */
-function editTimesheet(entry) {
-  const form = $('#form-timesheet');
-  if (!form) return;
-
-  form.elements.id.value = String(entry.id);
-  form.elements.projectId.value = entry.projectId ? String(entry.projectId) : '';
-  setDateField(form.elements.date, entry.date);
-  form.elements.durationHours.value = String(entry.durationHours);
-  form.elements.description.value = entry.description ?? '';
-
-  swapTheLabel($('#timesheet-form-title'), 'ts.edit', 'Edit entry');
-  swapTheLabel($('#timesheet-submit'), 'action.save', 'Save');
-  $('#timesheet-cancel').hidden = false;
-
-  switchView('timesheets');
-  openTheTabOf(form);
-  form.scrollIntoView({ block: 'nearest' });
-  form.elements.durationHours.focus();
-}
-
 /**
  * Puts words on an element that says two different things, and says which.
  *
@@ -5736,8 +4849,8 @@ function editTimesheet(entry) {
  * label that names a database or a file - carries the data-i18n it was written
  * with in the markup, and applyLanguage translates every one of those from its
  * key. So changing the language put the declared message back over the shown one:
- * a correction went back to reading "Book time" above a form still holding the
- * entry it had opened, with a button offering to book it. The heading disagreed
+ * a correction went back to reading "Add user" above a form still holding the
+ * account it had opened, with a button offering to add it. The heading disagreed
  * with the form, and the button disagreed with what pressing it would do.
  *
  * The English source travels too, and that half is easy to miss. applyLanguage
@@ -5759,928 +4872,6998 @@ function swapTheLabel(node, key, english) {
   setLeadingText(node, t(key, english));
 }
 
-/** Puts the form back to booking a new entry. */
-function resetTimesheetForm() {
-  const form = $('#form-timesheet');
-  if (!form) return;
+// --------------------------------------------------------------- calendars
 
-  form.elements.id.value = '';
-  form.elements.durationHours.value = '';
-  form.elements.description.value = '';
+/** The weekdays in the order a working week is written, Monday first; 0 is Sunday. */
+const CALENDAR_WEEK = [1, 2, 3, 4, 5, 6, 0];
 
-  swapTheLabel($('#timesheet-form-title'), 'ts.book', 'Book time');
-  swapTheLabel($('#timesheet-submit'), 'action.book', 'Book');
-  $('#timesheet-cancel').hidden = true;
+/** A weekday's name in the reader's language, in full or as short as it is written. */
+function weekdayName(weekday, width = 'long') {
+  // The 7th of January 2024 was a Sunday, so the 7th plus the weekday is that day.
+  return new Intl.DateTimeFormat(activeLocale(), { weekday: width, timeZone: 'UTC' })
+    .format(new Date(Date.UTC(2024, 0, 7 + weekday)));
 }
 
-/** The templates this account has kept, as they were last loaded. */
-let entryTemplates = [];
+/** Whose public holidays a calendar keeps, in words. */
+function calendarHolidays(place) {
+  if (!place) return t('calendar.installation', "the installation's");
+  if (place === 'none') return t('holiday.noRegion', 'No public holidays');
 
-/** Loads the account's templates into the booking form's picker and their card. */
-async function loadTemplates() {
-  if (!can('timesheets:write:own')) return;
-
-  entryTemplates = (await api('/me/templates'))?.items ?? [];
-
-  redrawable('templates', drawTemplates);
-}
-
-/** What a template fills in, in one line: its project, its hours, its description. */
-function templateLabel(template) {
-  return [
-    template.projectId ? projectName(template.projectId) : t('ts.noProject', 'No project'),
-    template.durationHours ? fmtHours(template.durationHours) : null,
-    template.description,
-  ].filter(Boolean).join(' · ');
+  return place.includes('-') ? regionName(place) : countryName(place);
 }
 
 /**
- * Whether a template can still fill the form: the project it names, if it names
- * one, is still among those the form offers.
- *
- * A template keeps its project by number, and the project can be finished, handed
- * on or deleted after it was saved. Filling the form with one of those would set
- * the project field to a choice it does not have - which a select answers by
- * quietly showing "No project" - so the template is offered but cannot be chosen.
+ * Reads the calendars and draws their card, for whoever sets up queues; the
+ * countries their public holidays are chosen from come with them, for somebody
+ * whose screens never loaded the installation's holiday card.
  */
-function templateUsable(template) {
-  return !template.projectId
-    || cache.projects.some((project) => project.id === template.projectId && project.status === 'active');
+async function loadCalendars() {
+  const page = await api('/calendars');
+  cache.calendars = page?.items ?? [];
+  if (page?.holidayCountries?.length) holidayCountries = page.holidayCountries;
+
+  fillTable($('#table-calendar tbody'), cache.calendars.map(calendarRow), 5,
+    t('calendar.empty', 'No calendars yet.'));
+
+  const form = $('#form-calendar');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillCalendarForm(form, null);
 }
 
-/** Draws the picker in the booking form and the card listing the templates. */
-function drawTemplates() {
-  const picker = $('#ts-template');
-
-  if (picker) {
-    // Marked as filled by a loader, so signing out empties it with the others.
-    picker.dataset.filled = '';
-    picker.replaceChildren(
-      el('option', { value: '', text: t('tpl.choose', 'Choose a template …') }),
-      ...entryTemplates.map((template) => el('option', {
-        value: String(template.id),
-        text: templateUsable(template)
-          ? templateLabel(template)
-          : `${templateLabel(template)} (${t('tpl.closed', 'its project takes no bookings')})`,
-        disabled: !templateUsable(template),
+/** One calendar as a row of its card's table. */
+function calendarRow(calendar) {
+  return el('tr', {},
+    el('td', { class: 'text', text: calendar.name }),
+    el('td', { class: 'text', text: calendar.zone || t('calendar.installation', "the installation's") }),
+    el('td', { class: 'text', text: calendarHolidays(calendar.holidayPlace) }),
+    el('td', { text: calendar.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editCalendar(calendar) }),
+      deleteButton({
+        label: `${t('entity.calendar', 'Calendar')} "${calendar.name}"`,
+        path: `/calendars/${calendar.id}`,
+        message: t('msg.calendarDeleted', 'Calendar deleted'),
+        after: refreshAll,
       })),
-    );
-  }
-
-  $('#ts-template-row').hidden = entryTemplates.length === 0;
-  $('#templates-card').hidden = entryTemplates.length === 0;
-
-  const rows = entryTemplates.map((template) => el('tr', {},
-    el('td', {
-      class: template.projectId ? 'text' : 'text empty',
-      text: template.projectId ? projectName(template.projectId) : t('ts.noProject', 'No project'),
-    }),
-    el('td', { class: 'num', text: template.durationHours ? fmtShare(template.durationHours) : '–' }),
-    el('td', { class: 'text', text: template.description ?? '' }),
-    el('td', { class: 'actions' }, deleteButton({
-      label: `${t('tpl.one', 'Template')} "${templateLabel(template)}"`,
-      path: `/me/templates/${template.id}`,
-      message: t('tpl.deleted', 'Template deleted'),
-      after: loadTemplates,
-    })),
-  ));
-
-  fillTable($('#table-templates tbody'), rows, 4, t('tpl.empty', 'No templates yet.'));
+  );
 }
 
 /**
- * Fills the booking form from a template: the project, the hours and the
- * description, each emptied where the template has none, so the form reads as it
- * did when the template was saved. The date stays - a template has none - and
- * nothing is booked: that is still the button.
+ * Fills the calendar form from a calendar, or for a new one: the zone and the
+ * public holidays offering the installation's own first, a box for each
+ * weekday's hours and a row for each free day.
  */
-function fillFromTemplate(template) {
-  const form = $('#form-timesheet');
-  if (!form) return;
+function fillCalendarForm(form, calendar) {
+  fillTimezoneSelect(form.elements.zone, calendar?.zone ?? '', t('calendar.installation', "the installation's"));
+  fillHolidayPickers(form, calendar?.holidayPlace ?? '', '',
+    el('option', { value: '', text: t('calendar.installation', "the installation's") }),
+    el('option', { value: 'none', text: t('holiday.noRegion', 'No public holidays') }));
 
-  form.elements.projectId.value = template.projectId ? String(template.projectId) : '';
-  form.elements.durationHours.value = template.durationHours ? String(template.durationHours) : '';
-  form.elements.description.value = template.description ?? '';
+  $('#calendar-hours').replaceChildren(...CALENDAR_WEEK.map((weekday) => el('label', {},
+    weekdayName(weekday),
+    el('input', {
+      type: 'text',
+      name: `hours${weekday}`,
+      maxlength: '120',
+      pattern: HOURS_PATTERN,
+      placeholder: '08:00–12:00, 13:00–17:00',
+      value: (calendar?.hours ?? []).filter((stretch) => stretch.weekday === weekday)
+        .map((stretch) => `${stretch.from}–${stretch.to}`).join(', '),
+    }))));
 
-  // The hours, which are what is usually checked or typed next.
-  form.elements.durationHours.focus();
-}
-
-/** Keeps what the booking form holds - all but the date - as a template. */
-function saveAsTemplate() {
-  const form = $('#form-timesheet');
-  if (!form) return;
-
-  const { projectId, durationHours, description } = form.elements;
-
-  const body = {
-    projectId: projectId.value ? Number(projectId.value) : null,
-    durationHours: durationHours.value === '' ? null : Number(durationHours.value),
-    description: description.value.trim() || null,
-  };
-
-  mutate(() => api('/me/templates', { method: 'POST', body: JSON.stringify(body) }),
-    t('tpl.saved', 'Saved as a template'), loadTemplates);
-}
-
-/** Forgets the templates the picker and the card showed, for an account that has signed out. */
-function forgetTheTemplates() {
-  entryTemplates = [];
-
-  $('#ts-template-row').hidden = true;
-  $('#templates-card').hidden = true;
+  $('#calendar-free-days').replaceChildren(...(calendar?.freeDays ?? []).map(freeDayRow));
 }
 
 /**
- * The actions one time entry offers, as a table cell.
- *
- * Shared between the list and the calendar's day view, which render the same
- * records: two copies of these rules would be two places for "whose entry is this"
- * to be answered differently, and the copy nobody was looking at would be the
- * wrong one.
- *
- * What is offered depends on the status and on the caller, because the API refuses
- * the rest anyway - the API is the authority here and this only avoids offering
- * what it would turn down.
+ * One free day as a row of the calendar form: its date, whether it comes every
+ * year, its name. Filled before it is put into the form, so that filling it is
+ * not taken for somebody editing.
  */
-function timesheetActions(entry) {
-  const actions = el('td', { class: 'actions' });
-  const mayEdit = mayEditTimesheet(entry);
+function freeDayRow(free = { day: '', recurring: false, name: '' }) {
+  const date = el('input', { type: 'date', name: 'freeDay', required: true });
+  const row = el('div', { class: 'row calendar-day' },
+    el('label', {}, t('calendar.day', 'Date'), date),
+    el('label', { class: 'switch' },
+      el('input', { type: 'checkbox', name: 'freeDayRecurring', checked: free.recurring }),
+      el('span', { class: 'switch-track' }),
+      el('span', { class: 'switch-label', text: t('calendar.everyYear', 'every year') })),
+    el('label', {}, t('field.name', 'Name'),
+      el('input', { type: 'text', name: 'freeDayName', maxlength: '255', value: free.name })),
+    el('button', { type: 'button', class: 'link', text: t('calendar.removeDay', 'remove'), onclick: () => row.remove() }));
 
-  if (mayEdit) {
-    actions.append(el('button', {
-      class: 'link',
-      text: t('action.edit', 'edit'),
-      onclick: () => editTimesheet(entry),
-    }));
-  }
+  enhanceDateFields(row);
+  setDateField(date, free.day);
 
-  if (mayEdit) {
-    actions.append(deleteButton({
-      label: `${fmtDate(entry.date)}, ${fmtHours(entry.durationHours)}`,
-      path: `/timesheets/${entry.id}`,
-      message: t('msg.entryDeleted', 'Entry deleted'),
-      after: reloadTimeViews,
-    }));
-  }
-
-  // What it said before, for one of the reader's own entries saved again since it
-  // was booked - the only ones with a history to show, and the only ones whose
-  // history the server will show them.
-  if (entry.userId === subjectID() && entry.updatedAt && entry.updatedAt !== entry.createdAt) {
-    actions.append(el('button', {
-      class: 'link',
-      'data-action': 'history',
-      text: t('history.open', 'history'),
-      onclick: () => mutate(() => showEntryHistory(entry), null, null),
-    }));
-  }
-
-  return actions;
+  return row;
 }
 
 /**
- * Shows what an entry said before each correction, the most recently replaced
- * first: when it was replaced, and its day, project, hours and description then.
- *
- * A dialog over the screen rather than a card on one, because the entry is offered
- * in two places - the list and the calendar's day - and its history belongs to
- * neither. Read only: nothing in a history is put back by pressing it.
+ * The hours the weekday boxes say. Each box is held to HOURS_PATTERN, which the
+ * browser checks before the form is sent, so every stretch here reads; whether
+ * stretches overlap or run backwards is the server's to refuse, which it does by
+ * naming the hours.
  */
-async function showEntryHistory(entry) {
-  const history = (await api(`/timesheets/${entry.id}/revisions`))?.items ?? [];
-  const previous = document.activeElement;
+function calendarHoursOf(form) {
+  const hours = [];
 
-  const projectOf = (id) => (id == null
-    ? t('ts.noProject', 'No project')
-    : cache.projects.find((p) => p.id === id)?.name ?? t('history.unlistedProject', 'a project no longer listed'));
-
-  const body = history.length
-    ? el('div', { class: 'table-wrap' }, el('table', { class: 'history-table' },
-      el('thead', {}, el('tr', {},
-        el('th', { text: t('history.replaced', 'Replaced') }),
-        el('th', { text: t('field.date', 'Date') }),
-        el('th', { text: t('field.project', 'Project') }),
-        el('th', { class: 'num', text: t('field.hours', 'Hours') }),
-        el('th', { text: t('field.description', 'Description') }))),
-      el('tbody', {}, ...history.map((version) => el('tr', {},
-        el('td', {}, fmtMoment(version.replacedAt), version.replacedBy ? el('span', {
-          class: 'acted-by',
-          text: fillIn(t('team.replacedBy', 'by {0}'), [actorName(version.replacedBy)]),
-        }) : null),
-        el('td', { text: fmtDate(version.date) }),
-        el('td', { class: 'text', text: projectOf(version.projectId) }),
-        el('td', { class: 'num', text: fmtHours(version.durationHours) }),
-        el('td', { class: 'text', text: version.description ?? '' }))))))
-    : el('p', { class: 'muted', text: t('history.none', 'Saved again since it was booked, without anything in it changing.') });
-
-  const card = el('div', { class: 'overlay-card history-card', role: 'dialog', 'aria-modal': 'true' },
-    el('h2', { text: fillIn(t('history.title', 'Earlier versions of the entry from {0}'), [fmtDate(entry.date)]) }),
-    body);
-
-  const overlay = el('div', { class: 'overlay history-overlay' }, card);
-
-  const onKey = (event) => {
-    if (event.key === 'Escape') close();
-  };
-
-  function close() {
-    document.removeEventListener('keydown', onKey);
-    overlay.remove();
-
-    if (previous instanceof HTMLElement) previous.focus();
+  for (const weekday of CALENDAR_WEEK) {
+    for (const part of form.elements[`hours${weekday}`].value.split(',')) {
+      const found = part.trim().match(/^(\d{2}:\d{2})\s*[-–]\s*(\d{2}:\d{2})$/);
+      if (found) hours.push({ weekday, from: found[1], to: found[2] });
+    }
   }
 
-  const done = el('button', {
-    class: 'secondary', type: 'button', text: t('history.close', 'Close'), onclick: close,
+  return hours;
+}
+
+/** The free days the form's rows say. */
+function calendarFreeDaysOf(form) {
+  return $$('.calendar-day', form).map((row) => ({
+    day: $('input[name="freeDay"]', row).value,
+    recurring: $('input[name="freeDayRecurring"]', row).checked,
+    name: $('input[name="freeDayName"]', row).value.trim(),
+  }));
+}
+
+/** Sends the calendar form, making a calendar or correcting one. */
+function saveCalendar(form) {
+  const hours = calendarHoursOf(form);
+  const id = form.elements.id.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    zone: form.elements.zone.value,
+    holidayPlace: chosenPlace(form),
+    hours,
+    freeDays: calendarFreeDaysOf(form),
+    valid: form.elements.valid.checked,
   });
 
-  card.append(el('div', { class: 'row confirm-actions' }, done));
-
-  document.addEventListener('keydown', onKey);
-  document.body.append(overlay);
-  done.focus();
+  mutate(
+    () => (id ? api(`/calendars/${id}`, { method: 'PUT', body }) : api('/calendars', { method: 'POST', body })),
+    id ? t('msg.calendarSaved', 'Calendar saved') : t('msg.calendarCreated', 'Calendar created'),
+    async () => { resetCalendarForm(); await refreshAll(); },
+  );
 }
 
-/**
- * Reloads everything that shows time entries.
- *
- * The list and the calendar render the same records from two requests, so a
- * change that refreshes only one of them leaves the other showing yesterday -
- * which is what booking an entry and switching to the calendar used to do.
- */
-async function reloadTimeViews() {
-  // The grid first and only while it is on screen - it is drawn again on arrival
-  // anyway. First, because it is usually what was just typed into: until it is
-  // drawn again, a cell just booked has no entry behind it, and a number typed
-  // into it in the meantime would book a second one.
-  if (!$('#view-week')?.hidden) await loadWeekGrid();
+/** Opens a calendar in the form, to correct it. */
+function editCalendar(calendar) {
+  const form = $('#form-calendar');
 
-  await loadTimesheets();
-  await loadCalendar();
+  form.elements.id.value = String(calendar.id);
+  form.elements.name.value = calendar.name;
+  form.elements.description.value = calendar.description;
+  form.elements.valid.checked = calendar.valid;
+  fillCalendarForm(form, calendar);
 
-  // And the budgets the hours just booked count towards.
-  await noticeBudgets();
+  // Drawn rather than declared with a key, because it carries the calendar's
+  // name; see editRole for why the key has to come off.
+  const heading = $('#calendar-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
 
-  // And the running balance they moved, which may have crossed a bound.
-  await loadNotices();
-}
-
-/**
- * How many entries the list asks for at a time.
- *
- * A screenful rather than everything. This list used to ask for every entry the
- * account had ever booked, on every load and again after every save, and the
- * request grew for as long as somebody kept recording time - the kind of slow
- * that arrives a week at a time and never becomes a bug report.
- *
- * Smaller than the API's own default page, deliberately: the endpoint answers
- * clients that are fetching rather than showing, and a table asks for what it can
- * put on a screen. Both are bounded, which is the part that matters.
- */
-const TIMESHEET_PAGE = 25;
-
-/** The entries the table is showing, which is a page of them at a time. */
-let timesheetEntries = [];
-
-/** How many there are altogether, which is what says whether there are more. */
-let timesheetTotal = 0;
-
-/** How many loads of the entries have begun, so an answer can tell it was overtaken. */
-let timesheetLoads = 0;
-
-/**
- * Loads the entries, one page at a time.
- *
- * `more` appends the next page instead of starting again. Everything else -
- * changing the filter, booking, correcting, deleting - starts again from the
- * first page on purpose: the list has changed underneath, and an offset into a
- * list that has moved skips one entry and repeats another.
- *
- * Only the newest load's answer is kept. Each one emptied the list as it began
- * and added its answer when it came back, so two at once - stepping through the
- * filter with the arrow keys sends one per step - put two projects' entries under
- * a filter naming one, and two presses of "more" the same page twice.
- */
-async function loadTimesheets(more = false) {
-  if (!can('timesheets:read:own')) return;
-
-  const params = timesheetFilterParams();
-
-  const before = more ? timesheetEntries : [];
-
-  params.set('limit', String(TIMESHEET_PAGE));
-  params.set('offset', String(before.length));
-
-  timesheetLoads += 1;
-  const asked = timesheetLoads;
-
-  const answer = await api(`/timesheets?${params}`);
-
-  if (asked !== timesheetLoads) return;
-
-  const page = answer?.items ?? [];
-
-  // What the server says, not what arrived: those differ exactly when there is
-  // another page, which is the whole question this screen has to answer.
-  timesheetTotal = answer?.totalCount ?? page.length;
-  timesheetEntries = before.concat(page);
-
-  const entries = timesheetEntries;
-
-  // Named `entry` rather than `t`, which would shadow the translation helper.
-  // No user column and no "this row is yours" highlight: every row is, so a column
-  // repeating one name and a shade behind every line say nothing.
-  const rows = entries.map((entry) => {
-    const actions = timesheetActions(entry);
-
-    return el('tr', {},
-      el('td', { text: fmtDate(entry.date) }),
-      el('td', {
-        class: entry.projectId ? 'text' : 'text empty',
-        text: entry.projectId ? projectName(entry.projectId) : t('ts.noProject', 'No project'),
-      }),
-      el('td', { class: 'num', text: fmtNumber(entry.durationHours) }),
-      el('td', { class: 'text' }, entry.description || '–', ...actedByLines(entry)),
-      actions,
-    );
+  redrawable('calendarFormTitle', () => {
+    heading.textContent = t('calendar.edit', 'Edit the calendar {0}').replace('{0}', calendar.name);
   });
 
-  fillTable($('#table-timesheets tbody'), rows, 5, t('ts.empty', 'No entries for this filter.'));
-
-  showTimesheetTally();
-
-  // The link answers to the filter as soon as the list does, from the count it
-  // already has: the new count comes back a request later, and until then a list
-  // of the waiting entries stood under the link that leads to it.
-  redrawable('unassigned', drawUnassigned);
-
-  await countUnassigned();
+  swapTheLabel($('#calendar-submit'), 'action.save', 'Save');
+  $('#calendar-cancel').hidden = false;
+  form.elements.name.focus();
 }
 
-/** How many entries are waiting for a project, as last counted. */
-let unassignedEntries = 0;
+/** Puts the calendar form back to making a new one. */
+function resetCalendarForm() {
+  const form = $('#form-calendar');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillCalendarForm(form, null);
+
+  stopRedrawing('calendarFormTitle');
+  swapTheLabel($('#calendar-form-title'), 'calendar.create', 'Add a calendar');
+  swapTheLabel($('#calendar-submit'), 'action.create', 'Create');
+  $('#calendar-cancel').hidden = true;
+}
+
+/** Wires the calendar form. */
+function wireCalendars() {
+  const form = $('#form-calendar');
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveCalendar(form); });
+  form.elements.country.addEventListener('change', () => fillRegions(form));
+  $('#calendar-add-day').addEventListener('click', () => $('#calendar-free-days').append(freeDayRow()));
+  $('#calendar-cancel').addEventListener('click', resetCalendarForm);
+}
+
+// ---------------------------------------------------------- service levels
+
+/** A service level's name, or "none" for a ticket or queue owed nothing. */
+function levelName(id) {
+  if (!id) return t('sla.none', 'none');
+
+  return cache.levels.find((level) => level.id === id)?.name ?? `#${id}`;
+}
 
 /**
- * Counts the entries still waiting for a project, for the link above the list.
- *
- * Hours can be recorded first and given a project later, and those are the ones
- * this collects. Counted whatever the list is narrowed to - a period, a search -
- * because the question is how many are waiting at all, not how many the filter
- * happens to show.
+ * Fills a choice of service level: those still offered, and the one already
+ * chosen, retired or not, because it may stay. What choosing nothing means is
+ * the caller's to say - no level for a queue, the queue's for a new ticket.
  */
-async function countUnassigned() {
-  const answer = await api(`/timesheets?${forSubject({ projectId: 'none', limit: '1' })}`);
-
-  unassignedEntries = answer?.totalCount ?? 0;
-
-  redrawable('unassigned', drawUnassigned);
+function fillLevelChoices(select, current, nothing) {
+  fillSelect(select,
+    cache.levels.filter((level) => level.valid || level.id === current)
+      .map((level) => ({ value: String(level.id), label: level.name })),
+    { placeholder: nothing, labelKey: 'label', valueKey: 'value' });
+  select.value = current ? String(current) : '';
 }
 
-/** Writes the link: hidden while nothing waits, and while the list already shows what does. */
-function drawUnassigned() {
-  const link = $('#ts-unassigned');
-  if (!link) return;
+/** Draws the service levels' card, for whoever sets up queues. */
+function loadSlaCard() {
+  const calendarOf = (id) => cache.calendars.find((calendar) => calendar.id === id)?.name ?? `#${id}`;
+  const minutes = (value) => (value ? String(value) : '–');
 
-  link.hidden = unassignedEntries === 0 || $('#filter-ts-project')?.value === 'none';
-  link.textContent = fillIn(t('ts.unassigned', '{0} without a project'), [unassignedEntries]);
+  fillTable($('#table-sla tbody'), cache.levels.map((level) => el('tr', {},
+    el('td', { class: 'text', text: level.name }),
+    el('td', { class: 'text', text: level.calendarId ? calendarOf(level.calendarId) : t('sla.aroundTheClock', 'around the clock') }),
+    el('td', { text: minutes(level.firstResponseMinutes) }),
+    el('td', { text: minutes(level.solutionMinutes) }),
+    el('td', { text: level.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editSla(level) }),
+      deleteButton({
+        label: `${t('entity.sla', 'Service level')} "${level.name}"`,
+        path: `/service-levels/${level.id}`,
+        message: t('msg.slaDeleted', 'Service level deleted'),
+        after: refreshAll,
+      })),
+  )), 6, t('sla.empty', 'No service levels yet.'));
+
+  const form = $('#form-sla');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillSlaCalendars(form, null);
+}
+
+/** Fills the service level form's choice of calendar, around the clock first. */
+function fillSlaCalendars(form, current) {
+  fillSelect(form.elements.calendarId,
+    cache.calendars.filter((calendar) => calendar.valid || calendar.id === current)
+      .map((calendar) => ({ value: String(calendar.id), label: calendar.name })),
+    { placeholder: t('sla.aroundTheClock', 'around the clock'), labelKey: 'label', valueKey: 'value' });
+  form.elements.calendarId.value = current ? String(current) : '';
+}
+
+/** Opens a service level in the form, to correct it. */
+function editSla(level) {
+  const form = $('#form-sla');
+
+  form.elements.id.value = String(level.id);
+  form.elements.name.value = level.name;
+  form.elements.description.value = level.description ?? '';
+  form.elements.firstResponseMinutes.value = String(level.firstResponseMinutes);
+  form.elements.updateMinutes.value = String(level.updateMinutes);
+  form.elements.solutionMinutes.value = String(level.solutionMinutes);
+  form.elements.valid.checked = level.valid;
+  fillSlaCalendars(form, level.calendarId);
+
+  // Drawn rather than declared with a key, because it carries the level's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#sla-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('slaFormTitle', () => {
+    heading.textContent = t('sla.edit', 'Edit the service level {0}').replace('{0}', level.name);
+  });
+
+  swapTheLabel($('#sla-submit'), 'action.save', 'Save');
+  $('#sla-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the service level form back to making a new one. */
+function resetSlaForm() {
+  const form = $('#form-sla');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillSlaCalendars(form, null);
+
+  stopRedrawing('slaFormTitle');
+  swapTheLabel($('#sla-form-title'), 'sla.create', 'Add a service level');
+  swapTheLabel($('#sla-submit'), 'action.create', 'Create');
+  $('#sla-cancel').hidden = true;
+}
+
+/** Sends the service level form, making a level or correcting one. */
+function saveSla(form) {
+  const id = form.elements.id.value;
+  const calendar = form.elements.calendarId.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    firstResponseMinutes: Number(form.elements.firstResponseMinutes.value),
+    updateMinutes: Number(form.elements.updateMinutes.value),
+    solutionMinutes: Number(form.elements.solutionMinutes.value),
+    valid: form.elements.valid.checked,
+
+    // Said out loud when there is none: a calendar sent as nothing cannot be
+    // told apart from one that was not sent, and a correction would keep it.
+    ...(calendar ? { calendarId: Number(calendar) } : { clearCalendar: true }),
+  });
+
+  mutate(
+    () => (id ? api(`/service-levels/${id}`, { method: 'PUT', body }) : api('/service-levels', { method: 'POST', body })),
+    id ? t('msg.slaSaved', 'Service level saved') : t('msg.slaCreated', 'Service level created'),
+    async () => { resetSlaForm(); await refreshAll(); },
+  );
+}
+
+/** Wires the service level form. */
+function wireSla() {
+  const form = $('#form-sla');
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveSla(form); });
+  $('#sla-cancel').addEventListener('click', resetSlaForm);
+}
+
+// -------------------------------------------------------------- automation
+
+/**
+ * What each step a macro can take is called. The server names them as KIX18
+ * names its ticket macro actions, which is right for the wire and nobody's word
+ * on a screen.
+ */
+const MACRO_STEP_TITLES = {
+  StateSet: 'Set the state',
+  PrioritySet: 'Set the priority',
+  TypeSet: 'Set the type',
+  TeamSet: 'Move to a queue',
+  OwnerSet: 'Set the owner',
+  ResponsibleSet: 'Set the responsible',
+  LockSet: 'Lock or unlock',
+  TitleSet: 'Set the title',
+  ContactSet: 'Set the contact',
+  OrganisationSet: 'Set the organisation',
+  ArticleCreate: 'Add an article',
+  TicketDelete: 'Delete the ticket',
+};
+
+/** A step a macro can take, in the reader's language. */
+function macroStepName(type) {
+  return t(`macrostep.${type}`, MACRO_STEP_TITLES[type] ?? type);
 }
 
 /**
- * Says how much of the list is on screen, and offers the rest.
- *
- * Both go down together once everything is showing. A table that is complete and
- * one that has been cut short are otherwise the same picture, which is the only
- * way bounding the request could have gone wrong quietly.
+ * How many steps one macro holds, as model.MaxMacroActions says. Written here
+ * because the form needs it before it has asked anything;
+ * TestTheRowsAFormAddsStopWhereTheServerDoes holds the two together.
  */
-function showTimesheetTally() {
-  const more = timesheetEntries.length < timesheetTotal;
+const MAX_MACRO_STEPS = 50;
 
-  $('#ts-more-row').hidden = !more;
+/**
+ * Fills the automation screen, for whoever may set it up. What a step and a
+ * job's criteria can name is read through the automation's own choices, which
+ * the right to set it up reads alone: a role allowed the automation and not the
+ * tickets, the accounts or the customers was offered nothing to choose, while
+ * the server took a step naming any record that is there.
+ */
+async function loadAutomation() {
+  if (!can('automation:write')) {
+    cache.macros = [];
+    cache.macroSteps = [];
+    cache.plans = [];
+    cache.planEvents = [];
+    cache.jobs = [];
 
-  $('#ts-shown').textContent = more
-    ? fillIn(t('ts.showing', 'Showing {0} of {1} entries'),
-      [timesheetEntries.length, timesheetTotal])
+    return;
+  }
+
+  const [macros, plans, jobs, choices] = await Promise.all(
+    ['/macros', '/exec-plans', '/jobs', '/automation/choices'].map((path) => api(path)),
+  );
+
+  cache.macros = macros?.items ?? [];
+  cache.macroSteps = macros?.steps ?? [];
+  cache.plans = plans?.items ?? [];
+  cache.planEvents = plans?.events ?? [];
+  cache.jobs = jobs?.items ?? [];
+  cache.stepChoices = {
+    queues: choices?.queues ?? [],
+    states: choices?.states ?? [],
+    priorities: choices?.priorities ?? [],
+    types: choices?.types ?? [],
+    accounts: choices?.accounts ?? [],
+  };
+
+  fillTable($('#table-macro tbody'), cache.macros.map(macroRow), 4, t('macro.empty', 'No macros yet.'));
+  fillSelect($('#macro-step-kind'),
+    cache.macroSteps.map((step) => ({ value: step.type, label: macroStepName(step.type) })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  const form = $('#form-macro');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillMacroSteps([]);
+
+  fillTable($('#table-plan tbody'), cache.plans.map(planRow), 4, t('plan.empty', 'No execution plans yet.'));
+
+  const planForm = $('#form-plan');
+  if (planForm && !beingEdited(planForm) && !planForm.elements.id.value) fillPlanForm(planForm, null);
+
+  fillTable($('#table-job tbody'), cache.jobs.map(jobRow), 6, t('job.empty', 'No jobs yet.'));
+  fillSelect($('#job-macro-kind'),
+    cache.macros.filter((macro) => macro.valid).map((macro) => ({ value: String(macro.id), label: macro.name })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  const jobForm = $('#form-job');
+  if (jobForm && !beingEdited(jobForm) && !jobForm.elements.id.value) fillJobForm(jobForm, null);
+  showRowBounds();
+
+  fillSelect($('#form-run')?.elements.job,
+    cache.jobs.map((job) => ({ value: String(job.id), label: job.name })),
+    { labelKey: 'label', valueKey: 'value' });
+  await loadRuns();
+}
+
+/** One macro as a row of its card's table, its steps named in their order. */
+function macroRow(macro) {
+  const steps = macro.actions.map((action) => macroStepName(action.type)).join(', ');
+
+  return el('tr', {},
+    el('td', { class: 'text', text: macro.name }),
+    el('td', { class: 'text', text: steps || t('macro.noSteps', 'none') }),
+    el('td', { text: macro.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editMacro(macro) }),
+      deleteButton({
+        label: `${t('entity.macro', 'Macro')} "${macro.name}"`,
+        path: `/macros/${macro.id}`,
+        message: t('msg.macroDeleted', 'Macro deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/** Puts a macro's steps into the form in their order, or none for a new one. */
+function fillMacroSteps(actions) {
+  $('#macro-steps').replaceChildren(...actions.map((action) => macroStepRow(action.type, action.parameters)));
+  showRowBounds();
+}
+
+/**
+ * Turns a button that adds a row off once its list holds as many as the server
+ * keeps - a macro's steps, a job's macros - rather than letting somebody add one
+ * more and be refused the whole record on Save, and while there is nothing to
+ * add.
+ */
+function showRowBounds() {
+  for (const [button, choice, rows, most] of [
+    ['#macro-add-step', '#macro-step-kind', '#macro-steps > li', MAX_MACRO_STEPS],
+    ['#job-add-macro', '#job-macro-kind', '#job-macros > li', MAX_JOB_MACROS],
+  ]) {
+    const add = $(button);
+    if (add) add.disabled = !$(choice)?.options.length || $$(rows).length >= most;
+  }
+}
+
+/**
+ * Marks a form as being filled in once the rows it keeps in order change.
+ * Adding, moving and taking out a row raise no input event, and a reload would
+ * otherwise put the form back to what the server holds and take the rows with
+ * it.
+ */
+function rowsChanged(form) {
+  form.dataset.editing = 'yes';
+  showRowBounds();
+}
+
+/**
+ * One step of the macro form: what it does, a field for each value it reads in
+ * the order its definition gives them, and the buttons that move it and take it
+ * out. A step stays the kind it was added as; another kind is another step.
+ */
+function macroStepRow(type, parameters = {}) {
+  const definition = cache.macroSteps.find((step) => step.type === type);
+  const row = el('li', { 'data-step': type });
+  const name = el('strong', {});
+
+  // Declared with its key, so that a change of language reaches a step drawn
+  // before it.
+  swapTheLabel(name, `macrostep.${type}`, MACRO_STEP_TITLES[type] ?? type);
+
+  row.append(
+    orderedHead(row, name, '#macro-step-kind'),
+    el('div', { class: 'grid' },
+      ...(definition?.parameters ?? []).map((parameter) => stepField(parameter, parameters[parameter.name] ?? ''))),
+  );
+
+  if (type === 'StateSet') showWaiting(row);
+
+  return row;
+}
+
+/**
+ * The line heading a row of a list a form keeps in order: what the row is, and
+ * the buttons that move it and take it out. The buttons are declared with their
+ * keys, so that a change of language reaches a row drawn before it; a row taken
+ * out hands the focus to the choice of the next one to add.
+ */
+function orderedHead(row, name, next) {
+  const button = (mark, press) => {
+    const made = el('button', { type: 'button', class: `link ${mark}` });
+    made.addEventListener('click', () => press(made));
+
+    return made;
+  };
+  const up = button('ordered-up', (pressed) => moveRow(row, pressed, -1));
+  const down = button('ordered-down', (pressed) => moveRow(row, pressed, 1));
+  const out = button('ordered-remove', () => {
+    const form = row.closest('form');
+
+    row.remove();
+    rowsChanged(form);
+    $(next).focus();
+  });
+
+  swapTheLabel(up, 'macro.up', 'move up');
+  swapTheLabel(down, 'macro.down', 'move down');
+  swapTheLabel(out, 'macro.removeStep', 'remove');
+
+  return el('div', { class: 'row ordered-head' }, name, up, down, out);
+}
+
+/**
+ * Moves a row one place up or down. Moving a node takes the focus off it, so the
+ * button that was pressed is given it back: somebody moving a row from the
+ * keyboard presses again to move it further.
+ */
+function moveRow(row, button, by) {
+  const neighbour = by < 0 ? row.previousElementSibling : row.nextElementSibling;
+  if (!neighbour) return;
+
+  if (by < 0) neighbour.before(row);
+  else neighbour.after(row);
+
+  button.focus();
+  rowsChanged(row.closest('form'));
+}
+
+/**
+ * A step's field for one value it reads, as the value's kind asks: a record
+ * chosen by its id, a channel, a switch, a number of minutes or a text, bounded
+ * as the server bounds it. A person, a contact or an organisation can be left
+ * empty, which is how a step takes the ticket's away; a record a step needs is
+ * chosen rather than defaulted to whichever comes first.
+ *
+ * The fields carry no name, so that a draft of the form leaves them alone: a
+ * step is a row the script makes, and a draft can only put values back into
+ * fields that are there.
+ */
+function stepField(parameter, value) {
+  if (parameter.kind === 'switch') return stepSwitch(parameter, value);
+  if (parameter.kind === 'contact' || parameter.kind === 'organisation') return searchedStep(parameter, value);
+
+  let control;
+
+  if (parameter.kind === 'text') {
+    control = el('input', { type: 'text', maxlength: String(parameter.max), required: parameter.required, value });
+  } else if (parameter.kind === 'longText') {
+    control = el('textarea', { rows: '4', maxlength: String(parameter.max), required: parameter.required });
+    control.value = value;
+  } else if (parameter.kind === 'minutes') {
+    control = el('input', {
+      type: 'number', min: '0', max: String(parameter.max), step: '1', required: parameter.required, value,
+    });
+  } else {
+    let placeholder = t('ticket.nobody', 'nobody');
+    if (parameter.required) placeholder = parameter.kind === 'channel' ? undefined : t('macro.choose', 'Choose one');
+
+    control = el('select', { required: parameter.required });
+    fillSelect(control, stepChoices(parameter.kind, value), { placeholder, labelKey: 'label', valueKey: 'value' });
+    if (value || placeholder) control.value = value;
+  }
+
+  control.dataset.parameter = parameter.name;
+
+  return fieldLabelled(parameter.name, control, parameter.kind === 'longText');
+}
+
+/** A label naming a field as FIELD_NAMES does, around its control. */
+function fieldLabelled(name, control, wide = false) {
+  const label = el('label', wide ? { class: 'wide' } : {});
+
+  swapTheLabel(label, `field.${name}`, FIELD_NAMES[name] ?? name);
+  label.append(control);
+
+  return label;
+}
+
+/**
+ * What a step can name of one kind: the records still offered, and the one it
+ * names already, retired or not, so that opening a macro does not quietly change
+ * it - the server refuses a retired one on Save and says which step names it.
+ */
+function stepChoices(kind, current) {
+  const { queues, states, priorities, types } = cache.stepChoices;
+  const kept = (items) => items.filter((item) => item.valid || String(item.id) === current);
+  const byId = new Map(queues.map((queue) => [queue.id, queue]));
+
+  const choices = {
+    state: () => kept(states).filter((state) => state.type !== 'merged')
+      .map((state) => ({ value: String(state.id), label: statusName(state.name) })),
+    priority: () => kept(priorities)
+      .map((priority) => ({ value: String(priority.id), label: priorityName(priority.name) })),
+    type: () => kept(types).map((type) => ({ value: String(type.id), label: ticketTypeName(type.name) })),
+    queue: () => kept(queues).map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    user: () => cache.stepChoices.accounts.map((user) => ({ value: String(user.id), label: user.name })),
+    channel: () => AGENT_CHANNELS.map((channel) => ({ value: channel, label: channelName(channel) })),
+  }[kind]?.() ?? [];
+
+  if (current && !choices.some((choice) => choice.value === current)) {
+    choices.unshift({ value: current, label: `#${current}` });
+  }
+
+  return choices;
+}
+
+/** A step's switch, which the server reads as "true" or "false". */
+function stepSwitch(parameter, value) {
+  const box = el('input', { type: 'checkbox', checked: value === 'true' });
+  const words = el('span', { class: 'switch-label' });
+
+  box.dataset.parameter = parameter.name;
+  swapTheLabel(words, `field.${parameter.name}`, FIELD_NAMES[parameter.name] ?? parameter.name);
+
+  return el('label', { class: 'switch' }, box, el('span', { class: 'switch-track' }), words);
+}
+
+/** What the search beside a step's contact or organisation is called. */
+const STEP_SEARCHES = {
+  contact: { label: ['ticket.contactSearch', 'Find the contact'], hint: ['ticket.contactSearchHint', 'name or address'] },
+  organisation: {
+    label: ['customer.organisationSearch', 'Find the organisation'],
+    hint: ['customer.organisationSearchHint', 'name or number'],
+  },
+};
+
+/**
+ * Where a step searches for a contact or an organisation: the automation's own
+ * searches, which the right to set it up reads. The paths alone: how an entry
+ * is written is SEARCHED_KINDS', which is declared further down and read when a
+ * step is drawn, because reading it here, while the script is still being run,
+ * stopped the whole script before anything was wired.
+ */
+const STEP_SEARCH_PATHS = {
+  contact: '/automation/contacts',
+  organisation: '/automation/organisations',
+};
+
+/**
+ * A step's choice of contact or organisation, each of which runs to thousands:
+ * a box to search in and a select of what it finds, as every such choice is -
+ * see SEARCHED_KINDS. The one the step names is kept among the options whatever
+ * a search finds, and named once its record has been read.
+ */
+function searchedStep(parameter, value) {
+  const kind = { path: STEP_SEARCH_PATHS[parameter.kind], describe: SEARCHED_KINDS[parameter.kind].describe };
+  const words = STEP_SEARCHES[parameter.kind];
+  const select = el('select', {});
+  const reads = can('automation:write');
+  let asked = 0;
+  let typing;
+
+  select.dataset.parameter = parameter.name;
+
+  const offer = (entries, keep) => {
+    const choices = entries.map((entry) => ({ value: String(entry.id), label: kind.describe(entry) }));
+    if (keep && !choices.some((choice) => choice.value === keep.value)) choices.unshift(keep);
+
+    fillSelect(select, choices, { placeholder: t('ticket.nobody', 'nobody'), labelKey: 'label', valueKey: 'value' });
+    select.value = keep?.value ?? '';
+  };
+
+  offer([], keptEntry(value, ''));
+
+  if (value && reads) {
+    api(`${kind.path}?id=${encodeURIComponent(value)}`)
+      .then((found) => {
+        const record = found?.items?.[0];
+        if (record && select.value === value) offer([], keptEntry(value, kind.describe(record)));
+      })
+      .catch((err) => toastFailure(err));
+  }
+
+  if (!reads) return fieldLabelled(parameter.name, select);
+
+  const search = el('input', {
+    type: 'search',
+    maxlength: '255',
+    placeholder: t(...words.hint),
+    'data-i18n-placeholder': words.hint[0],
+    'data-i18n-placeholder-source': words.hint[1],
+  });
+  const searchLabel = el('label', {});
+
+  swapTheLabel(searchLabel, ...words.label);
+  searchLabel.append(search);
+
+  search.addEventListener('input', () => {
+    clearTimeout(typing);
+    typing = setTimeout(async () => {
+      const mine = ++asked;
+      const query = new URLSearchParams({ limit: String(SEARCH_OFFERS), valid: 'true' });
+      if (search.value.trim()) query.set('q', search.value.trim());
+
+      try {
+        const entries = (await api(`${kind.path}?${query}`))?.items ?? [];
+        const kept = select.value
+          ? { value: select.value, label: select.selectedOptions[0]?.textContent ?? `#${select.value}` }
+          : null;
+
+        // A later search, or a form put back in the meantime, has the say.
+        if (mine === asked && select.isConnected) offer(entries, kept);
+      } catch (err) {
+        toastFailure(err);
+      }
+    }, 300);
+  });
+
+  return el('div', { class: 'grid-passthrough' }, searchLabel, fieldLabelled(parameter.name, select));
+}
+
+/**
+ * Shows the minutes a waiting state waits for beside a state that waits, and
+ * asks for them there: the server wants them for such a state and refuses them
+ * for any other.
+ */
+function showWaiting(row) {
+  const state = $('[data-parameter="stateId"]', row);
+  const minutes = $('[data-parameter="pendingMinutes"]', row);
+  if (!state || !minutes) return;
+
+  const show = () => {
+    const chosen = cache.stepChoices.states.find((candidate) => String(candidate.id) === state.value);
+    const waits = chosen?.type === 'pending-reminder' || chosen?.type === 'pending-auto';
+
+    minutes.closest('label').hidden = !waits;
+    minutes.required = waits;
+    minutes.min = waits ? '1' : '0';
+    if (!waits) minutes.value = '';
+  };
+
+  state.addEventListener('change', show);
+  show();
+}
+
+/** The steps the form holds, in order, with what each of their fields says. */
+function macroStepsOf() {
+  return $$('#macro-steps > li').map((row) => {
+    const parameters = {};
+
+    for (const field of $$('[data-parameter]', row)) {
+      const value = field.type === 'checkbox' ? String(field.checked) : field.value.trim();
+      if (value) parameters[field.dataset.parameter] = value;
+    }
+
+    return { type: row.dataset.step, parameters };
+  });
+}
+
+/** Sends the macro form, making a macro or correcting one. */
+function saveMacro(form) {
+  const id = form.elements.id.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    actions: macroStepsOf(),
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id ? api(`/macros/${id}`, { method: 'PUT', body }) : api('/macros', { method: 'POST', body })),
+    id ? t('msg.macroSaved', 'Macro saved') : t('msg.macroCreated', 'Macro created'),
+    async () => { resetMacroForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a macro in the form, to correct it. */
+function editMacro(macro) {
+  const form = $('#form-macro');
+
+  form.elements.id.value = String(macro.id);
+  form.elements.name.value = macro.name;
+  form.elements.description.value = macro.description;
+  form.elements.valid.checked = macro.valid;
+  fillMacroSteps(macro.actions);
+
+  // Drawn rather than declared with a key, because it carries the macro's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#macro-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('macroFormTitle', () => {
+    heading.textContent = t('macro.edit', 'Edit the macro {0}').replace('{0}', macro.name);
+  });
+
+  swapTheLabel($('#macro-submit'), 'action.save', 'Save');
+  $('#macro-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the macro form back to making a new one. */
+function resetMacroForm() {
+  const form = $('#form-macro');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillMacroSteps([]);
+
+  stopRedrawing('macroFormTitle');
+  swapTheLabel($('#macro-form-title'), 'macro.create', 'Add a macro');
+  swapTheLabel($('#macro-submit'), 'action.create', 'Create');
+  $('#macro-cancel').hidden = true;
+}
+
+/**
+ * What each event a plan can run on is called. The server names them as KIX18
+ * names its ticket events.
+ */
+const PLAN_EVENT_TITLES = {
+  TicketCreate: 'Ticket opened',
+  TicketTitleUpdate: 'Title changed',
+  TicketQueueUpdate: 'Moved to another queue',
+  TicketStateUpdate: 'State changed',
+  TicketPriorityUpdate: 'Priority changed',
+  TicketTypeUpdate: 'Type changed',
+  TicketOwnerUpdate: 'Owner changed',
+  TicketResponsibleUpdate: 'Responsible changed',
+  TicketCustomerUpdate: 'Contact or organisation changed',
+  TicketLockUpdate: 'Locked or unlocked',
+  TicketPendingTimeUpdate: 'Waiting time changed',
+  ArticleCreate: 'Article added',
+};
+
+/** An event a plan can run on, in the reader's language. */
+function planEventName(event) {
+  return t(`planevent.${event}`, PLAN_EVENT_TITLES[event] ?? event);
+}
+
+/** When a plan runs, in words: its weekdays and times, or the events it waits for. */
+function planWhen(plan) {
+  if (plan.type === 'EventBased') return plan.events.map(planEventName).join(', ');
+
+  const days = CALENDAR_WEEK.filter((day) => plan.weekdays.includes(day)).map((day) => weekdayName(day, 'short'));
+
+  return fillIn(t('plan.atTimes', '{0} at {1}'), [days.join(', '), plan.times.join(', ')]);
+}
+
+/** One plan as a row of its card's table. */
+function planRow(plan) {
+  return el('tr', {},
+    el('td', { class: 'text', text: plan.name }),
+    el('td', { class: 'text', text: planWhen(plan) }),
+    el('td', { text: plan.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editPlan(plan) }),
+      deleteButton({
+        label: `${t('entity.plan', 'Execution plan')} "${plan.name}"`,
+        path: `/exec-plans/${plan.id}`,
+        message: t('msg.planDeleted', 'Execution plan deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/**
+ * Fills the plan form from a plan, or for a new one: a switch for each weekday,
+ * Monday first, and one for each event the server lists, on as the plan has
+ * them. The switches carry no name, for the reason the steps of a macro carry
+ * none.
+ */
+function fillPlanForm(form, plan) {
+  form.elements.type.value = plan?.type ?? 'TimeBased';
+  form.elements.times.value = (plan?.times ?? []).join(', ');
+
+  $('#plan-weekdays').replaceChildren(...CALENDAR_WEEK.map((day) =>
+    choiceSwitch({ 'data-weekday': String(day) }, weekdayName(day), plan?.weekdays.includes(day) ?? false)));
+  $('#plan-events').replaceChildren(...cache.planEvents.map((event) =>
+    choiceSwitch({ 'data-event': event }, planEventName(event), plan?.events.includes(event) ?? false)));
+
+  showPlanKind(form);
+}
+
+/** One switch of a form's choice of several - a weekday, an event - on or off, told apart by its mark. */
+function choiceSwitch(mark, words, on) {
+  return el('label', { class: 'switch perm-switch' },
+    el('input', { type: 'checkbox', checked: on, ...mark }),
+    el('span', { class: 'switch-track' }),
+    el('span', { class: 'perm-name', text: words }));
+}
+
+/**
+ * Shows what the plan's kind reads and puts the other kind's away. A hidden
+ * field that is still required cannot be submitted past, so the times are
+ * required only while they are on screen.
+ */
+function showPlanKind(form) {
+  const timed = form.elements.type.value === 'TimeBased';
+
+  $('#plan-time').hidden = !timed;
+  $('#plan-event').hidden = timed;
+  form.elements.times.required = timed;
+}
+
+/**
+ * Sends the plan form, making a plan or correcting one. The other kind's values
+ * go as nothing, because the server refuses them for a plan they do not apply
+ * to rather than keeping them to look as if they did.
+ */
+function savePlan(form) {
+  const id = form.elements.id.value;
+  const timed = form.elements.type.value === 'TimeBased';
+  const on = (selector) => $$(selector, form).filter((box) => box.checked);
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    type: form.elements.type.value,
+    weekdays: timed ? on('[data-weekday]').map((box) => Number(box.dataset.weekday)) : [],
+    times: timed ? form.elements.times.value.split(',').map((time) => time.trim()).filter(Boolean) : [],
+    events: timed ? [] : on('[data-event]').map((box) => box.dataset.event),
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id ? api(`/exec-plans/${id}`, { method: 'PUT', body }) : api('/exec-plans', { method: 'POST', body })),
+    id ? t('msg.planSaved', 'Execution plan saved') : t('msg.planCreated', 'Execution plan created'),
+    async () => { resetPlanForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a plan in the form, to correct it. */
+function editPlan(plan) {
+  const form = $('#form-plan');
+
+  form.elements.id.value = String(plan.id);
+  form.elements.name.value = plan.name;
+  form.elements.description.value = plan.description;
+  form.elements.valid.checked = plan.valid;
+  fillPlanForm(form, plan);
+
+  // Drawn rather than declared with a key, because it carries the plan's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#plan-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('planFormTitle', () => {
+    heading.textContent = t('plan.edit', 'Edit the execution plan {0}').replace('{0}', plan.name);
+  });
+
+  swapTheLabel($('#plan-submit'), 'action.save', 'Save');
+  $('#plan-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the plan form back to making a new one. */
+function resetPlanForm() {
+  const form = $('#form-plan');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillPlanForm(form, null);
+
+  stopRedrawing('planFormTitle');
+  swapTheLabel($('#plan-form-title'), 'plan.create', 'Add an execution plan');
+  swapTheLabel($('#plan-submit'), 'action.create', 'Create');
+  $('#plan-cancel').hidden = true;
+}
+
+/**
+ * How many macros one job runs, as model.MaxJobMacros says; written here for
+ * the reason MAX_MACRO_STEPS is.
+ */
+const MAX_JOB_MACROS = 20;
+
+/** What started a run, in words. */
+const RUN_TRIGGER_TITLES = {
+  manual: 'by hand',
+  time: "at its plan's time",
+  event: 'on an event',
+};
+
+/** What started a run, in the reader's language. */
+function runTriggerName(trigger) {
+  return t(`runtrigger.${trigger}`, RUN_TRIGGER_TITLES[trigger] ?? trigger);
+}
+
+/** A macro's name, or its number where it is gone. */
+function macroName(id) {
+  return cache.macros.find((macro) => macro.id === id)?.name ?? `#${id}`;
+}
+
+/** One job as a row of its card's table. */
+function jobRow(job) {
+  const planName = (id) => cache.plans.find((plan) => plan.id === id)?.name ?? `#${id}`;
+
+  return el('tr', {},
+    el('td', { class: 'text', text: job.name }),
+    el('td', { class: 'text', text: job.macroIds.map(macroName).join(', ') }),
+    el('td', { class: 'text', text: job.planIds.map(planName).join(', ') || t('job.byHandOnly', 'by hand only') }),
+    el('td', { text: fmtMoment(job.lastRunAt) }),
+    el('td', { text: job.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editJob(job) }),
+      el('button', { class: 'link', text: t('job.run', 'run now'), onclick: (e) => runJob(job, e.currentTarget) }),
+      deleteButton({
+        label: `${t('entity.job', 'Job')} "${job.name}"`,
+        path: `/jobs/${job.id}`,
+        message: t('msg.jobDeleted', 'Job deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/**
+ * Runs a job now, says what it did, and shows its runs below. The button is off
+ * while the run takes its time, which on a few hundred tickets is a while; see
+ * holdFocus for why it is asked first.
+ */
+function runJob(job, button) {
+  const back = holdFocus(button);
+  button.disabled = true;
+
+  mutate(
+    () => api(`/jobs/${job.id}/run`, { method: 'POST' }),
+    null,
+    async (run) => {
+      toast(fillIn(t('job.ran', 'The job ran on {0} ticket(s): {1} changed, {2} refused.'),
+        [run.tickets, run.changed, run.failed]), 'ok');
+      $('#form-run').elements.job.value = String(job.id);
+      await refreshAll();
+    },
+  ).finally(() => {
+    button.disabled = false;
+    back();
+  });
+}
+
+/**
+ * Fills the job form from a job, or for a new one: a switch for every queue,
+ * state, priority and type a ticket can be taken by - retired ones among them,
+ * because a job may well be for the tickets still carrying one - the macros in
+ * the order the job runs them, and a switch for every plan still offered and
+ * every plan the job already names.
+ */
+function fillJobForm(form, job) {
+  fillCriteria(form, 'job', cache.stepChoices, job?.criteria);
+
+  $('#job-macros').replaceChildren(...(job?.macroIds ?? []).map(jobMacroRow));
+  $('#job-plans').replaceChildren(...cache.plans
+    .filter((plan) => plan.valid || job?.planIds.includes(plan.id))
+    .map((plan) => choiceSwitch({ 'data-plan': String(plan.id) }, plan.name, job?.planIds.includes(plan.id) ?? false)));
+
+  showRowBounds();
+}
+
+/**
+ * Fills a form's switches for the tickets something is about - a switch for
+ * every queue, state, priority and type in lists, retired ones among them,
+ * because a job or a notification may well be for the tickets still carrying
+ * one - on as the criteria have them, and its choice of lock. The switches go
+ * into the elements named prefix-queues, prefix-states and so on.
+ */
+function fillCriteria(form, prefix, lists, criteria) {
+  const byId = new Map(lists.queues.map((queue) => [queue.id, queue]));
+  const on = (list, id) => (criteria?.[list] ?? []).includes(id);
+  const locked = criteria?.locked;
+
+  $(`#${prefix}-queues`).replaceChildren(...lists.queues
+    .map((queue) => ({ id: queue.id, words: queuePath(queue, byId) }))
+    .sort((a, b) => a.words.localeCompare(b.words))
+    .map((queue) => choiceSwitch({ 'data-queue': String(queue.id) }, queue.words, on('queueIds', queue.id))));
+  $(`#${prefix}-states`).replaceChildren(...lists.states.map((state) =>
+    choiceSwitch({ 'data-state': String(state.id) }, statusName(state.name), on('stateIds', state.id))));
+  $(`#${prefix}-priorities`).replaceChildren(...lists.priorities.map((priority) =>
+    choiceSwitch({ 'data-priority': String(priority.id) }, priorityName(priority.name),
+      on('priorityIds', priority.id))));
+  $(`#${prefix}-types`).replaceChildren(...lists.types.map((type) =>
+    choiceSwitch({ 'data-type': String(type.id) }, ticketTypeName(type.name), on('typeIds', type.id))));
+
+  form.elements.locked.value = locked === true || locked === false ? String(locked) : '';
+}
+
+/**
+ * The tickets a form's switches say something is about. A list with nothing
+ * switched on goes as nothing, which takes any.
+ */
+function criteriaOf(form) {
+  const on = (mark) => $$(`[data-${mark}]`, form).filter((box) => box.checked)
+    .map((box) => Number(box.getAttribute(`data-${mark}`)));
+  const locked = form.elements.locked.value;
+
+  return {
+    queueIds: on('queue'),
+    stateIds: on('state'),
+    priorityIds: on('priority'),
+    typeIds: on('type'),
+    locked: locked ? locked === 'true' : null,
+  };
+}
+
+/** One macro of the job form, in the place the job runs it. */
+function jobMacroRow(id) {
+  const row = el('li', { 'data-macro': String(id) });
+
+  row.append(orderedHead(row, el('strong', { text: macroName(id) }), '#job-macro-kind'));
+
+  return row;
+}
+
+/**
+ * Sends the job form, making a job or correcting one. A list of criteria with
+ * nothing switched on goes as nothing, which takes any.
+ */
+function saveJob(form) {
+  const id = form.elements.id.value;
+  const plans = $$('[data-plan]', form).filter((box) => box.checked).map((box) => Number(box.dataset.plan));
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    criteria: criteriaOf(form),
+    macroIds: $$('#job-macros > li').map((row) => Number(row.dataset.macro)),
+    planIds: plans,
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id ? api(`/jobs/${id}`, { method: 'PUT', body }) : api('/jobs', { method: 'POST', body })),
+    id ? t('msg.jobSaved', 'Job saved') : t('msg.jobCreated', 'Job created'),
+    async () => { resetJobForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a job in the form, to correct it. */
+function editJob(job) {
+  const form = $('#form-job');
+
+  form.elements.id.value = String(job.id);
+  form.elements.name.value = job.name;
+  form.elements.description.value = job.description;
+  form.elements.valid.checked = job.valid;
+  fillJobForm(form, job);
+
+  // Drawn rather than declared with a key, because it carries the job's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#job-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('jobFormTitle', () => {
+    heading.textContent = t('job.edit', 'Edit the job {0}').replace('{0}', job.name);
+  });
+
+  swapTheLabel($('#job-submit'), 'action.save', 'Save');
+  $('#job-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the job form back to making a new one. */
+function resetJobForm() {
+  const form = $('#form-job');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillJobForm(form, null);
+
+  stopRedrawing('jobFormTitle');
+  swapTheLabel($('#job-form-title'), 'job.create', 'Add a job');
+  swapTheLabel($('#job-submit'), 'action.create', 'Create');
+  $('#job-cancel').hidden = true;
+}
+
+/**
+ * Draws what the chosen job's latest runs did: when each ran, what started it,
+ * how many tickets it took and changed, and every step it could not take, in
+ * the reader's words. Drawn again from the answer in hand when the language
+ * changes, and dropped when a later choice of job has the say.
+ */
+async function loadRuns() {
+  const tbody = $('#table-run tbody');
+  const id = $('#form-run')?.elements.job.value;
+  if (!tbody) return;
+
+  if (!id) {
+    stopRedrawing('jobRuns');
+    fillTable(tbody, [], 6, t('run.noJob', 'There is no job yet.'));
+
+    return;
+  }
+
+  const runs = (await api(`/jobs/${id}/runs`))?.items ?? [];
+  if ($('#form-run').elements.job.value !== id) return;
+
+  redrawable('jobRuns', () => fillTable(tbody, runs.map(runRow), 6, t('run.empty', 'This job has not run yet.')));
+}
+
+/** One run as a row of its card's table, with every line it kept. */
+function runRow(run) {
+  const lines = run.lines.map((line) => {
+    const where = [
+      line.macroId ? macroName(line.macroId) : '',
+      line.step ? fillIn(t('run.step', 'step {0}'), [line.step]) : '',
+    ].filter(Boolean).join(' · ');
+    const said = el('span', {});
+
+    showRefusal(said, runLineRefusal(line));
+
+    return el('li', {},
+      line.ticketId
+        ? el('button', {
+          type: 'button',
+          class: 'link',
+          text: fillIn(t('run.ticket', 'Ticket {0}'), [`#${line.ticketId}`]),
+          onclick: () => { switchView('tickets'); openTicket(line.ticketId); },
+        })
+        : null,
+      el('span', { text: line.ticketId ? ` · ${where}: ` : `${where}: ` }),
+      said);
+  });
+
+  return el('tr', {},
+    el('td', { text: fmtMoment(run.startedAt) }),
+    el('td', { class: 'text', text: runTriggerName(run.trigger) }),
+    el('td', { text: String(run.tickets) }),
+    el('td', { text: String(run.changed) }),
+    el('td', { text: String(run.failed) }),
+    el('td', { class: 'text' }, lines.length ? el('ul', { class: 'run-lines' }, ...lines) : '–'),
+  );
+}
+
+/**
+ * A line of a run as the refusal it keeps, shaped as the API would have
+ * answered it, so that it is said the way any other refusal is: the fields of
+ * an invalid request named as their form names them, a code in the reader's
+ * words with its values written as the screen writes them, and the English of a
+ * failure nobody translated folded away under it.
+ */
+function runLineRefusal(line) {
+  if (line.code === 'invalidFields') return { param: line.values };
+
+  return {
+    code: line.code, values: line.values, message: line.message, detail: line.code === 'internal' ? line.message : '',
+  };
+}
+
+/** Wires the automation screen's forms. */
+function wireAutomation() {
+  const macroForm = $('#form-macro');
+  const planForm = $('#form-plan');
+  const jobForm = $('#form-job');
+  const runForm = $('#form-run');
+
+  jobForm.addEventListener('submit', (e) => { e.preventDefault(); saveJob(jobForm); });
+  $('#job-cancel').addEventListener('click', resetJobForm);
+  $('#job-add-macro').addEventListener('click', () => {
+    const id = Number($('#job-macro-kind').value);
+    if (!id) return;
+
+    const row = jobMacroRow(id);
+    $('#job-macros').append(row);
+    rowsChanged(jobForm);
+    $('button', row)?.focus();
+  });
+
+  // A choice of what to look at rather than something to send.
+  runForm.addEventListener('submit', (e) => e.preventDefault());
+  runForm.elements.job.addEventListener('change', () => loadRuns().catch((err) => toastFailure(err)));
+
+  planForm.addEventListener('submit', (e) => { e.preventDefault(); savePlan(planForm); });
+  planForm.elements.type.addEventListener('change', () => showPlanKind(planForm));
+  $('#plan-cancel').addEventListener('click', resetPlanForm);
+
+  macroForm.addEventListener('submit', (e) => { e.preventDefault(); saveMacro(macroForm); });
+  $('#macro-cancel').addEventListener('click', resetMacroForm);
+
+  $('#macro-add-step').addEventListener('click', () => {
+    const type = $('#macro-step-kind').value;
+    if (!type) return;
+
+    const row = macroStepRow(type);
+    $('#macro-steps').append(row);
+    rowsChanged(macroForm);
+    $('select, input, textarea', row)?.focus();
+  });
+}
+
+// ------------------------------------------------------------ notifications
+
+/** What a notification has to work with before anything has been read: nothing. */
+function notifyingNothing() {
+  return {
+    items: [], events: [], recipients: [], languages: [], subjectLimit: 0, bodyLimit: 0,
+    lists: { queues: [], states: [], priorities: [], types: [] },
+  };
+}
+
+/**
+ * Who a notification can be sent to, in words. The server names them as KIX18
+ * names its recipients.
+ */
+const RECIPIENT_TITLES = {
+  AgentOwner: 'The owner',
+  AgentResponsible: 'The responsible agent',
+  AgentWatcher: 'Those watching the ticket',
+  AgentMyQueues: 'Those who chose its queue',
+  AgentWritePermissions: 'Those who work in its queue',
+  AgentReadPermissions: 'Those who can read its queue',
+};
+
+/** Who a notification can be sent to, in the reader's language. */
+function recipientName(recipient) {
+  return t(`recipient.${recipient}`, RECIPIENT_TITLES[recipient] ?? recipient);
+}
+
+/**
+ * Draws the notifications' card from the list the server sent: the table, and
+ * the form where nobody is filling it in. lists are the queues, states,
+ * priorities and types a notification's tickets can be named by.
+ */
+function drawNotifications(page, lists) {
+  cache.notifying = {
+    items: page?.items ?? [],
+    events: page?.events ?? [],
+    recipients: page?.recipients ?? [],
+    languages: page?.languages ?? [],
+    subjectLimit: page?.subjectLimit ?? 0,
+    bodyLimit: page?.bodyLimit ?? 0,
+    lists,
+  };
+
+  fillTable($('#table-notification tbody'), cache.notifying.items.map(notificationRow), 5,
+    t('notification.empty', 'No notifications yet.'));
+
+  const form = $('#form-notification');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillNotificationForm(form, null);
+}
+
+/** One notification as a row of its card's table. */
+function notificationRow(definition) {
+  return el('tr', {},
+    el('td', { class: 'text', text: definition.name }),
+    el('td', { class: 'text', text: definition.events.map(planEventName).join(', ') }),
+    el('td', { class: 'text', text: definition.recipients.map(recipientName).join(', ') }),
+    el('td', { text: definition.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editNotification(definition) }),
+      deleteButton({
+        label: `${t('entity.notification', 'Notification')} "${definition.name}"`,
+        path: `/notification-definitions/${definition.id}`,
+        message: t('msg.notificationDeleted', 'Notification deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/**
+ * Fills the notification form from a notification, or for a new one: a switch
+ * for every event and every recipient the server lists, the tickets it is about,
+ * and a subject and a text for every language the installation speaks.
+ */
+function fillNotificationForm(form, definition) {
+  const { events, recipients, languages, lists } = cache.notifying;
+
+  $('#notification-events').replaceChildren(...events.map((event) =>
+    choiceSwitch({ 'data-event': event }, planEventName(event), definition?.events.includes(event) ?? false)));
+  $('#notification-recipients').replaceChildren(...recipients.map((recipient) =>
+    choiceSwitch({ 'data-recipient': recipient }, recipientName(recipient),
+      definition?.recipients.includes(recipient) ?? false)));
+
+  fillCriteria(form, 'notification', lists, definition?.criteria);
+
+  $('#notification-messages').replaceChildren(...languages.map((language) =>
+    notificationMessage(language, definition?.messages.find((message) => message.language === language))));
+}
+
+/**
+ * What a notification says in one language: a subject and a text, bounded as
+ * the server bounds them. Either asks for the other once it holds something, so
+ * that a language half written is not sent to be refused; a language left empty
+ * is not spoken.
+ */
+function notificationMessage(language, message) {
+  const subject = el('input', {
+    type: 'text', maxlength: String(cache.notifying.subjectLimit), value: message?.subject ?? '',
+    'data-language': language, 'data-part': 'subject',
+  });
+  const body = el('textarea', {
+    rows: '4', maxlength: String(cache.notifying.bodyLimit), 'data-language': language, 'data-part': 'body',
+  });
+  const pair = () => {
+    const spoken = Boolean(subject.value.trim() || body.value.trim());
+    subject.required = spoken;
+    body.required = spoken;
+  };
+
+  body.value = message?.body ?? '';
+  subject.addEventListener('input', pair);
+  body.addEventListener('input', pair);
+  pair();
+
+  return el('fieldset', { class: 'notification-message' },
+    el('legend', { text: LANGUAGES[language] ?? language }),
+    el('div', { class: 'grid' }, fieldLabelled('subject', subject), fieldLabelled('body', body, true)));
+}
+
+/** What the notification form says, in each language it speaks. */
+function notificationMessagesOf(form) {
+  return cache.notifying.languages.map((language) => ({
+    language,
+    subject: $(`[data-language="${language}"][data-part="subject"]`, form)?.value.trim() ?? '',
+    body: $(`[data-language="${language}"][data-part="body"]`, form)?.value.trim() ?? '',
+  })).filter((message) => message.subject || message.body);
+}
+
+/** Sends the notification form, making a notification or correcting one. */
+function saveNotification(form) {
+  const id = form.elements.id.value;
+  const on = (mark) => $$(`[data-${mark}]`, form).filter((box) => box.checked)
+    .map((box) => box.getAttribute(`data-${mark}`));
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    events: on('event'),
+    recipients: on('recipient'),
+    criteria: criteriaOf(form),
+    oncePerDay: form.elements.oncePerDay.checked,
+    optional: form.elements.optional.checked,
+    messages: notificationMessagesOf(form),
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id
+      ? api(`/notification-definitions/${id}`, { method: 'PUT', body })
+      : api('/notification-definitions', { method: 'POST', body })),
+    id ? t('msg.notificationSaved', 'Notification saved') : t('msg.notificationCreated', 'Notification created'),
+    async () => { resetNotificationForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a notification in the form, to correct it. */
+function editNotification(definition) {
+  const form = $('#form-notification');
+
+  form.elements.id.value = String(definition.id);
+  form.elements.name.value = definition.name;
+  form.elements.description.value = definition.description;
+  form.elements.oncePerDay.checked = definition.oncePerDay;
+  form.elements.optional.checked = definition.optional;
+  form.elements.valid.checked = definition.valid;
+  fillNotificationForm(form, definition);
+
+  // Drawn rather than declared with a key, because it carries the notification's
+  // name; see editRole for why the key has to come off.
+  const heading = $('#notification-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('notificationFormTitle', () => {
+    heading.textContent = t('notification.edit', 'Edit the notification {0}').replace('{0}', definition.name);
+  });
+
+  swapTheLabel($('#notification-submit'), 'action.save', 'Save');
+  $('#notification-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the notification form back to making a new one. */
+function resetNotificationForm() {
+  const form = $('#form-notification');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillNotificationForm(form, null);
+
+  stopRedrawing('notificationFormTitle');
+  swapTheLabel($('#notification-form-title'), 'notification.create', 'Add a notification');
+  swapTheLabel($('#notification-submit'), 'action.create', 'Create');
+  $('#notification-cancel').hidden = true;
+}
+
+/** Wires the notification form. */
+function wireNotifications() {
+  const form = $('#form-notification');
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveNotification(form); });
+  $('#notification-cancel').addEventListener('click', resetNotificationForm);
+}
+
+// --------------------------------------------------------- answer templates
+
+/**
+ * Draws the answer templates' card, and the form where nobody is filling it in.
+ * queues are the ones a template can be offered in.
+ */
+function drawTemplates(page, queues) {
+  cache.templates = page?.items ?? [];
+  cache.templateQueues = queues;
+
+  const byId = new Map(queues.map((queue) => [queue.id, queue]));
+  const queueName = (id) => {
+    if (!id) return t('template.everyQueue', 'every queue');
+
+    return byId.has(id) ? queuePath(byId.get(id), byId) : `#${id}`;
+  };
+
+  fillTable($('#table-template tbody'), cache.templates.map((template) => el('tr', {},
+    el('td', { class: 'text', text: template.name }),
+    el('td', { class: 'text', text: queueName(template.queueId) }),
+    el('td', { text: template.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editTemplate(template) }),
+      deleteButton({
+        label: `${t('entity.template', 'Answer template')} "${template.name}"`,
+        path: `/response-templates/${template.id}`,
+        message: t('msg.templateDeleted', 'Answer template deleted'),
+        after: refreshAll,
+      })),
+  )), 4, t('template.empty', 'No answer templates yet.'));
+
+  const form = $('#form-template');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillTemplateQueues(form, null);
+}
+
+/**
+ * Fills the template form's choice of queue: every queue, or one of those still
+ * offered, and the one the template names already, retired or not.
+ */
+function fillTemplateQueues(form, current) {
+  const queues = cache.templateQueues.filter((queue) => queue.valid || queue.id === current);
+  const byId = new Map(cache.templateQueues.map((queue) => [queue.id, queue]));
+
+  fillSelect(form.elements.queueId,
+    queues.map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    { placeholder: t('template.everyQueue', 'every queue'), labelKey: 'label', valueKey: 'value' });
+  form.elements.queueId.value = current ? String(current) : '';
+}
+
+/** Sends the template form, making a template or correcting one. */
+function saveTemplate(form) {
+  const id = form.elements.id.value;
+  const queue = form.elements.queueId.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    subject: form.elements.subject.value.trim(),
+    body: form.elements.body.value.trim(),
+    valid: form.elements.valid.checked,
+    ...(queue ? { queueId: Number(queue) } : { clearQueue: true }),
+  });
+
+  mutate(
+    () => (id ? api(`/response-templates/${id}`, { method: 'PUT', body }) : api('/response-templates', { method: 'POST', body })),
+    id ? t('msg.templateSaved', 'Answer template saved') : t('msg.templateCreated', 'Answer template created'),
+    async () => { resetTemplateForm(); await refreshAll(); },
+  );
+}
+
+/** Opens a template in the form, to correct it. */
+function editTemplate(template) {
+  const form = $('#form-template');
+
+  form.elements.id.value = String(template.id);
+  form.elements.name.value = template.name;
+  form.elements.subject.value = template.subject;
+  form.elements.body.value = template.body;
+  form.elements.valid.checked = template.valid;
+  fillTemplateQueues(form, template.queueId);
+
+  // Drawn rather than declared with a key, because it carries the template's
+  // name; see editRole for why the key has to come off.
+  const heading = $('#template-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('templateFormTitle', () => {
+    heading.textContent = t('template.edit', 'Edit the answer template {0}').replace('{0}', template.name);
+  });
+
+  swapTheLabel($('#template-submit'), 'action.save', 'Save');
+  $('#template-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the template form back to making a new one. */
+function resetTemplateForm() {
+  const form = $('#form-template');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillTemplateQueues(form, null);
+
+  stopRedrawing('templateFormTitle');
+  swapTheLabel($('#template-form-title'), 'template.create', 'Add an answer template');
+  swapTheLabel($('#template-submit'), 'action.create', 'Create');
+  $('#template-cancel').hidden = true;
+}
+
+/**
+ * Offers the templates of the ticket that is open in the article form. Not over
+ * an article somebody is part way through writing, whose choice of template is
+ * theirs.
+ */
+function offerTemplates(templates) {
+  const article = $('#form-article');
+  cache.ticketTemplates = templates;
+
+  if (!article || beingEdited(article)) return;
+
+  fillSelect(article.elements.template,
+    templates.map((template) => ({ value: String(template.id), label: template.name })),
+    { placeholder: t('ticket.noTemplate', 'none'), labelKey: 'label', valueKey: 'value' });
+  article.elements.template.value = '';
+  article.elements.template.closest('label').hidden = templates.length === 0;
+}
+
+/**
+ * Starts the article from the template chosen: its subject where the article has
+ * none yet, and its text after whatever is written already, so that choosing a
+ * template never takes away what somebody wrote. The choice goes back to none,
+ * so that the same template can be chosen again.
+ */
+function useTemplate(article) {
+  const chosen = cache.ticketTemplates.find((template) => String(template.id) === article.elements.template.value);
+  if (!chosen) return;
+
+  if (!article.elements.subject.value.trim()) article.elements.subject.value = chosen.subject;
+
+  const body = article.elements.body;
+  body.value = body.value.trim() ? `${body.value.trimEnd()}\n\n${chosen.body}` : chosen.body;
+
+  article.dataset.editing = 'yes';
+  article.elements.template.value = '';
+  body.focus();
+}
+
+/** Wires the template form, and the choice of template in the article form. */
+function wireTemplates() {
+  const form = $('#form-template');
+  const article = $('#form-article');
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveTemplate(form); });
+  $('#template-cancel').addEventListener('click', resetTemplateForm);
+  article.elements.template.addEventListener('change', () => useTemplate(article));
+}
+
+// ----------------------------------------------------------- knowledge base
+
+/** Who may read an article, in words; the server names them as KIX18 does. */
+const FAQ_VISIBILITY_TITLES = {
+  internal: 'the staff alone',
+  external: 'customers signed in, and the staff',
+  public: 'anybody',
+};
+
+/** Who may read an article, in the reader's language. */
+function faqVisibilityName(visibility) {
+  return t(`faqvisibility.${visibility}`, FAQ_VISIBILITY_TITLES[visibility] ?? visibility);
+}
+
+/** A category of the knowledge base by the path of the categories above it. */
+function faqCategoryPath(id) {
+  const byId = new Map(cache.faqCategories.map((category) => [category.id, category]));
+  const category = byId.get(id);
+
+  return category ? queuePath(category, byId) : `#${id}`;
+}
+
+/**
+ * Fills the knowledge base's screen, for whoever reads it: the categories, the
+ * search's choices and what it finds, and - for whoever writes it - the forms
+ * where nobody is filling them in.
+ */
+async function loadFAQ() {
+  if (!can('faq:read')) return;
+
+  const categories = await api('/faq/categories');
+  cache.faqCategories = categories?.items ?? [];
+
+  const choices = cache.faqCategories
+    .map((category) => ({ value: String(category.id), label: faqCategoryPath(category.id) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const search = $('#form-faq-search');
+  if (search && !beingEdited(search)) {
+    fillSelect(search.elements.category, choices,
+      { placeholder: t('faq.everyCategory', 'every category'), labelKey: 'label', valueKey: 'value' });
+  }
+
+  drawFAQCategories();
+  await loadFAQArticles();
+
+  const form = $('#form-faq-article');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillFAQArticleForm(form, null);
+}
+
+/** Reads what the search finds, and draws it. */
+async function loadFAQArticles() {
+  const search = $('#form-faq-search');
+  const query = new URLSearchParams();
+
+  if (search?.elements.q.value.trim()) query.set('q', search.elements.q.value.trim());
+  if (search?.elements.category.value) query.set('category', search.elements.category.value);
+
+  const page = await api(`/faq/articles?${query}`);
+  cache.faqVisibilities = page?.visibilities ?? [];
+
+  fillTable($('#table-faq tbody'), (page?.items ?? []).map((article) => el('tr', {},
+    el('td', { class: 'text' },
+      el('button', { class: 'link', text: article.title, onclick: () => openFAQArticle(article.id) })),
+    el('td', { class: 'text', text: faqCategoryPath(article.categoryId) }),
+    el('td', { class: 'text', text: faqVisibilityName(article.visibility) }),
+    el('td', { text: fmtMoment(article.updatedAt) }),
+    el('td', { class: 'actions' }, ...(can('faq:write')
+      ? [
+        el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editFAQArticle(article) }),
+        deleteButton({
+          label: `${t('entity.faqarticle', 'Article')} "${article.title}"`,
+          path: `/faq/articles/${article.id}`,
+          message: t('msg.faqArticleDeleted', 'Article deleted'),
+          after: async () => { closeFAQArticle(); await loadFAQ(); },
+        }),
+      ]
+      : [])),
+  )), 5, t('faq.empty', 'Nothing found.'));
+}
+
+/** The article that is open, as the server last answered it, or none. */
+let faqArticleShown = null;
+
+/** Opens an article to read it: what it says, and what it is filed under. */
+async function openFAQArticle(id) {
+  const article = await api(`/faq/articles/${id}`);
+  if (!article) return;
+
+  faqArticleShown = article;
+
+  const fact = (term, value) => [el('dt', { text: term }), el('dd', { text: value })];
+
+  $('#faq-article-title').textContent = article.title;
+  $('#faq-article-facts').replaceChildren(
+    ...fact(t('field.categoryId', 'Category'), faqCategoryPath(article.categoryId)),
+    ...fact(t('field.visibility', 'Who may read it'), faqVisibilityName(article.visibility)),
+    ...(article.language ? fact(t('field.language', 'Language'), LANGUAGES[article.language] ?? article.language) : []),
+    ...(article.keywords ? fact(t('field.keywords', 'Keywords'), article.keywords) : []),
+    ...fact(t('faq.updated', 'Written'),
+      `${fmtMoment(article.updatedAt)}${article.updatedByName ? ` – ${article.updatedByName}` : ''}`),
+  );
+  $('#faq-article-body').textContent = article.body;
+  $('#faq-article').hidden = false;
+  $('#faq-article').scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+/** Puts the open article away. */
+function closeFAQArticle() {
+  faqArticleShown = null;
+  $('#faq-article').hidden = true;
+  $('#faq-article-title').textContent = '';
+  $('#faq-article-facts').replaceChildren();
+  $('#faq-article-body').textContent = '';
+}
+
+/**
+ * Fills the article form's choices: the categories still offered and the one
+ * the article is filed under, retired or not; who may read it, the staff alone
+ * for a new one; and its language, any for a new one.
+ */
+function fillFAQArticleForm(form, article) {
+  const offered = cache.faqCategories.filter((category) => category.valid || category.id === article?.categoryId);
+
+  fillSelect(form.elements.categoryId,
+    offered.map((category) => ({ value: String(category.id), label: faqCategoryPath(category.id) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    { labelKey: 'label', valueKey: 'value' });
+  fillSelect(form.elements.visibility,
+    (cache.faqVisibilities.length ? cache.faqVisibilities : Object.keys(FAQ_VISIBILITY_TITLES))
+      .map((visibility) => ({ value: visibility, label: faqVisibilityName(visibility) })),
+    { labelKey: 'label', valueKey: 'value' });
+  fillSelect(form.elements.language,
+    Object.entries(LANGUAGES).map(([code, name]) => ({ value: code, label: name })),
+    { placeholder: t('faq.everyLanguage', 'every language'), labelKey: 'label', valueKey: 'value' });
+
+  form.elements.categoryId.value = article ? String(article.categoryId) : (offered[0] ? String(offered[0].id) : '');
+  form.elements.visibility.value = article?.visibility ?? 'internal';
+  form.elements.language.value = article?.language ?? '';
+}
+
+/** Sends the article form, writing an article or correcting one. */
+function saveFAQArticle(form) {
+  const id = form.elements.id.value;
+  const body = JSON.stringify({
+    title: form.elements.title.value.trim(),
+    categoryId: Number(form.elements.categoryId.value),
+    visibility: form.elements.visibility.value,
+    language: form.elements.language.value,
+    keywords: form.elements.keywords.value.trim(),
+    body: form.elements.body.value.trim(),
+    valid: form.elements.valid.checked,
+  });
+
+  mutate(
+    () => (id ? api(`/faq/articles/${id}`, { method: 'PUT', body }) : api('/faq/articles', { method: 'POST', body })),
+    id ? t('msg.faqArticleSaved', 'Article saved') : t('msg.faqArticleCreated', 'Article written'),
+    async (written) => {
+      resetFAQArticleForm();
+      await loadFAQ();
+      if (written?.id) await openFAQArticle(written.id);
+    },
+  );
+}
+
+/** Opens the article that is shown in the form, to correct it. */
+function editFAQArticle(article) {
+  const form = $('#form-faq-article');
+
+  form.elements.id.value = String(article.id);
+  form.elements.title.value = article.title;
+  form.elements.keywords.value = article.keywords;
+  form.elements.body.value = article.body;
+  form.elements.valid.checked = article.valid;
+  fillFAQArticleForm(form, article);
+
+  // Drawn rather than declared with a key, because it carries the article's
+  // title; see editRole for why the key has to come off.
+  const heading = $('#faq-article-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('faqArticleFormTitle', () => {
+    heading.textContent = t('faq.edit', 'Edit the article {0}').replace('{0}', article.title);
+  });
+
+  swapTheLabel($('#faq-article-submit'), 'action.save', 'Save');
+  $('#faq-article-cancel').hidden = false;
+  form.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  form.elements.title.focus();
+}
+
+/** Puts the article form back to writing a new one. */
+function resetFAQArticleForm() {
+  const form = $('#form-faq-article');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillFAQArticleForm(form, null);
+
+  stopRedrawing('faqArticleFormTitle');
+  swapTheLabel($('#faq-article-form-title'), 'faq.create', 'Write an article');
+  swapTheLabel($('#faq-article-submit'), 'action.create', 'Create');
+  $('#faq-article-cancel').hidden = true;
+}
+
+/** Draws the categories' card, and its form where nobody is filling it in. */
+function drawFAQCategories() {
+  fillTable($('#table-faq-category tbody'), cache.faqCategories
+    .map((category) => ({ category, path: faqCategoryPath(category.id) }))
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map(({ category, path }) => el('tr', {},
+      el('td', { class: 'text', text: path }),
+      el('td', { class: 'text', text: category.description }),
+      el('td', { text: category.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+      el('td', { class: 'actions' },
+        el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editFAQCategory(category) }),
+        deleteButton({
+          label: `${t('entity.faqcategory', 'Category')} "${category.name}"`,
+          path: `/faq/categories/${category.id}`,
+          message: t('msg.faqCategoryDeleted', 'Category deleted'),
+          after: loadFAQ,
+        })),
+    )), 4, t('faq.categoriesEmpty', 'No categories yet.'));
+
+  const form = $('#form-faq-category');
+  if (form && !beingEdited(form) && !form.elements.id.value) fillFAQParents(form, null);
+}
+
+/** Fills the category form's choice of parent: the top, or any other category. */
+function fillFAQParents(form, category) {
+  fillSelect(form.elements.parentId,
+    cache.faqCategories.filter((other) => other.id !== category?.id)
+      .map((other) => ({ value: String(other.id), label: faqCategoryPath(other.id) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    { placeholder: t('faq.top', 'nothing - at the top'), labelKey: 'label', valueKey: 'value' });
+  form.elements.parentId.value = category?.parentId ? String(category.parentId) : '';
+}
+
+/** Sends the category form, making a category or correcting one. */
+function saveFAQCategory(form) {
+  const id = form.elements.id.value;
+  const parent = form.elements.parentId.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    valid: form.elements.valid.checked,
+    ...(parent ? { parentId: Number(parent) } : { clearParent: true }),
+  });
+
+  mutate(
+    () => (id ? api(`/faq/categories/${id}`, { method: 'PUT', body }) : api('/faq/categories', { method: 'POST', body })),
+    id ? t('msg.faqCategorySaved', 'Category saved') : t('msg.faqCategoryCreated', 'Category created'),
+    async () => { resetFAQCategoryForm(); await loadFAQ(); },
+  );
+}
+
+/** Opens a category in the form, to correct it. */
+function editFAQCategory(category) {
+  const form = $('#form-faq-category');
+
+  form.elements.id.value = String(category.id);
+  form.elements.name.value = category.name;
+  form.elements.description.value = category.description;
+  form.elements.valid.checked = category.valid;
+  fillFAQParents(form, category);
+
+  const heading = $('#faq-category-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('faqCategoryFormTitle', () => {
+    heading.textContent = t('faq.categoryEdit', 'Edit the category {0}').replace('{0}', category.name);
+  });
+
+  swapTheLabel($('#faq-category-submit'), 'action.save', 'Save');
+  $('#faq-category-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the category form back to making a new one. */
+function resetFAQCategoryForm() {
+  const form = $('#form-faq-category');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  fillFAQParents(form, null);
+
+  stopRedrawing('faqCategoryFormTitle');
+  swapTheLabel($('#faq-category-form-title'), 'faq.categoryCreate', 'Add a category');
+  swapTheLabel($('#faq-category-submit'), 'action.create', 'Create');
+  $('#faq-category-cancel').hidden = true;
+}
+
+/** Wires the knowledge base's screen. */
+function wireFAQ() {
+  const search = $('#form-faq-search');
+  const article = $('#form-faq-article');
+  const category = $('#form-faq-category');
+
+  search.addEventListener('submit', (e) => {
+    e.preventDefault();
+    loadFAQArticles().catch((err) => toastFailure(err));
+  });
+  article.addEventListener('submit', (e) => { e.preventDefault(); saveFAQArticle(article); });
+  category.addEventListener('submit', (e) => { e.preventDefault(); saveFAQCategory(category); });
+  $('#faq-article-cancel').addEventListener('click', resetFAQArticleForm);
+  $('#faq-category-cancel').addEventListener('click', resetFAQCategoryForm);
+  $('#faq-article-close').addEventListener('click', closeFAQArticle);
+  $('#faq-article-edit').addEventListener('click', () => { if (faqArticleShown) editFAQArticle(faqArticleShown); });
+}
+
+// ---------------------------------------------------- system configuration
+
+/**
+ * The value an option of the system configuration has, as the server last said.
+ * Every account signed in is handed the external options, which are the ones a
+ * screen needs; whoever administers is handed all of them.
+ */
+function configValue(name) {
+  return cache.sysconfig.find((option) => option.name === name)?.value;
+}
+
+/**
+ * A ticket's number as the installation writes it, KIX18's way: after the word
+ * it calls a ticket and the divider, Ticket::Hook and Ticket::HookDivider.
+ */
+function ticketName(number) {
+  return `${configValue('Ticket::Hook') ?? ''}${configValue('Ticket::HookDivider') ?? ''}${number}`;
+}
+
+/** What an option does, in the reader's language; the English is the server's. */
+function configDescription(option) {
+  return t(`sysconfig.${option.name}`, option.description);
+}
+
+/**
+ * A value of an option as the card shows it: a switch as on or off, a calendar
+ * by its name - none counts around the clock - and nothing as a word.
+ */
+function configShown(option, value) {
+  if (option.type === 'bool') return value ? t('change.on', 'on') : t('change.off', 'off');
+
+  if (option.type === 'calendar') {
+    if (value === null || value === undefined) return t('sla.aroundTheClock', 'around the clock');
+
+    return (cache.calendars ?? []).find((calendar) => calendar.id === value)?.name ?? `#${value}`;
+  }
+
+  return value === '' ? t('sysconfig.nothing', 'nothing') : value;
+}
+
+/** Reads the system configuration, and draws its card for whoever administers. */
+async function loadSysConfig() {
+  cache.sysconfig = (await api('/settings/sysconfig'))?.items ?? [];
+
+  const tbody = $('#table-sysconfig tbody');
+  if (!tbody || !can('settings:manage')) return;
+
+  // The names of the calendars an option may name, read here as well because
+  // nothing on this screen reads them otherwise; whoever cannot set up queues
+  // sees an option's calendar by its number.
+  if (cache.sysconfig.some((option) => option.type === 'calendar') && can('queues:write')) {
+    cache.calendars = (await api('/calendars'))?.items ?? [];
+  }
+
+  fillTable(tbody, cache.sysconfig.map(sysconfigRow), 4, t('sysconfig.none', 'No options.'));
+}
+
+/** One option as a row of the card's table. */
+function sysconfigRow(option) {
+  const value = configShown(option, option.value);
+
+  return el('tr', {},
+    el('td', { class: 'text' },
+      el('strong', { text: configDescription(option) }),
+      el('br', {}),
+      el('code', { class: 'muted', text: option.name })),
+    el('td', { class: 'text', text: option.modified ? `${value} · ${t('sysconfig.changed', 'changed')}` : value }),
+    el('td', { class: 'text', text: configShown(option, option.default) }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editSysConfig(option) })),
+  );
+}
+
+/**
+ * Opens an option in the card's form, to change it: a line of text bounded as
+ * the server bounds it, or a switch.
+ */
+function editSysConfig(option) {
+  const form = $('#form-sysconfig');
+  const text = option.type === 'string';
+  const calendar = option.type === 'calendar';
+
+  form.hidden = false;
+  form.elements.id.value = option.name;
+  $('.sysconfig-text', form).hidden = !text;
+  $('.sysconfig-switch', form).hidden = option.type !== 'bool';
+  $('.sysconfig-calendar', form).hidden = !calendar;
+  form.elements.text.maxLength = option.maxLength || 255;
+  form.elements.text.value = text ? option.value : '';
+  form.elements.enabled.checked = option.value === true;
+
+  // Around the clock first, then the calendars still offered - and the one the
+  // option names, offered or not, so that opening it does not quietly change it.
+  if (calendar) {
+    fillSelect(form.elements.calendar,
+      (cache.calendars ?? []).filter((entry) => entry.valid || entry.id === option.value)
+        .map((entry) => ({ value: String(entry.id), label: entry.name })),
+      { placeholder: t('sla.aroundTheClock', 'around the clock'), labelKey: 'label', valueKey: 'value' });
+    form.elements.calendar.value = option.value ? String(option.value) : '';
+  }
+  $('#sysconfig-default').hidden = !option.modified;
+  $('#sysconfig-cancel').hidden = false;
+
+  // Drawn rather than declared with a key, because it carries the option; see
+  // editRole for why the key has to come off.
+  const heading = $('#sysconfig-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('sysconfigForm', () => {
+    heading.textContent = option.name;
+    $('#sysconfig-description').textContent = configDescription(option);
+  });
+
+  form.elements[{ string: 'text', calendar: 'calendar' }[option.type] ?? 'enabled'].focus();
+}
+
+/** Puts the card's form away, holding no option. */
+function resetSysConfigForm() {
+  const form = $('#form-sysconfig');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  form.hidden = true;
+
+  stopRedrawing('sysconfigForm');
+  swapTheLabel($('#sysconfig-form-title'), 'sysconfig.formTitle', 'Change an option');
+  $('#sysconfig-description').textContent = '';
+  $('#sysconfig-default').hidden = true;
+  $('#sysconfig-cancel').hidden = true;
+}
+
+/**
+ * Sends the option in the card's form. Text goes as it was typed, not trimmed:
+ * a colon and a space can be the point.
+ */
+function saveSysConfig(form) {
+  const option = cache.sysconfig.find((candidate) => candidate.name === form.elements.id.value);
+  if (!option) return;
+
+  const chosen = form.elements.calendar.value;
+  const value = {
+    bool: () => form.elements.enabled.checked,
+    calendar: () => (chosen ? Number(chosen) : null),
+  }[option.type]?.() ?? form.elements.text.value;
+
+  mutate(
+    () => api(`/settings/sysconfig/${encodeURIComponent(option.name)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+    t('msg.sysconfigSaved', 'Option saved'),
+    async () => { resetSysConfigForm(); await refreshAll(); },
+  );
+}
+
+/** Puts the option in the card's form back to its default. */
+function putSysConfigBack(form) {
+  const name = form.elements.id.value;
+  if (!name) return;
+
+  mutate(
+    () => api(`/settings/sysconfig/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+    t('msg.sysconfigReset', 'Option put back to its default'),
+    async () => { resetSysConfigForm(); await refreshAll(); },
+  );
+}
+
+/** Wires the system configuration's form. */
+function wireSysConfig() {
+  const form = $('#form-sysconfig');
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveSysConfig(form); });
+  $('#sysconfig-default').addEventListener('click', () => putSysConfigBack(form));
+  $('#sysconfig-cancel').addEventListener('click', resetSysConfigForm);
+}
+
+// -------------------------------------------------------- searched choices
+
+/**
+ * What a searched choice can name, and how a choice reads.
+ *
+ * Contacts and organisations run to thousands where accounts and queues run to
+ * dozens, and a listing answers two hundred at most - so a select filled from
+ * one cannot hold them all, and a select missing the entry a record names
+ * saves the record as naming nobody: filled that way, the organisation came off
+ * every contact and every ticket of an organisation past the two hundredth the
+ * moment either was saved. Each such choice is therefore a select with a search
+ * box beside it.
+ */
+const SEARCHED_KINDS = {
+  contact: {
+    path: '/contacts',
+    describe: (contact) => (contact.email ? `${contact.name} <${contact.email}>` : contact.name),
+  },
+  organisation: {
+    path: '/organisations',
+    describe: (organisation) => (organisation.number
+      ? `${organisation.name} (${organisation.number})` : organisation.name),
+  },
+};
+
+/**
+ * Every searched choice: its form, its search box, its select, what it names,
+ * and what it says while it names nothing. A filter finds retired entries as
+ * well, because their contacts are still there to be found; a form offers only
+ * what may still be chosen.
+ */
+const SEARCHED = {
+  contactFilterOrganisation: {
+    form: '#form-contact-filter', search: 'organisationSearch', select: 'organisation', kind: 'organisation',
+    retired: true, none: () => t('customer.everyOrganisation', 'every organisation'),
+  },
+  contactOrganisation: {
+    form: '#form-contact', search: 'organisationSearch', select: 'organisationId', kind: 'organisation',
+    none: () => t('ticket.nobody', 'nobody'),
+  },
+  ticketContact: {
+    form: '#form-ticket', search: 'contactSearch', select: 'contactId', kind: 'contact',
+    none: () => t('ticket.nobody', 'nobody'),
+  },
+  ticketOrganisation: {
+    form: '#form-ticket', search: 'organisationSearch', select: 'organisationId', kind: 'organisation',
+    none: () => t('ticket.nobody', 'nobody'),
+  },
+};
+
+/** How many entries a search offers: more wants better words, not scrolling. */
+const SEARCH_OFFERS = 20;
+
+/** A record's own entry, kept by its choice whatever a search finds, or none. */
+function keptEntry(id, name) {
+  return id ? { value: String(id), label: name || `#${id}` } : null;
+}
+
+/**
+ * Fills a searched choice with what its search last found, and keeps the entry
+ * given - a record's own, or null for a new record - or, given nothing, the one
+ * it names now. The kept entry stays among the options, retired or not, so no
+ * search can take away what the form was going to keep.
+ */
+function offerFound(name, keep) {
+  const choice = SEARCHED[name];
+  const select = $(choice.form)?.elements[choice.select];
+  if (!select) return;
+
+  const named = select.value
+    ? { value: select.value, label: select.selectedOptions[0]?.textContent ?? `#${select.value}` }
+    : null;
+  const kept = keep === undefined ? named : keep;
+  const choices = (cache.found[name]?.entries ?? []).map((entry) => ({
+    value: String(entry.id), label: SEARCHED_KINDS[choice.kind].describe(entry),
+  }));
+
+  if (kept && !choices.some((offered) => offered.value === kept.value)) choices.unshift(kept);
+
+  fillSelect(select, choices, { placeholder: choice.none(), labelKey: 'label', valueKey: 'value' });
+  select.value = kept?.value ?? '';
+}
+
+/**
+ * Searches what a choice may name for the words in its search box, and offers
+ * the first of them. An answer that arrives after a later search was sent, or
+ * after a sign-out, is dropped: it would offer what the box no longer says, or
+ * somebody else's customers.
+ */
+async function searchChoices(name) {
+  const choice = SEARCHED[name];
+  const form = $(choice.form);
+  if (!form) return;
+
+  const search = { entries: cache.found[name]?.entries ?? [] };
+  cache.found[name] = search;
+
+  const query = new URLSearchParams({ limit: String(SEARCH_OFFERS) });
+  if (!choice.retired) query.set('valid', 'true');
+
+  const words = form.elements[choice.search].value.trim();
+  if (words) query.set('q', words);
+
+  const entries = (await api(`${SEARCHED_KINDS[choice.kind].path}?${query}`))?.items ?? [];
+  if (cache.found[name] !== search) return;
+
+  search.entries = entries;
+  offerFound(name);
+}
+
+/** Has every search box fill its choice as somebody types. */
+function wireSearches() {
+  for (const [name, choice] of Object.entries(SEARCHED)) {
+    let typing;
+
+    $(choice.form).elements[choice.search].addEventListener('input', () => {
+      clearTimeout(typing);
+      typing = setTimeout(() => searchChoices(name).catch((err) => toastFailure(err)), 300);
+    });
+  }
+}
+
+// --------------------------------------------------------------- customers
+
+/**
+ * The two cards of the customer screen - organisations and contacts - each a
+ * table and one form that makes an entry or corrects one, told apart by the
+ * hidden id as every form here is.
+ */
+const CUSTOMER_FORMS = {
+  organisation: {
+    path: '/organisations',
+    fields: ['name', 'number', 'url', 'address', 'note'],
+    create: ['customer.organisationCreate', 'Add an organisation'],
+    editing: (entry) => t('customer.organisationEdit', 'Edit the organisation {0}').replace('{0}', entry.name),
+    created: () => t('msg.organisationCreated', 'Organisation created'),
+    saved: () => t('msg.organisationSaved', 'Organisation saved'),
+  },
+  contact: {
+    path: '/contacts',
+    fields: ['name', 'email', 'phone', 'note'],
+    create: ['customer.contactCreate', 'Add a contact'],
+    editing: (entry) => t('customer.contactEdit', 'Edit the contact {0}').replace('{0}', entry.name),
+    created: () => t('msg.contactCreated', 'Contact created'),
+    saved: () => t('msg.contactSaved', 'Contact saved'),
+  },
+};
+
+/** How many entries a customer card lists before it asks for a narrower search. */
+const CUSTOMER_PAGE = 50;
+
+/**
+ * Fills the customer screen, for whoever may read customers, and its choices of
+ * organisation where nobody is filling them in.
+ */
+async function loadCustomers() {
+  if (!can('customers:read')) return;
+
+  await Promise.all([
+    loadOrganisationPage(),
+    loadContactPage(),
+    beingEdited($('#form-contact-filter')) ? null : searchChoices('contactFilterOrganisation'),
+    beingEdited($('#form-contact')) ? null : searchChoices('contactOrganisation'),
+  ]);
+}
+
+/** Says, under a card's table, when the search found more than it lists. */
+function customerOverflow(line, shown, total) {
+  if (!line) return;
+
+  line.textContent = total > shown
+    ? fillIn(t('customer.more', 'Showing {0} of {1} - narrow the search to find the rest.'), [shown, total])
     : '';
 }
 
-// --------------------------------------------------------------- week grid
+/** Reads the organisations the search asks for, and draws them. */
+async function loadOrganisationPage() {
+  const tbody = $('#table-organisation tbody');
+  const filter = $('#form-organisation-filter');
+  if (!tbody || !filter) return;
 
-/** A YYYY-MM-DD day moved by a number of days, counted on the calendar. */
-function addDays(iso, days) {
-  return new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+  const query = new URLSearchParams({ limit: String(CUSTOMER_PAGE) });
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+
+  const page = await api(`/organisations?${query}`);
+  const items = page?.items ?? [];
+
+  fillTable(tbody, items.map(organisationRow), 5, t('customer.organisationsEmpty', 'No organisations.'));
+  customerOverflow($('#organisation-overflow'), items.length, page?.totalCount ?? 0);
 }
 
-/** The Monday of the week a YYYY-MM-DD day falls in. */
-function mondayOf(iso) {
-  const weekday = new Date(`${iso}T00:00:00Z`).getUTCDay();
-
-  return addDays(iso, -((weekday + 6) % 7));
+/** One organisation as a row of its table. */
+function organisationRow(organisation) {
+  return el('tr', {},
+    el('td', { class: 'text', text: organisation.name }),
+    el('td', { class: 'text', text: organisation.number || '–' }),
+    el('td', { class: 'text' }, organisation.url
+      ? el('a', { href: organisation.url, text: organisation.url, target: '_blank', rel: 'noopener noreferrer' })
+      : '–'),
+    el('td', { text: organisation.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editCustomer('organisation', organisation) }),
+      deleteButton({
+        label: `${t('field.organisationId', 'Organisation')} "${organisation.name}"`,
+        path: `/organisations/${organisation.id}`,
+        message: t('msg.organisationDeleted', 'Organisation deleted'),
+        after: refreshAll,
+      })),
+  );
 }
 
-/** The ISO 8601 number of the week that begins on a Monday. */
-function isoWeekNumber(monday) {
-  // The week's Thursday decides its year, and the week is counted from the week
-  // holding that year's first Thursday.
-  const thursday = new Date(Date.parse(`${addDays(monday, 3)}T00:00:00Z`));
-  const yearStart = Date.UTC(thursday.getUTCFullYear(), 0, 1);
+/** Reads the contacts the search asks for, and draws them. */
+async function loadContactPage() {
+  const tbody = $('#table-contact tbody');
+  const filter = $('#form-contact-filter');
+  if (!tbody || !filter) return;
 
-  return Math.floor((thursday.getTime() - yearStart) / (7 * 86400000)) + 1;
+  const query = new URLSearchParams({ limit: String(CUSTOMER_PAGE) });
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+  if (filter.elements.organisation.value) query.set('organisation', filter.elements.organisation.value);
+
+  const page = await api(`/contacts?${query}`);
+  const items = page?.items ?? [];
+
+  fillTable(tbody, items.map(contactRow), 7, t('customer.contactsEmpty', 'No contacts.'));
+  customerOverflow($('#contact-overflow'), items.length, page?.totalCount ?? 0);
 }
 
-/** The Monday of the week the grid shows, or null before it was first opened. */
-let weekShown = null;
-
-/** What the grid was last drawn from, kept so a language change can redraw it. */
-let weekData = null;
+/** One contact as a row of its table. */
+function contactRow(contact) {
+  return el('tr', {},
+    el('td', { class: 'text', text: contact.name }),
+    el('td', { class: 'text', text: contact.email || '–' }),
+    el('td', { class: 'text', text: contact.phone || '–' }),
+    el('td', { class: 'text', text: contact.organisationName || '–' }),
+    el('td', { text: contact.hasPortalAccount ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { text: contact.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editCustomer('contact', contact) }),
+      ...(can('customers:write') ? portalActions(contact) : []),
+      deleteButton({
+        label: `${t('field.contactId', 'Contact')} "${contact.name}"`,
+        path: `/contacts/${contact.id}`,
+        message: t('msg.contactDeleted', 'Contact deleted'),
+        after: refreshAll,
+        ask: () => deleteContact(contact),
+      })),
+  );
+}
 
 /**
- * The rows somebody added by hand that have nothing booked on them yet, per week.
+ * What a contact's row offers about the portal: access for one without it, and
+ * for one with it a new password or taking it away. Only for whoever keeps the
+ * customers, who is the one the server lets do it.
  *
- * Kept on the page only: a row with no entry is not a fact about anything, and it
- * is gone with the week it was added to, which is when it stops being useful.
+ * Taking it away is a plain link, red only in the question it asks: a row's
+ * checkbox deletes what the row's first button carrying a deletion deletes, and
+ * a second such button in front of the contact's own would have "delete selected"
+ * take the portal away instead of deleting the contacts.
  */
-const weekExtraRows = new Map();
+function portalActions(contact) {
+  if (!contact.hasPortalAccount) {
+    return [el('button', {
+      class: 'link',
+      'data-action': 'portal-give',
+      text: t('customer.portalGive', 'give portal access'),
+      onclick: () => givePortal(contact, false),
+    })];
+  }
 
-/** What a row is keyed by: a project's id, or "none" for the hours without one. */
-const weekRowKey = (projectId) => (projectId ? String(projectId) : 'none');
+  return [
+    el('button', {
+      class: 'link',
+      'data-action': 'portal-password',
+      text: t('customer.portalPassword', 'new portal password'),
+      onclick: () => givePortal(contact, true),
+    }),
+    el('button', {
+      class: 'link',
+      'data-action': 'portal-take',
+      text: t('customer.portalTake', 'take portal access away'),
+      onclick: () => takePortal(contact),
+    }),
+  ];
+}
 
 /**
- * Loads the week the grid shows: its entries, and what each of its days asks.
+ * Gives a contact the portal, or the account they have a new password.
  *
- * A field somebody is typing into survives the redraw that follows - the redraw
- * after one cell's save can land while the next one is being filled in, and
- * throwing that away is what a background load must never do.
+ * Either way it is a password for one sign-in: the account has to choose its own
+ * before it can do anything, so what was typed here does not stay standing as a
+ * password two people know - and a new one ends whatever session the account
+ * had open, as a reset of any account's does. The question says so, and names
+ * the address the contact signs in with, because that is what they will be told.
  */
-async function loadWeekGrid() {
-  if (!can('timesheets:read:own')) return;
-
-  if (!weekShown) weekShown = mondayOf(todayISO());
-
-  const from = weekShown;
-  const to = addDays(from, 6);
-
-  const [entries, answer] = await Promise.all([
-    everyTimesheet({ from, to }),
-    api(`/me/days?${new URLSearchParams({ from, to })}`),
-  ]);
-
-  // Overtaken by a step to another week while this was on its way.
-  if (from !== weekShown) return;
-
-  weekData = { from, entries, days: answer?.days ?? [] };
-
-  redrawable('weekGrid', drawWeekGrid);
-}
-
-/** Draws the grid from what was last loaded, in the language now in force. */
-function drawWeekGrid() {
-  if (!weekData) return;
-
-  const { from, entries, days } = weekData;
-  const dates = Array.from({ length: 7 }, (_, i) => addDays(from, i));
-  const names = weekdayNames();
-  const dayLabel = new Intl.DateTimeFormat(activeLocale(), {
-    day: '2-digit', month: '2-digit', timeZone: 'UTC',
-  });
-
-  $('#week-title').textContent = fillIn(t('week.title', 'Week {0} · {1} – {2}'),
-    [isoWeekNumber(from), fmtDate(from), fmtDate(dates[6])]);
-
-  for (const head of $$('#table-week th[data-day]')) {
-    const i = Number(head.dataset.day);
-    // Two parts, so a narrow window can set the date under the day's name in
-    // every column alike - see .week-date.
-    head.replaceChildren(
-      el('span', { text: names[i] ?? '' }),
-      ' ',
-      el('span', { class: 'week-date', text: dayLabel.format(new Date(`${dates[i]}T00:00:00Z`)) }));
-
-    // And what else the day is: a public holiday, an absence somebody recorded.
-    const day = days.find((d) => d.date === dates[i]);
-    if (day?.holiday) head.append(el('span', { class: 'week-tag', text: holidayOf(day) }));
-    if (day?.absence) head.append(el('span', { class: 'week-tag', text: absenceName(day.absence) }));
-  }
-
-  // The field being typed into, so the redraw can hand it back.
-  const focused = document.activeElement?.closest?.('#table-week input[data-cell]');
-  const typing = focused && focused.value !== focused.dataset.value
-    ? { cell: focused.dataset.cell, value: focused.value }
-    : (focused ? { cell: focused.dataset.cell } : null);
-
-  // And put back to what the server holds before it goes. Taken off the page with
-  // the focus in it, it fires its change on the way out, and booked what had been
-  // typed so far - while the field drawn in its place carried the same digits on
-  // and booked the whole number beside it: 1 and 1.5, for 1.5 typed once.
-  if (typing?.value !== undefined) focused.value = focused.dataset.value;
-
-  // The rows: every project with something booked this week, every row added by
-  // hand, the hours without a project last.
-  const rows = new Map();
-
-  for (const entry of entries) {
-    const key = weekRowKey(entry.projectId);
-    if (!rows.has(key)) rows.set(key, entries.filter((e) => weekRowKey(e.projectId) === key));
-  }
-
-  for (const key of weekExtraRows.get(from) ?? []) {
-    if (!rows.has(key)) rows.set(key, []);
-  }
-
-  const order = [...rows.keys()].sort((a, b) => {
-    if (a === 'none') return 1;
-    if (b === 'none') return -1;
-
-    return projectName(Number(a)).localeCompare(projectName(Number(b)));
-  });
-
-  const writable = can('timesheets:write:own');
-
-  const body = order.map((key) => {
-    const own = rows.get(key);
-    const project = key === 'none' ? null : cache.projects.find((p) => String(p.id) === key);
-    // A closed project takes no new hours, so its cells only show what it has.
-    const open = key === 'none' || project?.status === 'active';
-    const label = key === 'none' ? t('ts.noProject', 'No project') : projectName(Number(key));
-
-    const cells = dates.map((date) => {
-      const there = own.filter((entry) => entry.date === date);
-      const sum = there.reduce((total, entry) => total + entry.durationHours, 0);
-      const cellKey = `${key}|${date}`;
-
-      if (there.length > 1) {
-        // Several entries make this sum, and a new number could mean any of them.
-        const lead = el('button', {
-          type: 'button',
-          class: 'link week-several',
-          text: fmtShare(sum),
-          'aria-label': fillIn(t('week.several', '{0} entries - show them'), [there.length]),
-        });
-
-        lead.addEventListener('click', () => showTheDaysEntries(date, key));
-
-        return el('td', { class: 'num' }, lead);
-      }
-
-      if (!writable || !open) {
-        return el('td', { class: 'num', text: sum ? fmtShare(sum) : '–' });
-      }
-
-      return el('td', { class: 'num' }, el('input', {
-        type: 'number',
-        step: 'any',
-        min: '0',
-        inputmode: 'decimal',
-        class: 'week-cell',
-        'data-cell': cellKey,
-        'data-value': sum ? String(sum) : '',
-        'data-id': there.length === 1 ? String(there[0].id) : '',
-        'data-project': key === 'none' ? '' : key,
-        'data-date': date,
-        'aria-label': `${label}, ${fmtDate(date)}`,
-        value: sum ? String(sum) : '',
-      }));
-    });
-
-    const total = own.reduce((sum, entry) => sum + entry.durationHours, 0);
-
-    return el('tr', {},
-      el('th', { scope: 'row', class: key === 'none' ? 'text empty' : 'text', text: label }),
-      ...cells,
-      el('td', { class: 'num sum', text: fmtShare(total) }));
-  });
-
-  $('#table-week tbody').replaceChildren(...(body.length ? body : [
-    el('tr', {}, el('td', {
-      colspan: '9', class: 'empty', text: t('week.empty', 'Nothing booked this week yet.'),
-    })),
-  ]));
-
-  // What the week came to, day by day, against what each day asked.
-  const booked = dates.map((date) => entries
-    .filter((entry) => entry.date === date)
-    .reduce((sum, entry) => sum + entry.durationHours, 0));
-  const target = dates.map((date) => days.find((d) => d.date === date)?.target ?? 0);
-
-  const sumOf = (values) => values.reduce((a, b) => a + b, 0);
-  const signed = (n) => (Math.abs(n) < 0.005 ? '±0' : `${n > 0 ? '+' : '−'}${fmtShare(Math.abs(n))}`);
-
-  // A day that does not count towards the balance has none here either, rather
-  // than one the balance does not have. Which days count is the server's to say -
-  // the booked ones, and from the day somebody chose every working day up to
-  // today - so the row comes to what the balance says.
-  const counts = dates.map((date) => days.find((d) => d.date === date)?.counts ?? false);
-  const balance = dates.map((_, i) => (counts[i] ? booked[i] - target[i] : null));
-  const counted = balance.filter((value) => value !== null);
-
-  const footRow = (label, values, total, format) => el('tr', {},
-    el('th', { scope: 'row', text: label }),
-    ...values.map((value) => el('td', { class: 'num', text: value === null ? '–' : format(value) })),
-    el('td', { class: 'num sum', text: format(total) }));
-
-  $('#table-week tfoot').replaceChildren(
-    footRow(t('week.booked', 'Booked'), booked, sumOf(booked), fmtShare),
-    footRow(t('week.target', 'Target'), target, sumOf(target), fmtShare),
-    footRow(t('week.balance', 'Balance'), balance, sumOf(counted), signed));
-
-  // The projects a row can still be added for: the open ones not on the grid.
-  const add = $('#week-add-project');
-
-  if (add) {
-    const bookable = cache.projects.filter((p) => p.status === 'active' && !rows.has(String(p.id)));
-
-    add.replaceChildren(
-      el('option', { value: '', text: t('week.choose', 'Choose …') }),
-      ...bookable.map((p) => el('option', { value: String(p.id), text: p.name })),
-      ...(rows.has('none') ? [] : [el('option', { value: 'none', text: t('ts.noProject', 'No project') })]),
-    );
-  }
-
-  if (typing) {
-    const again = $(`#table-week input[data-cell="${CSS.escape(typing.cell)}"]`);
-
-    if (again) {
-      // Focused first and filled after, because a field takes the focus with the
-      // caret in front of what it holds, and the next digit typed went first. A
-      // field nobody had typed into yet is selected whole, as the Tab that
-      // reached it left it.
-      again.focus();
-
-      if (typing.value !== undefined) {
-        again.value = typing.value;
-        // A number the page put there is not one the browser reports a change
-        // for when the field is left, so it was shown and never booked - see the
-        // focusout in wireWeekGrid.
-        again.dataset.carried = '';
-      } else {
-        again.select();
-      }
-    }
-  }
-}
-
-/**
- * Takes the reader to the entries a cell sums up: the entries screen, narrowed to
- * that day and that project with the filters it already has.
- */
-function showTheDaysEntries(date, key) {
-  const project = $('#filter-ts-project');
-  if (project) project.value = key === 'none' ? 'none' : key;
-
-  setDateField($('#filter-ts-from'), date);
-  setDateField($('#filter-ts-to'), date);
-
-  const search = $('#filter-ts-q');
-  if (search) search.value = '';
-
-  switchView('timesheets');
-  openTheTabOf($('#entries-card'));
-  mutate(loadTimesheets, null, null);
-}
-
-/**
- * Saves one cell: books a new entry, corrects the one behind it, or takes it back,
- * and draws the grid again whatever the server answered - see saveWeekCell.
- */
-async function commitWeekCell(input) {
-  const typed = input.value.trim();
-  const before = input.dataset.value;
-
-  if (typed === before) return;
-
-  const { id, project, date } = input.dataset;
-  const hours = Number(typed);
-
-  if (typed === '') {
-    if (!id) return;
-
-    const proceed = await confirmDialog({
-      title: t('week.removeTitle', 'Take this entry back?'),
-      text: fillIn(t('week.removeText', 'The {0} booked on {1} are deleted.'),
-        [fmtHours(Number(before)), fmtDate(date)]),
-      confirmLabel: t('action.delete', 'delete'),
-    });
-
-    if (!proceed) {
-      input.value = before;
-
-      return;
-    }
-
-    await saveWeekCell(() => api(`/timesheets/${id}`, { method: 'DELETE' }),
-      t('week.removed', 'Entry taken back'));
-
-    return;
-  }
-
-  if (!(hours > 0)) {
-    input.value = before;
-
-    return;
-  }
-
-  const call = id
-    ? () => api(`/timesheets/${id}`, { method: 'PUT', body: JSON.stringify({ durationHours: hours }) })
-    : () => api('/timesheets', {
-      method: 'POST',
-      body: JSON.stringify({
-        date, durationHours: hours, ...(project ? { projectId: Number(project) } : {}),
-      }),
-    });
-
-  await saveWeekCell(call, t('msg.booked', 'Time booked'));
-}
-
-/**
- * Makes one cell's change and draws the grid again once, from the server: with
- * everything else after a save, and on its own after a refusal, so a number the
- * server did not take does not stay on screen looking accepted.
- *
- * Once. It was drawn after the save and then again, and the second redraw landed
- * under whatever was being typed into the next cell by then.
- */
-async function saveWeekCell(call, message) {
-  let saved = false;
-
-  await mutate(call, message, async () => {
-    saved = true;
-    await reloadTimeViews();
-  });
-
-  if (!saved) await loadWeekGrid();
-}
-
-/**
- * Books the week before the one shown into the days of it that have nothing on
- * them yet.
- *
- * Asked first, because this books entries rather than filling a form. The answer
- * is shown whole, the left-out part included: a day that was already booked, or an
- * entry whose project has closed since, would otherwise look like something the
- * copy had missed.
- */
-async function copyLastWeek() {
-  const into = weekShown ?? mondayOf(todayISO());
-  const from = addDays(into, -7);
-
-  const proceed = await confirmDialog({
-    title: t('week.copyTitle', 'Copy last week?'),
-    text: fillIn(t('week.copyText',
-      'The entries of the week from {0} are booked again on the same weekdays of this one - only on days with nothing booked yet.'),
-    [fmtDate(from)]),
-    confirmLabel: t('week.copyConfirm', 'Copy'),
+async function givePortal(contact, again) {
+  const chosen = await confirmDialog({
+    title: again
+      ? t('customer.portalPasswordTitle', 'New portal password')
+      : t('customer.portalGiveTitle', 'Give portal access'),
+    text: again
+      ? fillIn(t('customer.portalPasswordText',
+        'Give {0} a new password to sign in to the customer portal with once. A password of their own is '
+        + 'chosen at that sign-in, and any session of theirs ends now.'), [contact.name])
+      : fillIn(t('customer.portalGiveText',
+        '{0} signs in to the customer portal with the address {1} and this password, once: a password of '
+        + 'their own is chosen at that sign-in.'), [contact.name, contact.email || '–']),
+    confirmLabel: again
+      ? t('customer.portalPasswordConfirm', 'Set the password')
+      : t('customer.portalGiveConfirm', 'Give access'),
     danger: false,
+    field: {
+      id: 'portal-password-field',
+      generateID: 'portal-password-generate',
+      label: t('field.password', 'Password'),
+      hint: fillIn(t('user.resetHint', 'At least {0} characters.'), [MIN_PASSWORD_LENGTH]),
+      minLength: MIN_PASSWORD_LENGTH,
+      generate: t('action.generate', 'Generate'),
+    },
+  });
+
+  if (!chosen) return;
+
+  await patch(`/contacts/${contact.id}/portal-access`, { password: chosen },
+    again ? t('msg.portalPasswordSet', 'New portal password set') : t('msg.portalGiven', 'Portal access given'),
+    refreshAll);
+}
+
+/** Takes the portal away from a contact, which erases the account they signed in with. */
+async function takePortal(contact) {
+  const proceed = await confirmDialog({
+    title: t('customer.portalTakeTitle', 'Take portal access away?'),
+    text: fillIn(t('customer.portalTakeText',
+      '{0} can no longer sign in to the customer portal: the account is erased. The tickets stay theirs.'),
+    [contact.name]),
+    confirmLabel: t('customer.portalTakeConfirm', 'Take it away'),
   });
 
   if (!proceed) return;
 
-  await mutate(() => api('/me/weeks/copy', { method: 'POST', body: JSON.stringify({ from, to: into }) }),
-    null,
-    async (copied) => {
-      toast(weekCopyNews(copied), 'ok');
-      await reloadTimeViews();
+  mutate(() => api(`/contacts/${contact.id}/portal-access`, { method: 'DELETE' }),
+    t('msg.portalTaken', 'Portal access taken away'), refreshAll);
+}
+
+/**
+ * Deletes a contact, asking first when tickets are for it.
+ *
+ * The server refuses that deletion rather than performing it, and its refusal
+ * carries how many tickets would keep no contact, so the question has the real
+ * number in it - as deleting an account that owns tickets does. A contact no
+ * ticket is for is asked about once, as any deletion is.
+ */
+async function deleteContact(contact) {
+  if (!await confirmDelete(`${t('field.contactId', 'Contact')} "${contact.name}"`)) return;
+
+  const done = t('msg.contactDeleted', 'Contact deleted');
+
+  try {
+    await api(`/contacts/${contact.id}`, { method: 'DELETE' });
+    toast(done, 'ok');
+    await refreshAll();
+
+    return;
+  } catch (err) {
+    if (err.status !== 409) {
+      toastFailure(err);
+
+      return;
+    }
+
+    const proceed = await confirmDialog({
+      title: t('confirm.deleteTitle', 'Delete for good?'),
+      text: t('customer.contactDeleteConfirm', 'Delete anyway? The tickets for this contact stay, for nobody.'),
+      detail: err.message,
+      confirmLabel: t('action.delete', 'delete'),
+    });
+
+    if (!proceed) return;
+  }
+
+  mutate(() => api(`/contacts/${contact.id}?confirm=true`, { method: 'DELETE' }), done, refreshAll);
+}
+
+// --------------------------------------------------------- published faq
+
+/**
+ * The categories each place reading the published knowledge base has been
+ * told, for naming an article's by its place in the tree.
+ */
+const publishedCategories = { portal: [], public: [] };
+
+/**
+ * Fills one of the two places the knowledge base is read from outside the
+ * staff - the portal's card, for a customer, and the sign-in screen's panel,
+ * for anybody - with its categories and what its search finds. Both ask the
+ * same routes, and the server decides what the asker may read: the places
+ * differ only in where they are.
+ */
+async function loadPublishedFAQ(place) {
+  publishedCategories[place] = (await api('/portal/faq/categories'))?.items ?? [];
+
+  const form = $(`#form-${place}-faq`);
+  if (!beingEdited(form)) {
+    const choices = publishedCategories[place]
+      .map((category) => ({ value: String(category.id), label: publishedCategoryPath(place, category.id) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    fillSelect(form.elements.category, choices,
+      { placeholder: t('faq.everyCategory', 'every category'), labelKey: 'label', valueKey: 'value' });
+  }
+
+  await findPublishedFAQ(place);
+}
+
+/** A published category named by its place in the tree, as a queue is. */
+function publishedCategoryPath(place, id) {
+  const byId = new Map(publishedCategories[place].map((category) => [category.id, category]));
+  const category = byId.get(id);
+
+  return category ? queuePath(category, byId) : '';
+}
+
+/** Draws what the place's search finds, a line each. */
+async function findPublishedFAQ(place) {
+  const form = $(`#form-${place}-faq`);
+  const query = new URLSearchParams();
+
+  if (form.elements.q.value.trim()) query.set('q', form.elements.q.value.trim());
+  if (form.elements.category.value) query.set('category', form.elements.category.value);
+
+  const found = (await api(`/portal/faq/articles?${query}`))?.items ?? [];
+
+  $(`#${place}-faq-list`).replaceChildren(...(found.length
+    ? found.map((article) => el('li', {},
+      el('button', {
+        type: 'button', class: 'link', text: article.title, onclick: () => openPublishedFAQ(place, article.id),
+      }),
+      el('span', { class: 'muted', text: ` · ${publishedCategoryPath(place, article.categoryId)}` })))
+    : [el('li', { class: 'muted', text: t('faq.empty', 'Nothing found.') })]));
+}
+
+/** Opens an article of the place's list below it. */
+async function openPublishedFAQ(place, id) {
+  const article = await api(`/portal/faq/articles/${id}`);
+
+  $(`#${place}-faq-article-title`).textContent = article.title;
+  $(`#${place}-faq-article-facts`).textContent = [
+    publishedCategoryPath(place, article.categoryId),
+    article.keywords,
+    fillIn(t('faq.writtenOn', 'written {0}'), [fmtMoment(article.updatedAt)]),
+  ].filter(Boolean).join(' · ');
+  $(`#${place}-faq-article-body`).textContent = article.body;
+  $(`#${place}-faq-article`).hidden = false;
+}
+
+/** Puts the place's article away, and what it said with it. */
+function closePublishedFAQ(place) {
+  $(`#${place}-faq-article`).hidden = true;
+  $(`#${place}-faq-article-title`).textContent = '';
+  $(`#${place}-faq-article-facts`).textContent = '';
+  $(`#${place}-faq-article-body`).textContent = '';
+}
+
+/**
+ * Offers the knowledge base on the sign-in screen where something is public,
+ * and says nothing where nothing is - or where the installation does not answer,
+ * which is not a reason to hold up signing in.
+ */
+async function offerPublicFAQ() {
+  let found = [];
+
+  try {
+    found = (await api('/portal/faq/articles'))?.items ?? [];
+  } catch {
+    found = [];
+  }
+
+  $('#login-faq-offer').hidden = found.length === 0;
+}
+
+/** Shows the sign-in screen's knowledge base in place of its form. */
+async function openPublicFAQ() {
+  $('#form-login').hidden = true;
+  $('#login-faq-offer').hidden = true;
+  $('#public-faq').hidden = false;
+
+  try {
+    await loadPublishedFAQ('public');
+  } catch (err) {
+    toastFailure(err);
+  }
+}
+
+/** Puts the sign-in screen's knowledge base away, and the form back. */
+function closePublicFAQ() {
+  $('#public-faq').hidden = true;
+  closePublishedFAQ('public');
+  $('#form-public-faq').reset();
+  $('#public-faq-list').replaceChildren();
+  $('#form-login').hidden = false;
+  offerPublicFAQ();
+}
+
+/** Wires the two places the knowledge base is read from outside the staff. */
+function wirePublishedFAQ() {
+  for (const place of ['portal', 'public']) {
+    const form = $(`#form-${place}-faq`);
+    let typing;
+
+    form.addEventListener('submit', (e) => { e.preventDefault(); findPublishedFAQ(place).catch((err) => toastFailure(err)); });
+    form.elements.category.addEventListener('change', () => findPublishedFAQ(place).catch((err) => toastFailure(err)));
+    form.elements.q.addEventListener('input', () => {
+      clearTimeout(typing);
+      typing = setTimeout(() => findPublishedFAQ(place).catch((err) => toastFailure(err)), 300);
+    });
+    $(`#${place}-faq-article-close`).addEventListener('click', () => closePublishedFAQ(place));
+  }
+
+  $('#login-faq-open').addEventListener('click', openPublicFAQ);
+  $('#public-faq-close').addEventListener('click', closePublicFAQ);
+}
+
+/** The classes of the general catalog that ship, in the reader's words; one an installation made is shown as it was typed. */
+const CATALOG_CLASS_TITLES = {
+  'ITSM::ConfigItem::Class': 'Configuration item classes',
+  'ITSM::ConfigItem::DeploymentState': 'Deployment states',
+  'ITSM::Core::IncidentState': 'Incident states',
+  'ITSM::ConfigItem::YesNo': 'Yes or no',
+  'ITSM::ConfigItem::Computer::Type': 'Computer types',
+  'ITSM::ConfigItem::Hardware::Type': 'Hardware types',
+  'ITSM::ConfigItem::Location::Type': 'Location types',
+  'ITSM::ConfigItem::Network::Type': 'Network types',
+  'ITSM::ConfigItem::Software::Type': 'Software types',
+  'ITSM::ConfigItem::Software::LicenceType': 'Licence types',
+  'ITSM::ChangeManagement::Category': 'Change categories',
+  'ITSM::ChangeManagement::Impact': 'Change impacts',
+  'ITSM::ChangeManagement::Priority': 'Change priorities',
+  'ITSM::ChangeManagement::Change::State': 'Change states',
+  'ITSM::ChangeManagement::WorkOrder::State': 'Work order states',
+  'ITSM::ChangeManagement::WorkOrder::Type': 'Work order types',
+};
+
+/** The values of the general catalog that ship, by the identifier they are kept under. */
+const SHIPPED_CATALOG_TITLES = {
+  operational: 'operational',
+  warning: 'warning',
+  incident: 'incident',
+  computer: 'computer',
+  hardware: 'hardware',
+  location: 'location',
+  building: 'building',
+  room: 'room',
+  network: 'network',
+  software: 'software',
+  expired: 'expired',
+  inactive: 'inactive',
+  maintenance: 'maintenance',
+  pilot: 'pilot',
+  planned: 'planned',
+  production: 'production',
+  repair: 'repair',
+  retired: 'retired',
+  review: 'review',
+  'test-qa': 'test/QA',
+  yes: 'yes',
+  no: 'no',
+  desktop: 'desktop',
+  phone: 'phone',
+  server: 'server',
+  other: 'other',
+  laptop: 'laptop',
+  monitor: 'monitor',
+  printer: 'printer',
+  switch: 'switch',
+  router: 'router',
+  'wlan-access-point': 'WLAN access point',
+  'security-device': 'security device',
+  'backup-device': 'backup device',
+  mouse: 'mouse',
+  keyboard: 'keyboard',
+  camera: 'camera',
+  beamer: 'projector',
+  modem: 'modem',
+  'usb-device': 'USB device',
+  'docking-station': 'docking station',
+  scanner: 'scanner',
+  office: 'office',
+  floor: 'floor',
+  rack: 'rack',
+  workplace: 'workplace',
+  outlet: 'outlet',
+  'it-facility': 'IT facility',
+  lan: 'LAN',
+  wlan: 'WLAN',
+  telco: 'telephony',
+  gsm: 'GSM',
+  'client-application': 'client application',
+  middleware: 'middleware',
+  'server-application': 'server application',
+  'client-os': 'client operating system',
+  'server-os': 'server operating system',
+  'admin-tool': 'administration tool',
+  'user-tool': 'user tool',
+  embedded: 'embedded',
+  'single-licence': 'single licence',
+  'per-user': 'per user',
+  'concurrent-users': 'concurrent users',
+  'per-processor': 'per processor',
+  'per-server': 'per server',
+  'per-node': 'per node',
+  'volume-licence': 'volume licence',
+  'enterprise-licence': 'enterprise licence',
+  'developer-licence': 'developer licence',
+  demo: 'demo',
+  'time-restricted': 'time restricted',
+  freeware: 'freeware',
+  unlimited: 'unlimited',
+  'open-source': 'open source',
+  '1-very-low': '1 very low',
+  '2-low': '2 low',
+  '3-normal': '3 normal',
+  '4-high': '4 high',
+  '5-very-high': '5 very high',
+  'requested': 'requested',
+  'pending-approval': 'pending approval',
+  'rejected': 'rejected',
+  'approved': 'approved',
+  'in-progress': 'in progress',
+  'pending-pir': 'pending PIR',
+  'successful': 'successful',
+  'failed': 'failed',
+  'canceled': 'canceled',
+  'retracted': 'retracted',
+  'created': 'created',
+  'accepted': 'accepted',
+  'ready': 'ready',
+  'closed': 'closed',
+  'approval': 'approval',
+  'workorder': 'work order',
+  'backout': 'backout',
+  'decision': 'decision',
+  'pir': 'PIR',
+};
+
+/** What a deployment or an incident state means to the code, in the reader's words. */
+const FUNCTIONALITY_TITLES = {
+  preproductive: 'before use',
+  productive: 'in use',
+  postproductive: 'after use',
+  operational: 'working',
+  warning: 'warned of',
+  incident: 'broken',
+};
+
+/** A class of the general catalog in the reader's words, or as it was typed. */
+function catalogClassTitle(name) {
+  return CATALOG_CLASS_TITLES[name] ? t(`catalogclass.${name}`, CATALOG_CLASS_TITLES[name]) : name;
+}
+
+/** A value of the general catalog in the reader's words where it shipped, or as it was typed. */
+function catalogValueTitle(name) {
+  return SHIPPED_CATALOG_TITLES[name] ? t(`catalogvalue.${name}`, SHIPPED_CATALOG_TITLES[name]) : name;
+}
+
+/** What a value means to the code, in the reader's words. */
+function functionalityTitle(name) {
+  return name ? t(`functionality.${name}`, FUNCTIONALITY_TITLES[name] ?? name) : '–';
+}
+
+/** The classes of the general catalog, with what a value of each may mean. */
+let generalCatalogClasses = [];
+
+/**
+ * Fills the general catalog's card for whoever may change it: the classes to
+ * choose a list from, and the values of the one chosen.
+ */
+async function loadGeneralCatalog() {
+  if (!can('catalog:write')) return;
+
+  generalCatalogClasses = (await api('/general-catalog/classes'))?.items ?? [];
+
+  const chooser = $('#form-catalog-class');
+  if (!beingEdited(chooser)) {
+    fillSelect(chooser.elements.class, generalCatalogClasses
+      .map((entry) => ({ value: entry.name, label: catalogClassTitle(entry.name) }))
+      .sort((a, b) => a.label.localeCompare(b.label)), { labelKey: 'label', valueKey: 'value' });
+  }
+
+  $('#catalog-classes').replaceChildren(...generalCatalogClasses.map((entry) => el('option', { value: entry.name })));
+
+  const form = $('#form-catalog');
+  if (!beingEdited(form) && !form.elements.id.value) {
+    form.elements.class.value = chooser.elements.class.value;
+    offerFunctionalities(form);
+  }
+
+  await loadGeneralCatalogItems();
+}
+
+/** Draws the values of the chosen class. */
+async function loadGeneralCatalogItems() {
+  const chosen = $('#form-catalog-class').elements.class.value;
+  const items = chosen ? (await api(`/general-catalog?class=${encodeURIComponent(chosen)}`))?.items ?? [] : [];
+
+  fillTable($('#table-catalog tbody'), items.map((item) => el('tr', {},
+    el('td', { class: 'text', text: catalogValueTitle(item.name) }),
+    el('td', { text: functionalityTitle(item.functionality) }),
+    el('td', { class: 'text', text: item.comment || '–' }),
+    el('td', { text: item.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editGeneralCatalogItem(item) })),
+  )), 5, t('gencatalog.empty', 'No values.'));
+}
+
+/**
+ * Offers the functionalities of the class the form names, and puts the field
+ * away for a class whose values mean nothing to the code - where the server
+ * refuses one, so a field left showing would be a question with no right answer.
+ */
+function offerFunctionalities(form, chosen = '') {
+  const offered = generalCatalogClasses.find((entry) => entry.name === form.elements.class.value.trim())?.functionalities ?? [];
+
+  fillSelect(form.elements.functionality, offered.map((name) => ({ value: name, label: functionalityTitle(name) })),
+    { labelKey: 'label', valueKey: 'value' });
+  form.elements.functionality.value = chosen || offered[0] || '';
+
+  $('#catalog-functionality').hidden = offered.length === 0;
+  form.elements.functionality.required = offered.length > 0;
+}
+
+/** Opens a value in the form, to correct it; its class stays the one it is in. */
+function editGeneralCatalogItem(item) {
+  const form = $('#form-catalog');
+
+  form.elements.id.value = String(item.id);
+  form.elements.class.value = item.class;
+  form.elements.class.readOnly = true;
+  form.elements.name.value = item.name;
+  form.elements.comment.value = item.comment;
+  form.elements.valid.checked = item.valid;
+  offerFunctionalities(form, item.functionality);
+
+  // Drawn rather than declared with a key, because it carries the value's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#catalog-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('catalogFormTitle', () => {
+    heading.textContent = fillIn(t('gencatalog.edit', 'Edit the value {0}'), [catalogValueTitle(item.name)]);
+  });
+
+  swapTheLabel($('#catalog-submit'), 'action.save', 'Save');
+  $('#catalog-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts the form back to adding a value to the class chosen above it. */
+function resetGeneralCatalogForm() {
+  const form = $('#form-catalog');
+
+  form.reset();
+  form.elements.id.value = '';
+  form.elements.class.readOnly = false;
+  form.elements.class.value = $('#form-catalog-class').elements.class.value;
+  offerFunctionalities(form);
+
+  stopRedrawing('catalogFormTitle');
+  swapTheLabel($('#catalog-form-title'), 'gencatalog.create', 'Add a value');
+  swapTheLabel($('#catalog-submit'), 'action.create', 'Create');
+  $('#catalog-cancel').hidden = true;
+}
+
+/** Sends the form: a new value, or the correction of the one it holds. */
+function saveGeneralCatalogItem(form) {
+  const id = form.elements.id.value;
+  const offered = !$('#catalog-functionality').hidden;
+  const sent = {
+    name: form.elements.name.value.trim(),
+    comment: form.elements.comment.value.trim(),
+    valid: form.elements.valid.checked,
+    functionality: offered ? form.elements.functionality.value : '',
+    ...(id ? {} : { class: form.elements.class.value.trim() }),
+  };
+  const body = JSON.stringify(sent);
+
+  mutate(
+    () => (id ? api(`/general-catalog/${id}`, { method: 'PUT', body }) : api('/general-catalog', { method: 'POST', body })),
+    id ? t('msg.catalogSaved', 'Value saved') : t('msg.catalogCreated', 'Value added'),
+    async (item) => {
+      const chooser = $('#form-catalog-class');
+      resetGeneralCatalogForm();
+      await loadGeneralCatalog();
+
+      if (item?.class && chooser.elements.class.value !== item.class) {
+        chooser.elements.class.value = item.class;
+        await loadGeneralCatalogItems();
+      }
+    },
+  );
+}
+
+/** Wires the general catalog's card. */
+function wireGeneralCatalog() {
+  $('#form-catalog-class').addEventListener('change', () => {
+    resetGeneralCatalogForm();
+    loadGeneralCatalogItems().catch((err) => toastFailure(err));
+  });
+  $('#form-catalog-class').addEventListener('submit', (e) => e.preventDefault());
+  $('#form-catalog').addEventListener('submit', (e) => { e.preventDefault(); saveGeneralCatalogItem(e.target); });
+  $('#form-catalog').elements.class.addEventListener('input', (e) => offerFunctionalities(e.target.form));
+  $('#catalog-cancel').addEventListener('click', resetGeneralCatalogForm);
+}
+
+// ------------------------------------------------------- class definitions
+
+/** The classes of configuration items, with the version each definition stands at. */
+let ciClasses = [];
+
+/**
+ * Fills the class definitions' card for whoever may write one: the classes to
+ * choose from, keeping the one chosen, and the versions of its definition.
+ */
+async function loadClassDefinitions() {
+  if (!can('catalog:write')) return;
+
+  ciClasses = (await api('/cmdb/classes'))?.items ?? [];
+
+  const form = $('#form-classdef');
+  const chosen = form.elements.classId.value;
+
+  fillSelect(form.elements.classId, ciClasses
+    .map((entry) => ({ value: String(entry.id), label: catalogValueTitle(entry.name) }))
+    .sort((a, b) => a.label.localeCompare(b.label)), { labelKey: 'label', valueKey: 'value' });
+
+  if (ciClasses.some((entry) => String(entry.id) === chosen)) form.elements.classId.value = chosen;
+
+  await loadClassDefinitionVersions();
+}
+
+/**
+ * Draws the versions of the chosen class's definition, and puts the standing
+ * one in the box - unless somebody is writing in it, whose words a reload must
+ * not take.
+ */
+async function loadClassDefinitionVersions() {
+  const form = $('#form-classdef');
+  const id = form.elements.classId.value;
+  const versions = id ? (await api(`/cmdb/classes/${id}/definitions`))?.items ?? [] : [];
+
+  if (!beingEdited(form)) {
+    form.elements.attributes.value = versions.length ? JSON.stringify(versions[0].attributes, null, 2) : '';
+  }
+
+  redrawable('classDefinitionVersion', () => {
+    $('#classdef-version').textContent = versions.length
+      ? fillIn(t('classdef.standing', 'Version {0} stands now.'), [versions[0].version])
+      : t('classdef.none', 'This class has no definition yet.');
+  });
+
+  fillTable($('#table-classdef-versions tbody'), versions.map((version) => el('tr', {},
+    el('td', { class: 'num', text: String(version.version) }),
+    el('td', { text: fmtMoment(version.createdAt) }),
+    el('td', { class: 'num', text: String(countClassAttributes(version.attributes)) }),
+  )), 3, t('classdef.noVersions', 'No version yet.'));
+}
+
+/** How many attributes a definition holds, those below others included. */
+function countClassAttributes(attributes) {
+  return (attributes ?? []).reduce((count, attribute) => count + 1 + countClassAttributes(attribute.sub), 0);
+}
+
+/**
+ * Sends the box as the class's next version. What is not JSON, or not a list,
+ * is said here; whether it is a definition an item can be written under is the
+ * server's to answer.
+ */
+function saveClassDefinition(form) {
+  let attributes;
+
+  try {
+    attributes = JSON.parse(form.elements.attributes.value);
+  } catch {
+    toast(t('classdef.notJSON', 'The definition is not JSON.'), 'error');
+
+    return;
+  }
+
+  if (!Array.isArray(attributes)) {
+    toast(t('classdef.notAList', 'The definition is a list of attributes.'), 'error');
+
+    return;
+  }
+
+  const id = form.elements.classId.value;
+
+  saveForm(form,
+    () => api(`/cmdb/classes/${id}/definitions`, { method: 'POST', body: JSON.stringify({ attributes }) }),
+    t('msg.classDefinitionSaved', 'Kept as a new version'),
+    loadClassDefinitions);
+}
+
+/** Wires the class definitions' card. */
+function wireClassDefinitions() {
+  const form = $('#form-classdef');
+
+  form.elements.classId.addEventListener('change', () => {
+    // Another class is another document: what was being written was the last
+    // one's, and stays only as long as nobody chooses away from it.
+    delete form.dataset.editing;
+    loadClassDefinitionVersions().catch((err) => toastFailure(err));
+  });
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveClassDefinition(e.target); });
+}
+
+// ------------------------------------------------------- configuration items
+
+/**
+ * What the items' screen reads besides the items: the classes, the states an
+ * item can be in, the lists a definition picks from, and each class's
+ * definitions by version. Kept between loads, so that a form drawn from a
+ * definition does not ask for it again with every keystroke.
+ */
+const assetLists = {
+  classes: [],
+  deployment: [],
+  incident: [],
+  catalogs: new Map(),
+  definitions: new Map(),
+};
+
+/** Where the page of items stands. */
+const itemPaging = { page: 1, limit: 50, total: 0 };
+
+/**
+ * The item open below the list and its versions, or null. version is the one on
+ * screen, which is the newest unless an older one was chosen to be read.
+ */
+let itemShown = null;
+
+/** The kinds of record an attribute names by id, searched rather than listed. */
+const REFERENCE_KINDS = {
+  Contact: SEARCHED_KINDS.contact,
+  Organisation: SEARCHED_KINDS.organisation,
+  CIClassReference: {
+    path: '/cmdb/items',
+    describe: (item) => `${item.number} ${item.name}`,
+  },
+};
+
+/** The classes as choices, by their names in the reader's words. */
+function classChoices(classes) {
+  return classes
+    .map((entry) => ({ value: String(entry.id), label: catalogValueTitle(entry.name) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Fills the items' screen for whoever may read them: the classes to narrow the
+ * list by, the page of items, and the open one, read again - unless somebody is
+ * writing in it, whose words a reload must not take.
+ */
+async function loadConfigItems() {
+  if (!can('assets:read')) return;
+
+  const [classes, deployment, incident] = await Promise.all([
+    api('/cmdb/classes'),
+    api('/general-catalog?class=ITSM::ConfigItem::DeploymentState'),
+    api('/general-catalog?class=ITSM::Core::IncidentState'),
+  ]);
+
+  assetLists.classes = classes?.items ?? [];
+  assetLists.deployment = deployment?.items ?? [];
+  assetLists.incident = incident?.items ?? [];
+  assetLists.catalogs.clear();
+  assetLists.definitions.clear();
+
+  fillSelect($('#form-configitem-filter').elements.class, classChoices(assetLists.classes),
+    { placeholder: t('configitem.everyClass', 'every class'), labelKey: 'label', valueKey: 'value' });
+
+  await loadConfigItemPage();
+
+  if (itemShown && !beingEdited($('#form-configitem'))) await openConfigItem(itemShown.item.id);
+}
+
+/** Reads the page of items the filter asks for, and draws it. */
+async function loadConfigItemPage() {
+  const filter = $('#form-configitem-filter');
+  const query = new URLSearchParams({ limit: String(itemPaging.limit), page: String(itemPaging.page) });
+
+  if (filter.elements.class.value) query.set('class', filter.elements.class.value);
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+
+  const page = await api(`/cmdb/items?${query}`);
+  itemPaging.total = page?.totalCount ?? 0;
+
+  fillTable($('#table-configitem tbody'), (page?.items ?? []).map(configItemRow), 7,
+    t('configitem.empty', 'No items.'));
+
+  const { total, limit } = itemPaging;
+  const from = total === 0 ? 0 : (itemPaging.page - 1) * limit + 1;
+  const to = Math.min(itemPaging.page * limit, total);
+
+  $('#configitems-range').textContent = fillIn(t('ticket.range', '{0}–{1} of {2}'), [from, to, total]);
+  $('#configitems-previous').disabled = itemPaging.page <= 1;
+  $('#configitems-next').disabled = to >= total;
+}
+
+/** A catalog value by its id among those read, in the reader's words. */
+function catalogEntryTitle(entries, id) {
+  const entry = entries.find((candidate) => candidate.id === id);
+
+  return entry ? catalogValueTitle(entry.name) : `#${id}`;
+}
+
+/** One item as a row of the list. */
+function configItemRow(item) {
+  const changed = item.changedByName
+    ? fillIn(t('configitem.changedBy', '{0}, by {1}'), [fmtMoment(item.changedAt), item.changedByName])
+    : fmtMoment(item.changedAt);
+
+  return el('tr', {},
+    el('td', { class: 'text' },
+      el('button', { class: 'link', text: item.number, onclick: () => openConfigItem(item.id) })),
+    el('td', { class: 'text', text: item.name }),
+    el('td', { class: 'text', text: catalogEntryTitle(assetLists.classes, item.classId) }),
+    el('td', { class: 'text', text: catalogEntryTitle(assetLists.deployment, item.deploymentStateId) }),
+    el('td', { class: 'text', text: catalogEntryTitle(assetLists.incident, item.incidentStateId) }),
+    el('td', { class: 'num', text: String(item.versionCount) }),
+    el('td', { text: changed }),
+  );
+}
+
+/** A class's definitions, the newest first, read once a load. */
+async function classDefinitions(classId) {
+  if (!assetLists.definitions.has(classId)) {
+    assetLists.definitions.set(classId, (await api(`/cmdb/classes/${classId}/definitions`))?.items ?? []);
+  }
+
+  return assetLists.definitions.get(classId);
+}
+
+/** The values of a list of the general catalog, read once a load. */
+async function catalogList(catalogClass) {
+  if (!assetLists.catalogs.has(catalogClass)) {
+    const values = (await api(`/general-catalog?class=${encodeURIComponent(catalogClass)}`))?.items ?? [];
+    assetLists.catalogs.set(catalogClass, values);
+  }
+
+  return assetLists.catalogs.get(catalogClass);
+}
+
+/**
+ * The lists a definition picks from, read before its form is drawn, so that
+ * drawing it waits on nothing.
+ */
+async function readListsOf(attributes) {
+  const wanted = new Set();
+  const walk = (list) => {
+    for (const attribute of list) {
+      if (attribute.type === 'GeneralCatalog' && attribute.catalog) wanted.add(attribute.catalog);
+      walk(attribute.sub ?? []);
+    }
+  };
+
+  walk(attributes);
+  await Promise.all([...wanted].map(catalogList));
+}
+
+/**
+ * What the records a version names by id are called, for the choices that keep
+ * them: a contact, an organisation or another item is searched for, never
+ * listed whole, so the one already chosen has to be read on its own.
+ */
+async function referenceLabels(attributes, data) {
+  const asked = [];
+  const walk = (list, values) => {
+    for (const attribute of list) {
+      for (const occurrence of values?.[attribute.key] ?? []) {
+        const kind = REFERENCE_KINDS[attribute.type];
+        if (kind && occurrence.value) asked.push({ kind, id: occurrence.value });
+        walk(attribute.sub ?? [], occurrence.sub);
+      }
+    }
+  };
+
+  walk(attributes, data);
+
+  const labels = new Map();
+
+  await Promise.all(asked.slice(0, 50).map(async ({ kind, id }) => {
+    try {
+      labels.set(`${kind.path}/${id}`, kind.describe(await api(`${kind.path}/${id}`)));
+    } catch {
+      labels.set(`${kind.path}/${id}`, fillIn(t('configitem.gone', '#{0}, no longer there'), [id]));
+    }
+  }));
+
+  return labels;
+}
+
+/** Opens the form for a new item, of the first class still offered. */
+async function startConfigItem() {
+  const form = $('#form-configitem');
+
+  resetConfigItemForm();
+  $('#configitem-detail').hidden = false;
+
+  const offered = assetLists.classes.filter((entry) => entry.valid && entry.version > 0);
+  fillSelect(form.elements.classId, classChoices(offered), { labelKey: 'label', valueKey: 'value' });
+  form.elements.classId.disabled = false;
+
+  await drawNewItemFields();
+  $('#configitem-detail').scrollIntoView({ block: 'start' });
+  form.elements.name.focus();
+}
+
+/** Draws the fields of a new item of the class chosen, from its definition as it stands. */
+async function drawNewItemFields() {
+  const form = $('#form-configitem');
+  const classId = Number(form.elements.classId.value);
+  const definition = classId ? (await classDefinitions(classId))[0] : null;
+
+  fillStateChoices(form, null);
+  await drawItemAttributes(definition?.attributes ?? [], {}, false);
+}
+
+/** Fills the two states, offering what is still offered and keeping what a version names. */
+function fillStateChoices(form, version) {
+  const choices = (entries, kept) => entries
+    .filter((entry) => entry.valid || entry.id === kept)
+    .map((entry) => ({ value: String(entry.id), label: catalogValueTitle(entry.name) }));
+
+  fillSelect(form.elements.deploymentStateId, choices(assetLists.deployment, version?.deploymentStateId),
+    { placeholder: t('configitem.choose', 'choose…'), labelKey: 'label', valueKey: 'value' });
+  fillSelect(form.elements.incidentStateId, choices(assetLists.incident, version?.incidentStateId),
+    { placeholder: t('configitem.choose', 'choose…'), labelKey: 'label', valueKey: 'value' });
+
+  form.elements.deploymentStateId.value = version ? String(version.deploymentStateId) : '';
+  form.elements.incidentStateId.value = version ? String(version.incidentStateId) : '';
+}
+
+/**
+ * Opens an item: the form holding what its newest version says, under its
+ * class's definition as it stands now - which is what the next version is
+ * written under - and its versions below. Read only for whoever may not write
+ * items.
+ */
+async function openConfigItem(id) {
+  let item;
+  let versions;
+
+  try {
+    [item, versions] = await Promise.all([api(`/cmdb/items/${id}`), api(`/cmdb/items/${id}/versions`)]);
+  } catch (err) {
+    toastFailure(err);
+    closeConfigItem();
+    await loadConfigItemPage();
+
+    return;
+  }
+
+  itemShown = { item, versions: versions?.items ?? [], version: null };
+
+  const form = $('#form-configitem');
+  const definition = (await classDefinitions(item.classId))[0];
+
+  resetConfigItemForm({ keepShown: true });
+  $('#configitem-detail').hidden = false;
+
+  form.elements.id.value = String(item.id);
+  fillSelect(form.elements.classId, classChoices(assetLists.classes), { labelKey: 'label', valueKey: 'value' });
+  form.elements.classId.value = String(item.classId);
+  form.elements.classId.disabled = true;
+  form.elements.name.value = item.version.name;
+  fillStateChoices(form, item.version);
+
+  // Drawn rather than declared with a key, because it carries the item's
+  // number; see editRole for why the key has to come off.
+  const heading = $('#configitem-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('configItemFormTitle', () => {
+    heading.textContent = fillIn(t('configitem.edit', 'Item {0}'), [item.number]);
+  });
+
+  swapTheLabel($('#configitem-submit'), 'configitem.saveVersion', 'Keep as a new version');
+  $('#configitem-delete').hidden = !can('assets:write');
+
+  await drawItemAttributes(definition?.attributes ?? [], item.version.data, !can('assets:write'));
+  drawItemVersions();
+
+  const linked = $('#configitem-links');
+  offerLinkKinds($('#form-configitem-link'));
+  linked.hidden = false;
+  await drawLinks(linked, 'configitem', item.id, can('assets:write'));
+}
+
+/**
+ * Shows an older version as it was written - under the definition it was
+ * written with, and read only, because a version is never changed. The newest
+ * is the form again.
+ */
+async function showItemVersion(version) {
+  if (!itemShown) return;
+
+  if (version.id === itemShown.versions[0]?.id) {
+    await openConfigItem(itemShown.item.id);
+
+    return;
+  }
+
+  const definitions = await classDefinitions(itemShown.item.classId);
+  const definition = definitions.find((candidate) => candidate.id === version.definitionId);
+  const form = $('#form-configitem');
+
+  itemShown.version = version;
+  form.elements.name.value = version.name;
+  fillStateChoices(form, version);
+  $('#configitem-fields').disabled = true;
+  $('#configitem-submit').hidden = true;
+
+  const place = itemShown.versions.length - itemShown.versions.indexOf(version);
+  const note = $('#configitem-version-shown');
+
+  note.replaceChildren(
+    el('span', { text: fillIn(t('configitem.olderShown', 'Version {0} as it was written; a version is never changed.'),
+      [place]) }),
+    ' ',
+    el('button', {
+      type: 'button',
+      class: 'link',
+      text: t('configitem.backToNewest', 'back to the newest'),
+      onclick: () => openConfigItem(itemShown.item.id),
+    }),
+  );
+  note.hidden = false;
+
+  await drawItemAttributes(definition?.attributes ?? [], version.data, true);
+  drawItemVersions();
+}
+
+/** Draws the open item's versions, the newest first, the one on screen marked. */
+function drawItemVersions() {
+  const shown = itemShown.version ?? itemShown.versions[0];
+  const count = itemShown.versions.length;
+
+  fillTable($('#table-configitem-versions tbody'), itemShown.versions.map((version, i) => el('tr',
+    { 'aria-current': version === shown ? 'true' : null },
+    el('td', { class: 'num', text: String(count - i) }),
+    el('td', { text: fmtMoment(version.createdAt) }),
+    el('td', { class: 'text', text: version.createdByName || (version.createdBy ? `#${version.createdBy}` : '–') }),
+    el('td', { class: 'text', text: version.name }),
+    el('td', { class: 'actions' }, version === shown ? null : el('button', {
+      type: 'button',
+      class: 'link',
+      text: t('configitem.read', 'read'),
+      onclick: () => showItemVersion(version),
+    })),
+  )), 5);
+}
+
+/**
+ * Draws a definition's attributes into the form, holding what data says: each
+ * as often as it occurs there, or as often as the definition starts it with,
+ * and never fewer times than it has to occur.
+ */
+async function drawItemAttributes(attributes, data, readOnly) {
+  await readListsOf(attributes);
+  const labels = await referenceLabels(attributes, data);
+
+  const box = $('#configitem-attributes');
+  box.replaceChildren(...attributes.map((attribute) => attributeBlock(attribute, data?.[attribute.key], readOnly,
+    labels)));
+  enhanceDateFields(box);
+
+  for (const native of $$('input[type="date"][data-value]', box)) setDateField(native, native.dataset.value);
+
+  $('#configitem-fields').disabled = readOnly;
+  $('#configitem-submit').hidden = readOnly;
+}
+
+/** One attribute: its occurrences, and the way to add one while it may occur again. */
+function attributeBlock(attribute, occurrences, readOnly, labels) {
+  const section = attribute.type === 'Section';
+  const block = el(section ? 'fieldset' : 'div', {
+    class: section ? 'ci-section' : 'ci-attribute',
+    'data-key': attribute.key,
+  });
+
+  block.append(el(section ? 'legend' : 'span', { class: section ? '' : 'ci-name', text: attribute.name }));
+
+  const list = el('div', { class: 'ci-occurrences' });
+  const given = occurrences ?? Array.from({ length: Math.max(attribute.countDefault, attribute.countMin) },
+    () => ({}));
+
+  for (const occurrence of given) list.append(occurrenceRow(attribute, occurrence, readOnly, labels));
+  block.append(list);
+
+  if (!readOnly && attribute.countMax > 1) {
+    const add = el('button', {
+      type: 'button',
+      class: 'link',
+      'data-ci': 'add',
+      text: fillIn(t('configitem.addAnother', 'add another: {0}'), [attribute.name]),
+      onclick: () => {
+        list.append(occurrenceRow(attribute, {}, false, labels));
+        enhanceDateFields(list);
+        countOccurrences(block, attribute);
+      },
+    });
+
+    block.append(add);
+  }
+
+  countOccurrences(block, attribute);
+
+  return block;
+}
+
+/** Offers adding and removing an occurrence only while the definition allows it. */
+function countOccurrences(block, attribute) {
+  const rows = $$(':scope > .ci-occurrences > .ci-occurrence', block);
+  const add = block.querySelector(':scope > [data-ci="add"]');
+
+  if (add) add.hidden = rows.length >= attribute.countMax;
+
+  for (const row of rows) {
+    const remove = row.querySelector(':scope > [data-ci="remove"]');
+    if (remove) remove.hidden = rows.length <= attribute.countMin;
+  }
+}
+
+/** One occurrence of an attribute: its value, and the attributes beneath it. */
+function occurrenceRow(attribute, occurrence, readOnly, labels) {
+  const row = el('div', { class: 'ci-occurrence' });
+
+  if (attribute.type !== 'Section') row.append(valueField(attribute, occurrence.value ?? '', labels));
+
+  if (!readOnly && attribute.countMax > attribute.countMin) {
+    row.append(el('button', {
+      type: 'button',
+      class: 'link',
+      'data-ci': 'remove',
+      text: t('configitem.remove', 'remove'),
+      onclick: () => {
+        const block = row.closest('[data-key]');
+        row.remove();
+        countOccurrences(block, attribute);
+      },
+    }));
+  }
+
+  if (attribute.sub?.length) {
+    const sub = el('div', { class: 'ci-sub' });
+    sub.append(...attribute.sub.map((child) => attributeBlock(child, occurrence.sub?.[child.key], readOnly, labels)));
+    row.append(sub);
+  }
+
+  return row;
+}
+
+/** The control a value of an attribute's type is written in, named by the attribute. */
+function valueField(attribute, value, labels) {
+  const named = { 'aria-label': attribute.name, class: 'ci-value' };
+  const required = attribute.required ? { required: true } : {};
+
+  switch (attribute.type) {
+    case 'TextArea':
+      return el('textarea', { ...named, ...required, rows: '3', maxlength: '50000', text: value });
+    case 'Date':
+      return el('input', { ...named, ...required, type: 'date', 'data-value': value });
+    case 'DateTime': {
+      const at = value ? dayAndTimeIn(value, readerZone()) : null;
+
+      return el('input', { ...named, ...required, type: 'datetime-local', value: at ? `${at.day}T${at.time}` : '' });
+    }
+    case 'GeneralCatalog': {
+      const select = el('select', { ...named, ...required });
+      const entries = (assetLists.catalogs.get(attribute.catalog) ?? [])
+        .filter((entry) => entry.valid || String(entry.id) === value);
+
+      select.append(el('option', { value: '', text: '–' }),
+        ...entries.map((entry) => el('option', { value: String(entry.id), text: catalogValueTitle(entry.name) })));
+      select.value = value;
+
+      return select;
+    }
+    case 'Contact':
+    case 'Organisation':
+    case 'CIClassReference':
+      return referenceField(attribute, value, labels);
+    default:
+      return el('input', {
+        ...named, ...required, type: 'text', maxlength: String(attribute.maxLength || 50000), value,
+      });
+  }
+}
+
+/**
+ * A value naming a contact, an organisation or another item: a search and the
+ * choice it fills, which always keeps the record already named. A reference to
+ * an item is searched among the classes the attribute names.
+ */
+function referenceField(attribute, value, labels) {
+  const kind = REFERENCE_KINDS[attribute.type];
+  const select = el('select', { 'aria-label': attribute.name, class: 'ci-value' });
+  const search = el('input', {
+    type: 'search',
+    'aria-label': fillIn(t('configitem.searchFor', 'search for {0}'), [attribute.name]),
+    placeholder: t('configitem.findHint', 'name or number'),
+    maxlength: '255',
+  });
+
+  const offer = (found) => {
+    const kept = select.value;
+    const options = [el('option', { value: '', text: '–' })];
+
+    if (kept && !found.some((record) => String(record.id) === kept)) {
+      options.push(el('option', { value: kept, text: select.selectedOptions[0]?.textContent ?? `#${kept}` }));
+    }
+
+    options.push(...found.map((record) => el('option', { value: String(record.id), text: kind.describe(record) })));
+    select.replaceChildren(...options);
+    select.value = kept;
+  };
+
+  select.append(el('option', { value: '', text: '–' }));
+
+  if (value) {
+    select.append(el('option', { value, text: labels.get(`${kind.path}/${value}`) ?? `#${value}` }));
+    select.value = value;
+  }
+
+  let pending;
+
+  search.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(async () => {
+      const query = new URLSearchParams({ q: search.value.trim(), limit: String(SEARCH_OFFERS) });
+
+      if (attribute.type === 'CIClassReference') {
+        const classes = assetLists.classes.filter((entry) => (attribute.classes ?? []).includes(entry.name));
+        query.set('class', classes.map((entry) => entry.id).join(',') || '0');
+      }
+
+      try {
+        offer((await api(`${kind.path}?${query}`))?.items ?? []);
+      } catch (err) {
+        toastFailure(err);
+      }
+    }, 250);
+  });
+
+  return el('span', { class: 'ci-choice' }, search, select);
+}
+
+/** What the form's attributes hold, as the API takes a version's values. */
+function attributeData(box) {
+  const data = {};
+
+  for (const block of $$(':scope > [data-key]', box)) {
+    const occurrences = $$(':scope > .ci-occurrences > .ci-occurrence', block).map((row) => {
+      const occurrence = {};
+      // A date's named box sits inside the wrapper enhanceDateFields puts around it.
+      const field = row.querySelector(':scope > .ci-value, :scope > .ci-choice > .ci-value, '
+        + ':scope > .date-wrap > .ci-value');
+      const value = field ? fieldValue(field) : '';
+
+      if (value) occurrence.value = value;
+
+      const sub = row.querySelector(':scope > .ci-sub');
+      if (sub) {
+        const below = attributeData(sub);
+        if (Object.keys(below).length) occurrence.sub = below;
+      }
+
+      return occurrence;
+    });
+
+    if (occurrences.length) data[block.dataset.key] = occurrences;
+  }
+
+  return data;
+}
+
+/** A value as the API takes it: a moment in the reader's zone as the moment it names. */
+function fieldValue(field) {
+  if (field.type === 'datetime-local') {
+    const [day, time] = field.value.split('T');
+
+    return day ? momentIn(day, time, readerZone()) : '';
+  }
+
+  return field.value;
+}
+
+/** Writes the item: a new one with its first version, or the open one's next version. */
+async function saveConfigItem(form) {
+  const id = form.elements.id.value;
+  const body = {
+    name: form.elements.name.value,
+    deploymentStateId: Number(form.elements.deploymentStateId.value) || 0,
+    incidentStateId: Number(form.elements.incidentStateId.value) || 0,
+    data: attributeData($('#configitem-attributes')),
+  };
+
+  if (!id) body.classId = Number(form.elements.classId.value) || 0;
+
+  await mutate(() => api(id ? `/cmdb/items/${id}/versions` : '/cmdb/items',
+    { method: 'POST', body: JSON.stringify(body) }),
+    id ? t('msg.versionKept', 'Kept as a new version') : t('msg.itemAdded', 'Item added'),
+    async (item) => {
+      delete form.dataset.editing;
+      await loadConfigItemPage();
+      await openConfigItem(item.id);
     });
 }
 
-/** What a copy did, as one sentence per part of it that happened. */
-function weekCopyNews(copied) {
-  const news = [fillIn(t('week.copied', 'Entries copied: {0} ({1}).'),
-    [copied.copied, fmtHours(copied.hours)])];
+/** Deletes the open item with every version of it, once asked. */
+async function deleteConfigItem() {
+  if (!itemShown) return;
 
-  if (copied.kept) {
-    news.push(fillIn(t('week.copyKept', 'Days already booked, left as they were: {0}.'), [copied.kept]));
-  }
-
-  if (copied.closed) {
-    news.push(fillIn(t('week.copyClosed', 'Left out because their project no longer takes bookings: {0}.'),
-      [copied.closed]));
-  }
-
-  return news.join(' ');
-}
-
-/** Forgets the week the grid showed, for an account that has signed out. */
-function forgetTheWeek() {
-  weekShown = null;
-  weekData = null;
-  weekExtraRows.clear();
-
-  $('#table-week tbody')?.replaceChildren();
-  $('#table-week tfoot')?.replaceChildren();
-}
-
-function wireWeekGrid() {
-  const table = $('#table-week');
-  if (!table) return;
-
-  // On change, which a number field fires when it is left or Enter is pressed -
-  // not on every keystroke, which would book "1" on the way to typing "1.5".
-  table.addEventListener('change', (event) => {
-    const input = event.target.closest('input[data-cell]');
-    if (!input) return;
-
-    delete input.dataset.carried;
-    commitWeekCell(input);
+  const { item } = itemShown;
+  const sure = await confirmDialog({
+    title: t('configitem.deleteTitle', 'Delete the item?'),
+    text: fillIn(t('configitem.deleteText', '{0} {1} goes with every version of it.'), [item.number, item.name]),
+    confirmLabel: t('configitem.deleteConfirm', 'Delete it'),
   });
 
-  // Leaving a field the grid was drawn again under books what it carries. More
-  // typed after the redraw fires the change above first, which takes the mark
-  // off, so the number is booked once either way.
-  table.addEventListener('focusout', (event) => {
-    const input = event.target.closest('input[data-cell][data-carried]');
-    if (!input) return;
+  if (!sure) return;
 
-    delete input.dataset.carried;
-    commitWeekCell(input);
+  await mutate(() => api(`/cmdb/items/${item.id}`, { method: 'DELETE' }), t('msg.itemDeleted', 'Item deleted'),
+    async () => {
+      closeConfigItem();
+      await loadConfigItemPage();
+    });
+}
+
+/**
+ * Puts the item form back to adding one, empty. keepShown leaves which item is
+ * open alone, for opening another in its place.
+ */
+function resetConfigItemForm({ keepShown = false } = {}) {
+  const form = $('#form-configitem');
+
+  form.reset();
+  form.elements.id.value = '';
+  delete form.dataset.editing;
+  form.elements.classId.disabled = false;
+  $('#configitem-fields').disabled = false;
+  $('#configitem-attributes').replaceChildren();
+  $('#configitem-version-shown').hidden = true;
+  stopRedrawing('configItemFormTitle');
+  swapTheLabel($('#configitem-form-title'), 'configitem.create', 'Add an item');
+  swapTheLabel($('#configitem-submit'), 'configitem.add', 'Add the item');
+  $('#configitem-submit').hidden = false;
+  $('#configitem-delete').hidden = true;
+  $('#table-configitem-versions tbody').replaceChildren();
+  $('#configitem-links').hidden = true;
+  forgetLinks($('#configitem-links'));
+
+  if (!keepShown) itemShown = null;
+}
+
+/** Closes the item below the list. */
+function closeConfigItem() {
+  resetConfigItemForm();
+  $('#configitem-detail').hidden = true;
+}
+
+function wireConfigItems() {
+  const filter = $('#form-configitem-filter');
+  let pending;
+
+  filter.addEventListener('submit', (e) => e.preventDefault());
+  filter.elements.class.addEventListener('change', () => {
+    itemPaging.page = 1;
+    loadConfigItemPage().catch((err) => toastFailure(err));
+  });
+  filter.elements.q.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => {
+      itemPaging.page = 1;
+      loadConfigItemPage().catch((err) => toastFailure(err));
+    }, 250);
   });
 
-  const step = (weeks) => {
-    weekShown = addDays(weekShown ?? mondayOf(todayISO()), weeks * 7);
-    mutate(loadWeekGrid, null, null);
+  $('#configitems-previous').addEventListener('click', () => {
+    itemPaging.page = Math.max(1, itemPaging.page - 1);
+    loadConfigItemPage().catch((err) => toastFailure(err));
+  });
+  $('#configitems-next').addEventListener('click', () => {
+    itemPaging.page += 1;
+    loadConfigItemPage().catch((err) => toastFailure(err));
+  });
+
+  $('#configitem-new').addEventListener('click', () => startConfigItem().catch((err) => toastFailure(err)));
+
+  const form = $('#form-configitem');
+
+  form.elements.classId.addEventListener('change', () => {
+    if (!form.elements.id.value) drawNewItemFields().catch((err) => toastFailure(err));
+  });
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveConfigItem(e.target); });
+  $('#configitem-cancel').addEventListener('click', closeConfigItem);
+  $('#configitem-delete').addEventListener('click', () => deleteConfigItem());
+
+  wireLinkForm($('#configitem-links'));
+  wireLinkForm($('#ticket-links'));
+  wireTicketMerge();
+}
+
+// --------------------------------------------------------------------- links
+
+/**
+ * How a link reads, by its type: from the record that is its source and from
+ * the one that is its target. Normal reads the same both ways.
+ */
+const LINK_WORDS = {
+  Normal: { out: () => t('link.normal', 'relevant to'), in: () => t('link.normal', 'relevant to') },
+  ParentChild: { out: () => t('link.parentOf', 'parent of'), in: () => t('link.childOf', 'child of') },
+  DependsOn: { out: () => t('link.dependsOn', 'depends on'), in: () => t('link.requiredFor', 'required for') },
+};
+
+/**
+ * The kinds of record a link reaches: how one is searched for and with which
+ * right, how it is written, and how it is opened.
+ */
+const LINK_KINDS = {
+  ticket: {
+    path: '/tickets',
+    right: 'tickets:read',
+    describe: (ticket) => `${ticket.number} ${ticket.title}`,
+    name: () => t('link.aTicket', 'a ticket'),
+    open: (id) => { switchView('tickets'); return openTicket(id); },
+  },
+  configitem: {
+    path: '/cmdb/items',
+    right: 'assets:read',
+    describe: (item) => `${item.number} ${item.name}`,
+    name: () => t('link.anItem', 'a configuration item'),
+    open: (id) => { switchView('assets'); return openConfigItem(id); },
+  },
+  change: {
+    path: '/changes',
+    right: 'changes:read',
+    describe: (change) => `${change.number} ${change.title}`,
+    name: () => t('link.aChange', 'a change'),
+    open: (id) => { switchView('changes'); return openItsmChange(id); },
+  },
+};
+
+/**
+ * Offers a link form only the kinds of record its reader may search for - the
+ * right a link to one is made with - and chooses the first of them where the
+ * one chosen is not offered.
+ */
+function offerLinkKinds(form) {
+  const select = form.elements.object;
+
+  for (const option of select.options) option.hidden = !can(LINK_KINDS[option.value].right);
+
+  if (select.selectedOptions[0]?.hidden) {
+    select.value = [...select.options].find((option) => !option.hidden)?.value ?? '';
+  }
+}
+
+/**
+ * Draws a record's links into its section: how each reads from here, the record
+ * at its other end, which opens it, and - where the reader may change this
+ * record - the way to undo it and to link another.
+ */
+async function drawLinks(section, object, id, canChange) {
+  const links = (await api(`/links?object=${object}&record=${id}`))?.items ?? [];
+  const list = section.querySelector('.link-list');
+
+  section.dataset.object = object;
+  section.dataset.record = String(id);
+
+  list.replaceChildren(...links.map((link) => el('li', {},
+    el('span', { class: 'muted', text: LINK_WORDS[link.type]?.[link.outward ? 'out' : 'in']() ?? link.type }),
+    ' ',
+    el('button', {
+      type: 'button',
+      class: 'link',
+      text: link.label,
+      onclick: () => LINK_KINDS[link.object]?.open(link.objectId)?.catch((err) => toastFailure(err)),
+    }),
+    canChange ? ' ' : null,
+    canChange ? el('button', {
+      type: 'button',
+      class: 'link',
+      text: t('link.undo', 'undo'),
+      onclick: () => mutate(() => api(`/links/${link.id}?object=${object}&record=${id}`, { method: 'DELETE' }),
+        t('msg.unlinked', 'Link undone'), () => drawLinks(section, object, id, canChange)),
+    }) : null)));
+
+  if (!links.length) list.append(el('li', { class: 'muted', text: t('link.none', 'Nothing linked yet.') }));
+
+  const form = section.querySelector('form');
+  if (form) {
+    form.hidden = !canChange;
+    form.dataset.canChange = canChange ? 'yes' : '';
+  }
+}
+
+/** Empties a record's links, for a record closed or a reader gone. */
+function forgetLinks(section) {
+  section.querySelector('.link-list').replaceChildren();
+  delete section.dataset.object;
+  delete section.dataset.record;
+
+  const form = section.querySelector('form');
+  if (form) {
+    form.reset();
+    form.elements.record.replaceChildren(el('option', { value: '', text: '–' }));
+  }
+}
+
+/**
+ * Wires a section's form: the types in the words they read with from here, a
+ * search for the record to link, which fills the choice, and the link made from
+ * the record the section shows.
+ */
+function wireLinkForm(section) {
+  const form = section.querySelector('form');
+  if (!form) return;
+
+  const kind = () => form.elements.object.value;
+  let pending;
+
+  const offer = async () => {
+    const query = new URLSearchParams({ q: form.elements.find.value.trim(), limit: String(SEARCH_OFFERS) });
+    const found = (await api(`${LINK_KINDS[kind()].path}?${query}`))?.items ?? [];
+
+    form.elements.record.replaceChildren(el('option', { value: '', text: '–' }),
+      ...found
+        .filter((record) => !(kind() === section.dataset.object && String(record.id) === section.dataset.record))
+        .map((record) => el('option', { value: String(record.id), text: LINK_KINDS[kind()].describe(record) })));
   };
 
-  $('#week-prev').addEventListener('click', () => step(-1));
-  $('#week-next').addEventListener('click', () => step(1));
-  $('#week-today').addEventListener('click', () => {
-    weekShown = mondayOf(todayISO());
-    mutate(loadWeekGrid, null, null);
+  const types = () => fillSelect(form.elements.type, Object.keys(LINK_WORDS)
+    .map((type) => ({ value: type, label: LINK_WORDS[type].out() })), { labelKey: 'label', valueKey: 'value' });
+
+  types();
+  redrawable(`linkTypes:${section.getAttribute('id')}`, types);
+
+  form.elements.record.replaceChildren(el('option', { value: '', text: '–' }));
+  form.elements.find.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => offer().catch((err) => toastFailure(err)), 250);
   });
+  form.elements.object.addEventListener('change', () => offer().catch((err) => toastFailure(err)));
 
-  $('#week-copy').addEventListener('click', copyLastWeek);
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
 
-  $('#week-add-project').addEventListener('change', (event) => {
-    const key = event.target.value;
-    if (!key || !weekShown) return;
+    const object = section.dataset.object;
+    const id = Number(section.dataset.record);
+    const body = {
+      sourceObject: object, sourceId: id, targetObject: kind(),
+      targetId: Number(form.elements.record.value) || 0, type: form.elements.type.value,
+    };
 
-    const added = weekExtraRows.get(weekShown) ?? new Set();
-    added.add(key);
-    weekExtraRows.set(weekShown, added);
-
-    drawWeekGrid();
-
-    // Straight into the row's first day, which is where somebody adding a row
-    // starts typing.
-    $(`#table-week input[data-cell^="${CSS.escape(key)}|"]`)?.focus();
+    mutate(() => api('/links', { method: 'POST', body: JSON.stringify(body) }), t('msg.linked', 'Linked'),
+      async () => {
+        form.reset();
+        types();
+        form.elements.record.replaceChildren(el('option', { value: '', text: '–' }));
+        await drawLinks(section, object, id, form.dataset.canChange === 'yes');
+      });
   });
 }
 
-// ----------------------------------------------------------------- calendar
+// ------------------------------------------------------------------ changes
 
 /**
- * The month the calendar is showing, as a Date on the first of that month.
- *
- * Empty until something renders it, because which month somebody is in is a
- * question about their own zone, and the zone is not known until they are signed
- * in. It used to be worked out from the browser's clock as this file loaded, which
- * is a different month from theirs for part of the first and the last day of every
- * one - so an account in Auckland read on a Berlin machine opened the calendar on
- * the month it had just left, with today highlighted nowhere in the grid.
+ * The lists the Changes screen picks from and the people it can name, read on
+ * each load: a change's category, impact, priority and state, and a work
+ * order's state and type.
  */
-let calendarMonth = null;
+const itsmChangeLists = {
+  categories: [], impacts: [], priorities: [], states: [], orderStates: [], orderTypes: [], people: [],
+};
 
-const ISO_DAY = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/** Which page of changes the list shows. */
+const itsmChangePaging = { page: 1, limit: 50, total: 0 };
 
-/** The first of the month a YYYY-MM-DD day falls in. */
-function monthOf(iso) {
-  const [year, month] = iso.split('-').map(Number);
+/** The change open below the list, or null. */
+let itsmChangeShown = null;
 
-  return new Date(year, month - 1, 1);
+/** The work order open in its form, or null while the form adds one or is closed. */
+let workOrderShown = null;
+
+/** A list's values as choices: those still offered, and the one given, which may since have been retired. */
+function catalogChoices(entries, kept) {
+  return entries
+    .filter((entry) => entry.valid || entry.id === kept)
+    .map((entry) => ({ value: String(entry.id), label: catalogValueTitle(entry.name) }));
 }
-
-/** The month to show, worked out from this user's own today the first time it is asked. */
-function currentCalendarMonth() {
-  if (!calendarMonth) calendarMonth = monthOf(todayISO());
-
-  return calendarMonth;
-}
-
-/** The date this code last filled in, so a date the user typed is recognisable. */
-let autofilledDate = '';
 
 /**
- * Points the booking form at today, leaving a date the user chose alone.
- *
- * Overwriting their choice would be worse than a stale default: someone
- * catching up on last week's hours would silently book them against today.
+ * The people a field can name, as choices: those who may work on changes for a
+ * manager or a builder, anybody who may see them for a work order's agent -
+ * and the one named already, who may since have lost the right.
  */
-function resetBookingDate() {
-  const field = $('#form-timesheet')?.elements.date;
-  if (!field) return;
+function peopleChoices(working, kept, keptName) {
+  const people = itsmChangeLists.people
+    .filter((person) => !working || person.works)
+    .map((person) => ({ value: String(person.id), label: person.name }));
 
-  if (field.value === '' || field.value === autofilledDate) {
-    autofilledDate = todayISO();
-    setDateField(field, autofilledDate);
+  if (kept && !people.some((person) => person.value === String(kept))) {
+    people.push({ value: String(kept), label: keptName || `#${kept}` });
+  }
+
+  return people;
+}
+
+/** From when to when something is planned or ran, since when where it goes on, or a dash. */
+function momentSpan(start, end) {
+  if (start && end) return fillIn(t('itsmchange.span', '{0} to {1}'), [fmtMoment(start), fmtMoment(end)]);
+  if (start) return fillIn(t('workorder.since', 'since {0}'), [fmtMoment(start)]);
+
+  return '–';
+}
+
+/**
+ * Fills the Changes screen for whoever may read changes: the lists a change and
+ * its work orders pick from, the people they can name, the page of changes,
+ * and the open change, read again - unless somebody is writing in it or in one
+ * of its work orders.
+ */
+async function loadItsmChanges() {
+  if (!can('changes:read')) return;
+
+  const list = (name) => api(`/general-catalog?class=${encodeURIComponent(`ITSM::ChangeManagement::${name}`)}`);
+  const [categories, impacts, priorities, states, orderStates, orderTypes, people] = await Promise.all([
+    list('Category'), list('Impact'), list('Priority'), list('Change::State'), list('WorkOrder::State'),
+    list('WorkOrder::Type'), api('/changes/people'),
+  ]);
+
+  Object.assign(itsmChangeLists, {
+    categories: categories?.items ?? [],
+    impacts: impacts?.items ?? [],
+    priorities: priorities?.items ?? [],
+    states: states?.items ?? [],
+    orderStates: orderStates?.items ?? [],
+    orderTypes: orderTypes?.items ?? [],
+    people: people?.items ?? [],
+  });
+
+  fillSelect($('#form-itsmchange-filter').elements.state,
+    itsmChangeLists.states.map((entry) => ({ value: String(entry.id), label: catalogValueTitle(entry.name) })),
+    { placeholder: t('itsmchange.everyState', 'every state'), labelKey: 'label', valueKey: 'value' });
+
+  await loadItsmChangePage();
+
+  if (itsmChangeShown && !beingEdited($('#form-itsmchange')) && !beingEdited($('#form-workorder'))) {
+    await openItsmChange(itsmChangeShown.id);
   }
 }
+
+/** Reads the page of changes the filter asks for, and draws it. */
+async function loadItsmChangePage() {
+  const filter = $('#form-itsmchange-filter');
+  const query = new URLSearchParams({
+    limit: String(itsmChangePaging.limit), page: String(itsmChangePaging.page),
+  });
+
+  if (filter.elements.state.value) query.set('state', filter.elements.state.value);
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+
+  const page = await api(`/changes?${query}`);
+  itsmChangePaging.total = page?.totalCount ?? 0;
+
+  fillTable($('#table-itsmchange tbody'), (page?.items ?? []).map(itsmChangeRow), 7,
+    t('itsmchange.empty', 'No changes.'));
+
+  const { total, limit } = itsmChangePaging;
+  const from = total === 0 ? 0 : (itsmChangePaging.page - 1) * limit + 1;
+  const to = Math.min(itsmChangePaging.page * limit, total);
+
+  $('#itsmchanges-range').textContent = fillIn(t('ticket.range', '{0}–{1} of {2}'), [from, to, total]);
+  $('#itsmchanges-previous').disabled = itsmChangePaging.page <= 1;
+  $('#itsmchanges-next').disabled = to >= total;
+}
+
+/** One change as a row of the list. */
+function itsmChangeRow(change) {
+  return el('tr', {},
+    el('td', { class: 'text' },
+      el('button', { class: 'link', text: change.number, onclick: () => openItsmChange(change.id) })),
+    el('td', { class: 'text', text: change.title }),
+    el('td', { class: 'text', text: catalogEntryTitle(itsmChangeLists.states, change.stateId) }),
+    el('td', { class: 'text', text: catalogEntryTitle(itsmChangeLists.priorities, change.priorityId) }),
+    el('td', { class: 'text', text: change.managerName || '–' }),
+    el('td', { text: momentSpan(change.plannedStartAt, change.plannedEndAt) }),
+    el('td', { class: 'num', text: String(change.workOrders) }),
+  );
+}
+
+/** Fills the change form's lists, keeping what a change already names. */
+function fillItsmChangeForm(form, change) {
+  const choose = { labelKey: 'label', valueKey: 'value' };
+  const nobody = { ...choose, placeholder: t('ticket.nobody', 'nobody') };
+
+  fillSelect(form.elements.categoryId, catalogChoices(itsmChangeLists.categories, change?.categoryId), choose);
+  fillSelect(form.elements.impactId, catalogChoices(itsmChangeLists.impacts, change?.impactId), choose);
+  fillSelect(form.elements.priorityId, catalogChoices(itsmChangeLists.priorities, change?.priorityId),
+    { ...choose, placeholder: t('itsmchange.byMatrix', 'from category and impact') });
+  fillSelect(form.elements.managerId, peopleChoices(true, change?.managerId, change?.managerName), nobody);
+  fillSelect(form.elements.builderId, peopleChoices(true, change?.builderId, change?.builderName), nobody);
+}
+
+/** Opens the form for a new change, ranked in the middle of the scale, as OTRS ranks one nobody ranks. */
+function startItsmChange() {
+  const form = $('#form-itsmchange');
+  const normal = (entries) => String(entries.find((entry) => entry.name === '3-normal')?.id ?? '');
+
+  resetItsmChangeForm();
+  $('#itsmchange-detail').hidden = false;
+  fillItsmChangeForm(form, null);
+  form.elements.categoryId.value = normal(itsmChangeLists.categories);
+  form.elements.impactId.value = normal(itsmChangeLists.impacts);
+  form.elements.priorityId.value = '';
+  form.elements.managerId.value = '';
+  form.elements.builderId.value = '';
+
+  $('#itsmchange-detail').scrollIntoView({ block: 'start' });
+  form.elements.title.focus();
+}
+
+/**
+ * Opens a change below the list: its form, read only for whoever may not work
+ * on changes; where it stands and where it may go; its work orders; and what it
+ * is linked to.
+ */
+async function openItsmChange(id) {
+  let change;
+  let orders;
+
+  try {
+    [change, orders] = await Promise.all([api(`/changes/${id}`), api(`/changes/${id}/work-orders`)]);
+  } catch (err) {
+    toastFailure(err);
+    closeItsmChange();
+    await loadItsmChangePage();
+
+    return;
+  }
+
+  const form = $('#form-itsmchange');
+
+  resetItsmChangeForm({ keepShown: true });
+  itsmChangeShown = change;
+  $('#itsmchange-detail').hidden = false;
+
+  form.elements.id.value = String(change.id);
+  fillItsmChangeForm(form, change);
+  form.elements.title.value = change.title;
+  form.elements.description.value = change.description;
+  form.elements.justification.value = change.justification;
+  form.elements.categoryId.value = String(change.categoryId);
+  form.elements.impactId.value = String(change.impactId);
+  form.elements.priorityId.value = String(change.priorityId);
+  form.elements.managerId.value = change.managerId ? String(change.managerId) : '';
+  form.elements.builderId.value = change.builderId ? String(change.builderId) : '';
+
+  const requested = change.requestedAt ? dayAndTimeIn(change.requestedAt, readerZone()) : { day: '', time: '' };
+  setDateField(form.elements.requestedDay, requested.day);
+  form.elements.requestedTime.value = requested.time;
+
+  $('#itsmchange-fields').disabled = !can('changes:write');
+
+  // Drawn rather than declared with a key, because it carries the change's
+  // number; see editRole for why the key has to come off.
+  const heading = $('#itsmchange-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('itsmChangeFormTitle', () => {
+    heading.textContent = fillIn(t('itsmchange.edit', 'Change {0}'), [change.number]);
+  });
+
+  swapTheLabel($('#itsmchange-submit'), 'itsmchange.save', 'Save the change');
+  $('#itsmchange-delete').hidden = !can('changes:write');
+
+  drawItsmChangeStanding(change);
+  drawWorkOrders(orders?.items ?? []);
+
+  const linked = $('#itsmchange-links');
+  offerLinkKinds($('#form-itsmchange-link'));
+  linked.hidden = false;
+  await drawLinks(linked, 'change', change.id, can('changes:write'));
+}
+
+/**
+ * Says where the open change stands and what its work orders say of when it
+ * runs, and offers the states the machine lets it move on to - nothing where
+ * its state ends it, or the reader may not work on changes.
+ */
+function drawItsmChangeStanding(change) {
+  const minutes = (count) => fillIn(t('ticket.minutes', '{0} minutes'), [count]);
+  const move = $('#form-itsmchange-move');
+  const next = change.nextStateIds ?? [];
+
+  $('#itsmchange-standing').textContent = fillIn(t('itsmchange.standing',
+    'State: {0}. Planned: {1}. Ran: {2}. {3} planned and {4} accounted over {5} work orders.'), [
+    catalogEntryTitle(itsmChangeLists.states, change.stateId),
+    momentSpan(change.plannedStartAt, change.plannedEndAt),
+    momentSpan(change.actualStartAt, change.actualEndAt),
+    minutes(change.plannedMinutes), minutes(change.accountedMinutes), change.workOrders,
+  ]);
+
+  fillSelect(move.elements.stateId,
+    next.map((id) => ({ value: String(id), label: catalogEntryTitle(itsmChangeLists.states, id) })),
+    { labelKey: 'label', valueKey: 'value' });
+  move.hidden = !next.length || !can('changes:write');
+  $('#itsmchange-state').hidden = false;
+}
+
+/**
+ * Writes the change: a new one, or what the open one says now. Its priority is
+ * sent only where it was chosen, so that a category or an impact changed here
+ * is ranked by the matrix rather than kept at the priority it had.
+ */
+async function saveItsmChange(form) {
+  const id = form.elements.id.value;
+  const number = (name) => Number(form.elements[name].value) || 0;
+  const priority = number('priorityId');
+  const day = form.elements.requestedDay.value;
+  const body = {
+    title: form.elements.title.value,
+    description: form.elements.description.value,
+    justification: form.elements.justification.value,
+    categoryId: number('categoryId'),
+    impactId: number('impactId'),
+    ...(priority && priority !== itsmChangeShown?.priorityId ? { priorityId: priority } : {}),
+    ...(number('managerId') ? { managerId: number('managerId') } : { clearManager: true }),
+    ...(number('builderId') ? { builderId: number('builderId') } : { clearBuilder: true }),
+    ...(day ? { requestedAt: momentIn(day, form.elements.requestedTime.value, readerZone()) }
+      : { clearRequestedAt: true }),
+  };
+
+  await mutate(() => api(id ? `/changes/${id}` : '/changes',
+    { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) }),
+  id ? t('msg.itsmChangeSaved', 'Change saved') : t('msg.itsmChangeAdded', 'Change added'),
+  async (change) => {
+    delete form.dataset.editing;
+    await loadItsmChangePage();
+    await openItsmChange(change.id);
+  });
+}
+
+/** Moves the open change on to the state chosen. */
+async function moveItsmChange(form) {
+  if (!itsmChangeShown) return;
+
+  const { id } = itsmChangeShown;
+
+  await mutate(() => api(`/changes/${id}`,
+    { method: 'PUT', body: JSON.stringify({ stateId: Number(form.elements.stateId.value) || 0 }) }),
+  t('msg.itsmChangeMoved', 'Change moved on'),
+  async () => {
+    await loadItsmChangePage();
+    await openItsmChange(id);
+  });
+}
+
+/** Deletes the open change with its work orders and its links, once asked. */
+async function deleteItsmChange() {
+  if (!itsmChangeShown) return;
+
+  const change = itsmChangeShown;
+  const sure = await confirmDialog({
+    title: t('itsmchange.deleteTitle', 'Delete the change?'),
+    text: fillIn(t('itsmchange.deleteText', '{0} {1} goes with its work orders and its links.'),
+      [change.number, change.title]),
+    confirmLabel: t('itsmchange.deleteConfirm', 'Delete it'),
+  });
+
+  if (!sure) return;
+
+  await mutate(() => api(`/changes/${change.id}`, { method: 'DELETE' }),
+    t('msg.itsmChangeDeleted', 'Change deleted'),
+    async () => {
+      closeItsmChange();
+      await loadItsmChangePage();
+    });
+}
+
+/**
+ * Puts the change form back to adding one, empty, with nothing below it.
+ * keepShown leaves which change is open alone, for opening another in its
+ * place.
+ */
+function resetItsmChangeForm({ keepShown = false } = {}) {
+  const form = $('#form-itsmchange');
+
+  form.reset();
+  form.elements.id.value = '';
+  delete form.dataset.editing;
+  $('#itsmchange-fields').disabled = false;
+  stopRedrawing('itsmChangeFormTitle');
+  swapTheLabel($('#itsmchange-form-title'), 'itsmchange.create', 'Add a change');
+  swapTheLabel($('#itsmchange-submit'), 'itsmchange.add', 'Add the change');
+  $('#itsmchange-submit').hidden = !can('changes:write');
+  $('#itsmchange-delete').hidden = true;
+  $('#itsmchange-state').hidden = true;
+  $('#itsmchange-standing').textContent = '';
+  $('#itsmchange-workorders').hidden = true;
+  $('#table-workorder tbody').replaceChildren();
+  resetWorkOrderForm();
+  $('#itsmchange-links').hidden = true;
+  forgetLinks($('#itsmchange-links'));
+
+  if (!keepShown) itsmChangeShown = null;
+}
+
+/** Closes the change below the list. */
+function closeItsmChange() {
+  resetItsmChangeForm();
+  $('#itsmchange-detail').hidden = true;
+}
+
+/** Draws the open change's work orders, in the order of its plan. */
+function drawWorkOrders(orders) {
+  fillTable($('#table-workorder tbody'), orders.map(workOrderRow), 8, t('workorder.empty', 'No work orders yet.'));
+  $('#itsmchange-workorders').hidden = false;
+}
+
+/** One work order as a row of its change's table. */
+function workOrderRow(order) {
+  return el('tr', {},
+    el('td', { class: 'num', text: String(order.number) }),
+    el('td', { class: 'text' },
+      el('button', { type: 'button', class: 'link', text: order.title, onclick: () => openWorkOrder(order) })),
+    el('td', { class: 'text', text: catalogEntryTitle(itsmChangeLists.orderStates, order.stateId) }),
+    el('td', { class: 'text', text: catalogEntryTitle(itsmChangeLists.orderTypes, order.workOrderTypeId) }),
+    el('td', { class: 'text', text: order.agentName || '–' }),
+    el('td', { text: momentSpan(order.plannedStartAt, order.plannedEndAt) }),
+    el('td', { text: momentSpan(order.actualStartAt, order.actualEndAt) }),
+    el('td', { class: 'num', text: fillIn(t('ticket.minutes', '{0} minutes'), [order.accountedMinutes]) }),
+  );
+}
+
+/**
+ * Fills the work order form from a work order, or empty and of OTRS's default
+ * type for a new one. Its state offers where it stands and where the machine
+ * lets it go from there.
+ */
+function fillWorkOrderForm(form, order) {
+  const choose = { labelKey: 'label', valueKey: 'value' };
+  const states = order ? [order.stateId, ...(order.nextStateIds ?? [])] : [];
+
+  fillSelect(form.elements.workOrderTypeId, catalogChoices(itsmChangeLists.orderTypes, order?.workOrderTypeId),
+    choose);
+  fillSelect(form.elements.agentId, peopleChoices(false, order?.agentId, order?.agentName),
+    { ...choose, placeholder: t('ticket.nobody', 'nobody') });
+  fillSelect(form.elements.stateId,
+    states.map((id) => ({ value: String(id), label: catalogEntryTitle(itsmChangeLists.orderStates, id) })), choose);
+
+  const plain = itsmChangeLists.orderTypes.find((entry) => entry.name === 'workorder')?.id;
+
+  form.elements.workOrderTypeId.value = String(order?.workOrderTypeId ?? plain ?? '');
+  form.elements.agentId.value = order?.agentId ? String(order.agentId) : '';
+  form.elements.stateId.value = order ? String(order.stateId) : '';
+  form.elements.title.value = order?.title ?? '';
+  form.elements.instruction.value = order?.instruction ?? '';
+  form.elements.report.value = order?.report ?? '';
+  form.elements.plannedMinutes.value = order ? String(order.plannedMinutes) : '';
+  form.elements.minutes.value = '';
+
+  for (const [field, at] of [
+    ['plannedStart', order?.plannedStartAt], ['plannedEnd', order?.plannedEndAt],
+    ['actualStart', order?.actualStartAt], ['actualEnd', order?.actualEndAt],
+  ]) {
+    const moment = at ? dayAndTimeIn(at, readerZone()) : { day: '', time: '' };
+
+    setDateField(form.elements[`${field}Day`], moment.day);
+    form.elements[`${field}Time`].value = moment.time;
+  }
+}
+
+/** Opens the form for a new work order of the open change, without the report a new one has nothing for. */
+function startWorkOrder() {
+  const form = $('#form-workorder');
+
+  resetWorkOrderForm();
+  form.hidden = false;
+  fillWorkOrderForm(form, null);
+  form.scrollIntoView({ block: 'nearest' });
+  form.elements.title.focus();
+}
+
+/**
+ * Opens a work order in its form: all of it for whoever may work on changes,
+ * the report alone for its agent - whom the server lets write nothing else -
+ * and read only for anybody else.
+ */
+function openWorkOrder(order) {
+  const form = $('#form-workorder');
+  const plans = can('changes:write');
+  const reports = plans || (Boolean(order.agentId) && order.agentId === me.user?.id);
+
+  resetWorkOrderForm();
+  workOrderShown = order;
+  form.hidden = false;
+  form.elements.id.value = String(order.id);
+  fillWorkOrderForm(form, order);
+
+  $('#workorder-plan').disabled = !plans;
+  $('#workorder-report').hidden = false;
+  $('#workorder-report').disabled = !reports;
+  $('#workorder-submit').hidden = !reports;
+  $('#workorder-delete').hidden = !plans;
+
+  // Drawn rather than declared with a key, because it carries the work
+  // order's number; see editRole for why the key has to come off.
+  const heading = $('#workorder-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('workOrderFormTitle', () => {
+    heading.textContent = fillIn(t('workorder.edit', 'Work order {0}'), [order.number]);
+  });
+
+  swapTheLabel($('#workorder-submit'), 'workorder.save', 'Save the work order');
+  form.scrollIntoView({ block: 'nearest' });
+}
+
+/**
+ * Writes the work order: a new one of the open change, or what the open one
+ * says now - only what the reader may write of it, so that its agent's report
+ * is not refused for the plan beside it.
+ */
+async function saveWorkOrder(form) {
+  if (!itsmChangeShown) return;
+
+  const changeId = itsmChangeShown.id;
+  const order = workOrderShown;
+  const moment = (field) => {
+    const day = form.elements[`${field}Day`].value;
+
+    return day ? momentIn(day, form.elements[`${field}Time`].value, readerZone()) : null;
+  };
+  const moments = (startField, endField, startKey, endKey, clearKey) => {
+    const [start, end] = [moment(startField), moment(endField)];
+
+    if (!start && !end) return { [clearKey]: true };
+
+    return { ...(start ? { [startKey]: start } : {}), ...(end ? { [endKey]: end } : {}) };
+  };
+  const body = {};
+
+  if (!$('#workorder-plan').disabled) {
+    const agent = Number(form.elements.agentId.value) || 0;
+
+    Object.assign(body, {
+      title: form.elements.title.value,
+      instruction: form.elements.instruction.value,
+      workOrderTypeId: Number(form.elements.workOrderTypeId.value) || 0,
+      plannedMinutes: Number(form.elements.plannedMinutes.value) || 0,
+      ...(agent ? { agentId: agent } : { clearAgent: true }),
+      ...moments('plannedStart', 'plannedEnd', 'plannedStartAt', 'plannedEndAt', 'clearPlanned'),
+    });
+  }
+
+  if (order && !$('#workorder-report').disabled) {
+    const state = Number(form.elements.stateId.value) || 0;
+
+    Object.assign(body, {
+      report: form.elements.report.value,
+      minutes: Number(form.elements.minutes.value) || 0,
+      ...(state && state !== order.stateId ? { stateId: state } : {}),
+      ...moments('actualStart', 'actualEnd', 'actualStartAt', 'actualEndAt', 'clearActual'),
+    });
+  }
+
+  await mutate(() => api(order ? `/work-orders/${order.id}` : `/changes/${changeId}/work-orders`,
+    { method: order ? 'PUT' : 'POST', body: JSON.stringify(body) }),
+  order ? t('msg.workOrderSaved', 'Work order saved') : t('msg.workOrderAdded', 'Work order added'),
+  async () => {
+    resetWorkOrderForm();
+    await loadItsmChangePage();
+    await openItsmChange(changeId);
+  });
+}
+
+/** Deletes the open work order, once asked. */
+async function deleteWorkOrder() {
+  const order = workOrderShown;
+  if (!order || !itsmChangeShown) return;
+
+  const changeId = itsmChangeShown.id;
+  const sure = await confirmDialog({
+    title: t('workorder.deleteTitle', 'Delete the work order?'),
+    text: fillIn(t('workorder.deleteText', '{0} goes, with its report and the time accounted on it.'),
+      [order.title]),
+    confirmLabel: t('workorder.deleteConfirm', 'Delete it'),
+  });
+
+  if (!sure) return;
+
+  await mutate(() => api(`/work-orders/${order.id}`, { method: 'DELETE' }),
+    t('msg.workOrderDeleted', 'Work order deleted'),
+    async () => {
+      resetWorkOrderForm();
+      await loadItsmChangePage();
+      await openItsmChange(changeId);
+    });
+}
+
+/** Puts the work order form back to adding one, empty and closed. */
+function resetWorkOrderForm() {
+  const form = $('#form-workorder');
+
+  form.reset();
+  form.elements.id.value = '';
+  delete form.dataset.editing;
+  workOrderShown = null;
+  $('#workorder-plan').disabled = false;
+  $('#workorder-report').disabled = false;
+  $('#workorder-report').hidden = true;
+  stopRedrawing('workOrderFormTitle');
+  swapTheLabel($('#workorder-form-title'), 'workorder.create', 'Add a work order');
+  swapTheLabel($('#workorder-submit'), 'workorder.add', 'Add the work order');
+  $('#workorder-submit').hidden = false;
+  $('#workorder-delete').hidden = true;
+  form.hidden = true;
+}
+
+function wireItsmChanges() {
+  const filter = $('#form-itsmchange-filter');
+  const reload = () => loadItsmChangePage().catch((err) => toastFailure(err));
+  let pending;
+
+  filter.addEventListener('submit', (e) => e.preventDefault());
+  filter.elements.state.addEventListener('change', () => {
+    itsmChangePaging.page = 1;
+    reload();
+  });
+  filter.elements.q.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => {
+      itsmChangePaging.page = 1;
+      reload();
+    }, 250);
+  });
+
+  $('#itsmchanges-previous').addEventListener('click', () => {
+    itsmChangePaging.page = Math.max(1, itsmChangePaging.page - 1);
+    reload();
+  });
+  $('#itsmchanges-next').addEventListener('click', () => {
+    itsmChangePaging.page += 1;
+    reload();
+  });
+
+  $('#itsmchange-new').addEventListener('click', startItsmChange);
+  $('#form-itsmchange').addEventListener('submit', (e) => { e.preventDefault(); saveItsmChange(e.target); });
+  $('#itsmchange-cancel').addEventListener('click', closeItsmChange);
+  $('#itsmchange-delete').addEventListener('click', () => deleteItsmChange());
+  $('#form-itsmchange-move').addEventListener('submit', (e) => { e.preventDefault(); moveItsmChange(e.target); });
+
+  $('#workorder-new').addEventListener('click', startWorkOrder);
+  $('#form-workorder').addEventListener('submit', (e) => { e.preventDefault(); saveWorkOrder(e.target); });
+  $('#workorder-close').addEventListener('click', resetWorkOrderForm);
+  $('#workorder-delete').addEventListener('click', () => deleteWorkOrder());
+
+  wireLinkForm($('#itsmchange-links'));
+}
+
+// ------------------------------------------------------------------ portal
+
+/** The ticket open on the portal's screen, or null. */
+let portalTicketShown = null;
+
+/**
+ * Fills the portal's screen for an account that reaches it: a page of the
+ * tickets it follows and the queues a ticket is opened in. The question of
+ * which queue is put only where there is more than one, and the form goes where
+ * there is none, with a sentence saying why rather than nothing.
+ */
+async function loadPortal() {
+  if (!can('portal:use')) return;
+
+  await loadPortalTickets();
+  await loadPublishedFAQ('portal');
+
+  const form = $('#form-portal-ticket');
+  let queues = [];
+
+  try {
+    queues = (await api('/portal/queues'))?.items ?? [];
+  } catch (err) {
+    // An account that signs in as no contact is refused this, and has nothing
+    // to open a ticket as - which the empty screen says on its own.
+    if (err.status !== 409) throw err;
+  }
+
+  // A choice nobody has made yet where there are several, so that the first
+  // queue in the list is not where every ticket lands because nobody looked.
+  if (!beingEdited(form)) {
+    fillSelect(form.elements.queueId, queues,
+      queues.length > 1 ? { placeholder: t('portal.chooseQueue', 'choose…') } : {});
+  }
+
+  $('#portal-queue-choice').hidden = queues.length < 2;
+  form.elements.queueId.required = queues.length > 1;
+  form.hidden = queues.length === 0;
+  $('#portal-no-queue').hidden = queues.length > 0;
+}
+
+/** Reads the page of tickets the filter asks for, and draws it. */
+async function loadPortalTickets() {
+  const finished = $('#form-portal-filter').elements.finished.value === 'true';
+  const page = await api(`/portal/tickets?limit=${CUSTOMER_PAGE}${finished ? '&finished=true' : ''}`);
+  const items = page?.items ?? [];
+
+  fillTable($('#table-portal tbody'), items.map((ticket) => el('tr', {},
+    el('td', { class: 'text' }, el('button', {
+      type: 'button', class: 'link', text: ticket.title, onclick: () => openPortalTicket(ticket.id),
+    })),
+    el('td', { text: ticketName(ticket.number) }),
+    el('td', { text: statusName(ticket.state) }),
+    el('td', { class: 'text', text: ticket.contactName || '–' }),
+    el('td', { text: fmtMoment(ticket.updatedAt) }),
+  )), 5, finished
+    ? t('portal.noneFinished', 'No finished tickets.')
+    : t('portal.none', 'No tickets being worked on.'));
+  customerOverflow($('#portal-overflow'), items.length, page?.totalCount ?? 0);
+}
+
+/**
+ * Opens one of the tickets on the portal's screen: where it stands, and what
+ * the customer is shown of it, the oldest first, each article with who wrote it
+ * and its files.
+ */
+async function openPortalTicket(id) {
+  const [ticket, articles] = await Promise.all([
+    api(`/portal/tickets/${id}`), api(`/portal/tickets/${id}/articles`),
+  ]);
+
+  portalTicketShown = ticket;
+
+  $('#portal-ticket-title').textContent = ticket.title;
+  $('#portal-ticket-facts').textContent = [
+    ticketName(ticket.number),
+    statusName(ticket.state),
+    fillIn(t('portal.opened', 'opened {0}'), [fmtMoment(ticket.createdAt)]),
+  ].join(' · ');
+
+  $('#portal-thread').replaceChildren(...(articles?.items ?? []).map((article) => el('li', {},
+    el('p', { class: 'muted', text: [
+      article.sender === 'customer'
+        ? (article.authorName || t('portal.you', 'you'))
+        : (article.authorName || t('portal.serviceDesk', 'the service desk')),
+      fmtMoment(article.createdAt),
+    ].join(' · ') }),
+    article.subject ? el('strong', { text: article.subject }) : null,
+    el('div', { class: 'ticket-article-body', text: article.body }),
+    article.attachments.length ? el('ul', { class: 'ticket-attachments' }, ...article.attachments.map((file) => el('li', {},
+      el('button', {
+        type: 'button',
+        class: 'link',
+        text: `${file.filename} (${fileSize(file.size)})`,
+        onclick: () => downloadAttachment(ticket.id, file, 'portal/tickets').catch((err) => toastFailure(err)),
+      })))) : null,
+  )));
+
+  $('#portal-ticket').hidden = false;
+  $('#portal-ticket').scrollIntoView({ block: 'start' });
+}
+
+/** Puts the open ticket away, and what was written about it with it. */
+function closePortalTicket() {
+  portalTicketShown = null;
+  $('#portal-ticket').hidden = true;
+  $('#portal-thread').replaceChildren();
+  $('#portal-ticket-title').textContent = '';
+  $('#portal-ticket-facts').textContent = '';
+  $('#form-portal-answer').reset();
+}
+
+/**
+ * Opens a ticket from the portal's form, and then sends its files with the
+ * article it was opened with - after the form is emptied, as an article's files
+ * go on the staff's side, so that a file refused cannot leave the text behind
+ * for a second press to send again.
+ */
+function savePortalTicket(form) {
+  const files = [...(form.elements.files.files ?? [])];
+  const queue = form.elements.queueId.value;
+  const body = JSON.stringify({
+    title: form.elements.title.value.trim(),
+    body: form.elements.body.value,
+    ...(queue && !$('#portal-queue-choice').hidden ? { queueId: Number(queue) } : {}),
+  });
+
+  mutate(() => api('/portal/tickets', { method: 'POST', body }), t('msg.portalOpened', 'Ticket opened'),
+    async (ticket) => {
+      form.reset();
+
+      if (ticket?.id && files.length) {
+        const articles = await api(`/portal/tickets/${ticket.id}/articles`);
+        await attachFiles(ticket.id, articles?.items?.[0]?.id, files, 'portal/tickets');
+      }
+
+      await loadPortalTickets();
+      if (ticket?.id) await openPortalTicket(ticket.id);
+    });
+}
+
+/**
+ * Sends the customer's answer to the open ticket, with its files. The answer
+ * says which ticket it landed in, which is a new one where the ticket was
+ * finished and its queue opens one for an answer - and that is the one opened
+ * afterwards.
+ */
+function savePortalAnswer(form) {
+  if (!portalTicketShown) return;
+
+  const id = portalTicketShown.id;
+  const files = [...(form.elements.files.files ?? [])];
+  const body = JSON.stringify({ body: form.elements.body.value });
+
+  mutate(() => api(`/portal/tickets/${id}/articles`, { method: 'POST', body }), t('msg.portalAnswered', 'Answer sent'),
+    async (article) => {
+      form.reset();
+
+      const landed = article?.ticketId || id;
+      await attachFiles(landed, article?.id, files, 'portal/tickets');
+      await loadPortalTickets();
+      await openPortalTicket(landed);
+    });
+}
+
+/** Wires the portal's screen. */
+function wirePortal() {
+  $('#form-portal-filter').addEventListener('change', () => loadPortalTickets().catch((err) => toastFailure(err)));
+  $('#form-portal-filter').addEventListener('submit', (e) => e.preventDefault());
+  $('#form-portal-ticket').addEventListener('submit', (e) => { e.preventDefault(); savePortalTicket(e.target); });
+  $('#form-portal-answer').addEventListener('submit', (e) => { e.preventDefault(); savePortalAnswer(e.target); });
+  $('#portal-ticket-close').addEventListener('click', closePortalTicket);
+}
+
+/** Opens an organisation or a contact in its card's form, to correct it. */
+function editCustomer(kind, entry) {
+  const form = $(`#form-${kind}`);
+  const card = CUSTOMER_FORMS[kind];
+
+  form.elements.id.value = String(entry.id);
+  for (const field of card.fields) form.elements[field].value = entry[field] ?? '';
+  form.elements.valid.checked = entry.valid;
+
+  if (kind === 'contact') {
+    form.elements.seesOrganisation.checked = entry.seesOrganisation;
+    offerFound('contactOrganisation', keptEntry(entry.organisationId, entry.organisationName));
+  }
+
+  // Drawn rather than declared with a key, because it carries the entry's name;
+  // see editRole for why the key has to come off.
+  const heading = $(`#${kind}-form-title`);
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable(`${kind}FormTitle`, () => { heading.textContent = card.editing(entry); });
+
+  swapTheLabel($(`#${kind}-submit`), 'action.save', 'Save');
+  $(`#${kind}-cancel`).hidden = false;
+  form.elements.name.focus();
+}
+
+/** Puts a customer card's form back to making a new entry. */
+function resetCustomerForm(kind) {
+  const form = $(`#form-${kind}`);
+  const card = CUSTOMER_FORMS[kind];
+
+  form.reset();
+  form.elements.id.value = '';
+
+  if (kind === 'contact') offerFound('contactOrganisation', null);
+
+  stopRedrawing(`${kind}FormTitle`);
+  swapTheLabel($(`#${kind}-form-title`), ...card.create);
+  swapTheLabel($(`#${kind}-submit`), 'action.create', 'Create');
+  $(`#${kind}-cancel`).hidden = true;
+}
+
+/**
+ * Sends a customer card's form. A contact's organisation is taken off by saying
+ * so, because an id sent as nothing cannot be told apart from one not sent.
+ */
+function saveCustomer(kind, form) {
+  const card = CUSTOMER_FORMS[kind];
+  const id = form.elements.id.value;
+  const sent = { valid: form.elements.valid.checked };
+
+  for (const field of card.fields) sent[field] = form.elements[field].value.trim();
+
+  if (kind === 'contact') {
+    const organisation = form.elements.organisationId.value;
+
+    if (organisation) sent.organisationId = Number(organisation);
+    else if (id) sent.clearOrganisation = true;
+
+    sent.seesOrganisation = form.elements.seesOrganisation.checked;
+  }
+
+  const body = JSON.stringify(sent);
+
+  mutate(
+    () => (id ? api(`${card.path}/${id}`, { method: 'PUT', body }) : api(card.path, { method: 'POST', body })),
+    id ? card.saved() : card.created(),
+    async () => { resetCustomerForm(kind); await refreshAll(); },
+  );
+}
+
+/** Wires the customer screen's forms. */
+function wireCustomers() {
+  for (const kind of Object.keys(CUSTOMER_FORMS)) {
+    $(`#form-${kind}`).addEventListener('submit', (e) => { e.preventDefault(); saveCustomer(kind, e.target); });
+    $(`#${kind}-cancel`).addEventListener('click', () => resetCustomerForm(kind));
+  }
+
+  for (const [filter, load] of [['#form-organisation-filter', loadOrganisationPage], ['#form-contact-filter', loadContactPage]]) {
+    const form = $(filter);
+    let typing;
+
+    form.addEventListener('submit', (e) => { e.preventDefault(); load(); });
+    form.addEventListener('change', () => load());
+    form.elements.q.addEventListener('input', () => {
+      clearTimeout(typing);
+      typing = setTimeout(load, 300);
+    });
+  }
+
+  wireSearches();
+}
+
+// ----------------------------------------------------------------- tickets
+
+/** The English for how a ticket or an article arrived, which are the server's model.AgentChannels. */
+const CHANNEL_TITLES = {
+  note: 'note',
+  phone: 'phone call',
+  web: 'customer portal',
+};
+
+/**
+ * The channels an agent writes through by hand, which are the ones the forms
+ * offer: the portal is the customer's, and the server refuses it from anybody
+ * else.
+ */
+const AGENT_CHANNELS = ['note', 'phone'];
+
+/** How an article or a ticket arrived, in the reader's language. */
+function channelName(channel) {
+  return t(`channel.${channel}`, CHANNEL_TITLES[channel] ?? channel);
+}
+
+/**
+ * What each kind of history line says, by the server's model.HistoryEvents. The
+ * values are filled in by describeHistory, in the reader's words for each.
+ */
+const HISTORY_SENTENCES = {
+  created: () => t('history.created', 'Opened the ticket'),
+  title: () => t('history.title', 'Changed the title from "{0}" to "{1}"'),
+  queue: () => t('history.queue', 'Moved it from {0} to {1}'),
+  state: () => t('history.state', 'Changed the state from {0} to {1}'),
+  priority: () => t('history.priority', 'Changed the priority from {0} to {1}'),
+  type: () => t('history.type', 'Changed the type from {0} to {1}'),
+  owner: () => t('history.owner', 'Changed the owner from {0} to {1}'),
+  responsible: () => t('history.responsible', 'Changed who is responsible from {0} to {1}'),
+  contact: () => t('history.contact', 'Changed who it is for from {0} to {1}'),
+  organisation: () => t('history.organisation', 'Changed the organisation from {0} to {1}'),
+  lock: () => t('history.lock', 'Locked it: {1}'),
+  pending: () => t('history.pending', 'Changed how long it waits from {0} to {1}'),
+  article: () => t('history.article', 'Wrote a {1}'),
+  time: () => t('history.time', 'Noted {1} minutes'),
+  attachment: () => t('history.attachment', 'Attached {1}'),
+  sla: () => t('history.sla', 'Changed the service level from {0} to {1}'),
+  merged: () => t('history.merged', 'Merged ticket {0} into ticket {1}'),
+};
+
+/** How the ticket list stands: which page, how many to a page, how many in all. */
+const ticketPaging = { page: 1, limit: 25, total: 0 };
+
+/** The ticket that is open, as the server last answered it, or nobody. */
+let openTicketShown = null;
+
+/** The zone a moment is read and written in: the account's, or the browser's before it has one. */
+function readerZone() {
+  return me.user?.effectiveTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/**
+ * A day and a time of day in a zone, as the moment they name.
+ *
+ * Intl reads a moment in a zone but cannot write one, so the offset is found by
+ * reading back: the wall clock taken as UTC, read in the zone, says how far off it
+ * is, and reading once more at the corrected moment settles a day the zone moves
+ * its clocks on.
+ */
+function momentIn(day, time, zone) {
+  const [y, m, d] = day.split('-').map(Number);
+  const [h, mi] = (time || '00:00').split(':').map(Number);
+  const wall = Date.UTC(y, m - 1, d, h, mi);
+
+  const offset = (at) => {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+      timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    }).formatToParts(new Date(at)).map((part) => [part.type, part.value]));
+
+    return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+      Number(parts.hour), Number(parts.minute)) - at;
+  };
+
+  const first = wall - offset(wall);
+
+  return new Date(wall - offset(first)).toISOString();
+}
+
+/** A moment as the day and the time of day it is in a zone, as date and time fields hold them. */
+function dayAndTimeIn(iso, zone) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }).formatToParts(new Date(iso)).map((part) => [part.type, part.value]));
+
+  return { day: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
+/**
+ * Fills the ticket screens, for whoever may read tickets: the lists a ticket is
+ * described by, the page of tickets, and the one that is open, read again.
+ */
+async function loadTickets() {
+  if (!can('tickets:read')) return;
+
+  const [queues, states, priorities, types, levels] = await Promise.all(
+    ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path, '/service-levels']
+      .map((path) => api(path)),
+  );
+
+  cache.levels = levels?.items ?? [];
+  cache.ticketQueues = queues?.items ?? [];
+  cache.states = states?.items ?? [];
+  cache.priorities = priorities?.items ?? [];
+  cache.types = types?.items ?? [];
+
+  const filter = $('#form-ticket-filter');
+  if (filter && !beingEdited(filter)) {
+    fillSelect(filter.elements.queue, queueChoices(cache.ticketQueues),
+      { placeholder: t('ticket.allQueues', 'every queue'), labelKey: 'label', valueKey: 'value' });
+    fillTicketSearch(filter);
+  }
+
+  const form = $('#form-ticket');
+  if (form && !beingEdited(form) && !form.elements.id.value) {
+    fillTicketForm(form, null, []);
+    showTicketJob(form, false);
+  }
+
+  if (form && !beingEdited(form) && can('customers:read')) {
+    await Promise.all([searchChoices('ticketContact'), searchChoices('ticketOrganisation')]);
+  }
+
+  await loadTicketPage();
+  await loadSavedSearches();
+  await loadTold();
+  await loadNotifyChoices();
+
+  if (openTicketShown) await openTicket(openTicketShown.id, { keepPlace: true });
+}
+
+// ---------------------------------------------------------------- overview
+
+/** The overview's tiles, each opening the ticket list searched for what it counts. */
+const OVERVIEW_TILES = [
+  {
+    key: 'owned',
+    label: () => t('overview.owned', 'Yours, still to do'),
+    search: (filter) => { filter.elements.mine.checked = true; },
+  },
+  {
+    key: 'responsible',
+    label: () => t('overview.responsible', 'Yours to answer for'),
+    search: (filter) => { filter.elements.responsible.value = 'me'; },
+  },
+  {
+    key: 'watched',
+    label: () => t('overview.watched', 'Watched by you'),
+    search: (filter) => { filter.elements.watched.checked = true; },
+  },
+  {
+    key: 'overdue',
+    label: () => t('overview.overdueTile', 'Overdue'),
+    search: (filter) => { filter.elements.overdue.checked = true; },
+  },
+];
+
+/** Fills the overview for whoever reads tickets. */
+async function loadOverview() {
+  if (!can('tickets:read')) return;
+
+  const overview = await api('/tickets/overview');
+  if (!overview) return;
+
+  cache.overviewDays = overview.days ?? [];
+
+  drawOverviewTiles(overview);
+  drawQueueLoads(overview.queues ?? []);
+  drawDayLoads(cache.overviewDays);
+}
+
+/** A count, written the way the reader writes a whole number. */
+function fmtCount(n) {
+  return new Intl.NumberFormat(activeLocale(), { maximumFractionDigits: 0 }).format(n ?? 0);
+}
+
+/** The four tiles of the agent's own work. */
+function drawOverviewTiles(overview) {
+  const row = $('#overview-tiles');
+  if (!row) return;
+
+  row.replaceChildren(...OVERVIEW_TILES.map((tile) => el('button', {
+    type: 'button',
+    class: 'overview-tile',
+    'data-tile': tile.key,
+    onclick: () => showSearchedTickets(tile.search),
+  },
+  el('span', { class: 'overview-value', text: fmtCount(overview[tile.key]) }),
+  el('span', { class: 'overview-label', text: tile.label() }))));
+}
+
+/** Each reached queue's unfinished tickets by where they stand. */
+function drawQueueLoads(loads) {
+  const tbody = $('#table-overview-queues tbody');
+  if (!tbody) return;
+
+  const byId = new Map(cache.ticketQueues.map((queue) => [queue.id, queue]));
+
+  fillTable(tbody, loads.map((load) => {
+    const queue = byId.get(load.queueId);
+
+    return el('tr', {},
+      el('td', { class: 'text' }, el('button', {
+        type: 'button',
+        class: 'link',
+        text: queue ? queuePath(queue, byId) : `#${load.queueId}`,
+        onclick: () => showSearchedTickets((filter) => { filter.elements.queue.value = String(load.queueId); }),
+      })),
+      el('td', { class: 'num', text: fmtCount(load.new) }),
+      el('td', { class: 'num', text: fmtCount(load.open) }),
+      el('td', { class: 'num', text: fmtCount(load.waiting) }),
+      el('td', { class: 'num', text: fmtCount(load.overdue) }));
+  }), 5, t('overview.noQueues', 'No queue reaches you.'));
+}
+
+/**
+ * Opens the ticket list searched for what a tile or a queue counts: the search
+ * put back to asking for nothing, then given the one thing asked, and folded out
+ * where that thing is one of its further criteria.
+ */
+function showSearchedTickets(search) {
+  const filter = $('#form-ticket-filter');
+  if (!filter) return;
+
+  filter.reset();
+  search(filter);
+
+  const further = $('#ticket-search');
+  further.open = $$('select, input', further).some((field) =>
+    (field.type === 'checkbox' ? field.checked : field.value !== '' && field.name !== 'sort'));
+
+  ticketPaging.page = 1;
+  switchView('tickets');
+  loadTicketPage().catch((err) => toastFailure(err));
+}
+
+/** A day of the overview, as the chart's axis writes it. */
+function overviewDayNumber(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+
+  return new Intl.DateTimeFormat(activeLocale(), { day: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(y, m - 1, d)));
+}
+
+/** A day of the overview, as the tooltip and the table write it. */
+function overviewDayName(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+
+  return new Intl.DateTimeFormat(activeLocale(), {
+    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
+  }).format(new Date(Date.UTC(y, m - 1, d)));
+}
+
+/** An element of the chart, in SVG's namespace. */
+function svgEl(name, attributes = {}) {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', name);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+  return node;
+}
+
+/** The smallest clean number at or above a count, for the top of the axis. */
+function chartTop(max) {
+  for (let scale = 1; ; scale *= 10) {
+    for (const step of [1, 2, 4, 5]) {
+      if (step * scale >= Math.max(max, 1)) return step * scale;
+    }
+  }
+}
+
+/** A column grown from the baseline: square at the foot, its top corners rounded. */
+function columnPath(x, top, width, baseline) {
+  const r = Math.min(4, width / 2, baseline - top);
+
+  return `M${x},${baseline}V${top + r}Q${x},${top} ${x + r},${top}H${x + width - r}`
+    + `Q${x + width},${top} ${x + width},${top + r}V${baseline}Z`;
+}
+
+/** The overview's last two weeks, day by day. */
+function drawDayLoads(days) {
+  drawColumns($('#overview-chart'), $('#table-overview-days tbody'), dailyBuckets(days));
+}
+
+/** Days as the chart's buckets, one each. */
+function dailyBuckets(days) {
+  return days.map((day) => ({
+    axis: overviewDayNumber(day.day), name: overviewDayName(day.day), opened: day.opened, closed: day.closed,
+  }));
+}
+
+/**
+ * A span's days as the chart's buckets: one a day up to a month, a week each
+ * up to a quarter - counted back from the last day, so the last week ends on
+ * it - and a calendar month each over a longer span, so that a year is still a
+ * row of columns a screen holds.
+ */
+function spanBuckets(days) {
+  if (days.length <= 31) return dailyBuckets(days);
+
+  const named = (iso, options) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Intl.DateTimeFormat(activeLocale(), { ...options, timeZone: 'UTC' })
+      .format(new Date(Date.UTC(y, m - 1, d)));
+  };
+
+  const groups = [];
+
+  if (days.length <= 93) {
+    for (let end = days.length; end > 0; end -= 7) groups.unshift(days.slice(Math.max(0, end - 7), end));
+
+    return groups.map((week) => ({
+      axis: named(week[0].day, { day: 'numeric', month: 'short' }),
+      name: `${overviewDayName(week[0].day)} – ${overviewDayName(week[week.length - 1].day)}`,
+      opened: week.reduce((sum, day) => sum + day.opened, 0),
+      closed: week.reduce((sum, day) => sum + day.closed, 0),
+    }));
+  }
+
+  for (const day of days) {
+    const month = day.day.slice(0, 7);
+    if (groups.length === 0 || groups[groups.length - 1].month !== month) groups.push({ month, days: [] });
+    groups[groups.length - 1].days.push(day);
+  }
+
+  return groups.map((group) => ({
+    axis: named(group.days[0].day, { month: 'short' }),
+    name: named(group.days[0].day, { month: 'long', year: 'numeric' }),
+    opened: group.days.reduce((sum, day) => sum + day.opened, 0),
+    closed: group.days.reduce((sum, day) => sum + day.closed, 0),
+  }));
+}
+
+/** What each chart was last given and the width it was drawn at, to draw it again. */
+const chartsDrawn = new WeakMap();
+
+/**
+ * Draws a chart again once its card's width changes: a screen or a tab that was
+ * hidden when the numbers came has no width to draw at, and a window resized
+ * has a different one.
+ */
+const chartWidths = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const drawn = chartsDrawn.get(entry.target);
+
+    if (drawn && Math.round(entry.contentRect.width) !== drawn.width) {
+      drawColumns(entry.target, drawn.tbody, drawn.buckets);
+    }
+  }
+});
+
+/**
+ * Buckets as pairs of columns, opened beside finished, with a tooltip per
+ * bucket and a table of the same numbers under it. Drawn at the width the card
+ * has, so the axis text stays its size on a telephone.
+ */
+function drawColumns(holder, tbody, buckets) {
+  if (!holder || !tbody) return;
+
+  chartsDrawn.set(holder, { tbody, buckets, width: Math.round(holder.clientWidth) });
+  chartWidths.observe(holder);
+
+  fillTable(tbody, buckets.map((bucket) => el('tr', {},
+    el('td', { class: 'text', text: bucket.name }),
+    el('td', { class: 'num', text: fmtCount(bucket.opened) }),
+    el('td', { class: 'num', text: fmtCount(bucket.closed) }))), 3, '');
+
+  const width = holder.clientWidth;
+  if (!width || buckets.length === 0) return;
+
+  const height = 180;
+  const left = 32;
+  const bottom = 24;
+  const top = chartTop(Math.max(...buckets.map((bucket) => Math.max(bucket.opened, bucket.closed))));
+  const plot = { x: left, y: 8, w: width - left - 4, h: height - 8 - bottom };
+  const slot = plot.w / buckets.length;
+  const bar = Math.max(1, Math.min(12, (slot - 2 - 6) / 2));
+  const baseline = plot.y + plot.h;
+  const y = (value) => baseline - (value / top) * plot.h;
+
+  // As many axis labels as fit side by side, counted back from the last bucket.
+  const every = Math.max(1, Math.ceil((44 * buckets.length) / plot.w));
+
+  const chart = svgEl('svg', {
+    viewBox: `0 0 ${width} ${height}`, height, role: 'group',
+    'aria-label': holder.closest('.card')?.querySelector('h2')?.textContent ?? '',
+  });
+
+  for (const tick of (top % 2 === 0 ? [0, top / 2, top] : [0, top])) {
+    chart.append(svgEl('line', {
+      class: tick === 0 ? 'chart-axis' : 'chart-grid', x1: plot.x, x2: plot.x + plot.w, y1: y(tick), y2: y(tick),
+    }));
+    const label = svgEl('text', { class: 'chart-tick', x: plot.x - 6, y: y(tick) + 4, 'text-anchor': 'end' });
+    label.textContent = fmtCount(tick);
+    chart.append(label);
+  }
+
+  const tip = el('div', { class: 'chart-tip', hidden: true });
+  const columns = [];
+
+  buckets.forEach((bucket, i) => {
+    const x = plot.x + i * slot + (slot - (2 * bar + 2)) / 2;
+    const pair = [];
+
+    for (const [value, series, offset] of [[bucket.opened, 'opened', 0], [bucket.closed, 'closed', bar + 2]]) {
+      if (value > 0) {
+        const column = svgEl('path', {
+          class: `chart-bar chart-bar-${series}`, d: columnPath(x + offset, y(value), bar, baseline),
+        });
+        pair.push(column);
+        chart.append(column);
+      }
+    }
+
+    columns.push(pair);
+
+    if ((buckets.length - 1 - i) % every === 0) {
+      const label = svgEl('text', {
+        class: 'chart-tick', x: plot.x + i * slot + slot / 2, y: height - 6, 'text-anchor': 'middle',
+      });
+      label.textContent = bucket.axis;
+      chart.append(label);
+    }
+  });
+
+  buckets.forEach((bucket, i) => {
+    const said = t('overview.dayLoad', '{0}: {1} opened, {2} finished')
+      .replace('{0}', bucket.name).replace('{1}', fmtCount(bucket.opened)).replace('{2}', fmtCount(bucket.closed));
+    const hit = svgEl('rect', {
+      class: 'chart-hit', x: plot.x + i * slot, y: plot.y, width: slot, height: plot.h,
+      tabindex: 0, role: 'img', 'aria-label': said,
+    });
+
+    const show = () => {
+      columns[i].forEach((column) => column.classList.add('lifted'));
+      tip.replaceChildren(
+        el('div', { class: 'chart-tip-day', text: bucket.name }),
+        ...[['opened', bucket.opened, t('overview.opened', 'Opened')],
+          ['closed', bucket.closed, t('overview.closed', 'Finished')]].map(([series, value, label]) =>
+          el('div', { class: 'chart-tip-row' },
+            el('span', { class: `chart-tip-line ${series}` }),
+            el('strong', { text: fmtCount(value) }),
+            el('span', { text: label }))));
+      tip.hidden = false;
+
+      const middle = plot.x + i * slot + slot / 2;
+      tip.style.left = `${Math.max(0, Math.min(middle - tip.offsetWidth / 2, width - tip.offsetWidth))}px`;
+      tip.style.top = `${Math.max(0, y(Math.max(bucket.opened, bucket.closed)) - tip.offsetHeight - 8)}px`;
+    };
+
+    const hide = () => {
+      columns[i].forEach((column) => column.classList.remove('lifted'));
+      tip.hidden = true;
+    };
+
+    hit.addEventListener('pointerenter', show);
+    hit.addEventListener('focus', show);
+    hit.addEventListener('pointerleave', hide);
+    hit.addEventListener('blur', hide);
+    chart.append(hit);
+  });
+
+  holder.replaceChildren(chart, tip);
+}
+
+// ------------------------------------------------------------- statistics
+
+/** The report the statistics last answered, to draw again at a new width. */
+let reportShown = null;
+
+/** What the statistics count by, as its column is headed: the key and the English. */
+const REPORT_BY = {
+  queue: ['field.queue', 'Queue'],
+  priority: ['field.priority', 'Priority'],
+  type: ['field.type', 'Type'],
+  owner: ['ticket.owner', 'Owner'],
+  organisation: ['field.organisationId', 'Organisation'],
+  serviceLevel: ['field.serviceLevelId', 'Service level'],
+};
+
+/** The days a period choice covers, as the report's from and to. */
+function reportPeriod(form) {
+  const today = todayISO();
+  const [y, m, d] = today.split('-').map(Number);
+  const back = (days) => ISO_DAY(new Date(y, m - 1, d - days));
+
+  switch (form.elements.period.value) {
+    case '7': return { from: back(6), to: today };
+    case '90': return { from: back(89), to: today };
+    case 'month': return { from: ISO_DAY(new Date(y, m - 1, 1)), to: today };
+    case 'lastMonth': return { from: ISO_DAY(new Date(y, m - 2, 1)), to: ISO_DAY(new Date(y, m - 1, 0)) };
+    case 'year': return { from: ISO_DAY(new Date(y, 0, 1)), to: today };
+    case 'custom': return { from: form.elements.from.value, to: form.elements.to.value };
+    default: return { from: back(29), to: today };
+  }
+}
+
+/** Reads the statistics the form asks for, and draws them. */
+async function loadReport() {
+  const form = $('#form-report');
+  if (!form || !can('reports:read')) return;
+
+  const custom = form.elements.period.value === 'custom';
+  $$('.report-custom', form).forEach((label) => { label.hidden = !custom; });
+
+  const { from, to } = reportPeriod(form);
+  if (custom && (!from || !to)) return;
+
+  const query = new URLSearchParams({ from, to, by: form.elements.by.value });
+
+  reportShown = await api(`/reports/tickets?${query}`);
+  if (!reportShown) return;
+
+  drawReport(reportShown, form);
+}
+
+/** A share kept of what was owed, as a figure and in words; a dash where nothing was owed. */
+function keptShare(kept, owed) {
+  if (!owed) return { value: '–', of: '' };
+
+  return {
+    value: new Intl.NumberFormat(activeLocale(), { style: 'percent', maximumFractionDigits: 0 }).format(kept / owed),
+    of: t('report.keptOf', '{0} of {1}').replace('{0}', fmtCount(kept)).replace('{1}', fmtCount(owed)),
+  };
+}
+
+/** Whole minutes as the screen writes a span of time: minutes under an hour, hours above it. */
+function fmtMinutesTaken(minutes) {
+  if (minutes === null || minutes === undefined) return '–';
+  if (minutes < 60) return t('ticket.minutes', '{0} minutes').replace('{0}', fmtCount(minutes));
+
+  return fmtHours(minutes / 60);
+}
+
+/** What a row of the statistics is the tickets of, in words. */
+function reportRowName(row, by) {
+  if (row.id === 0) return by === 'owner' ? t('ticket.nobody', 'nobody') : t('report.none', 'none');
+  if (!row.name) return `#${row.id}`;
+  if (by === 'priority') return priorityName(row.name);
+  if (by === 'type') return ticketTypeName(row.name);
+
+  return row.name;
+}
+
+/** The statistics: the figures of the whole span, its columns and its rows. */
+function drawReport(report, form) {
+  const total = report.total ?? {};
+  const answers = keptShare(total.responseKept, total.responseOwed);
+  const solutions = keptShare(total.solutionKept, total.solutionOwed);
+
+  $('#report-tiles').replaceChildren(...[
+    [fmtCount(total.opened), t('overview.opened', 'Opened'), ''],
+    [fmtCount(total.closed), t('overview.closed', 'Finished'), ''],
+    [answers.value, t('report.responseKept', 'First answers in time'), answers.of],
+    [solutions.value, t('report.solutionKept', 'Solutions in time'), solutions.of],
+    [fmtMinutesTaken(total.averageResponseMinutes), t('report.responseAverage', 'Average first answer'), ''],
+    [fmtMinutesTaken(total.averageResolutionMinutes), t('report.resolutionAverage', 'Average time to finish'), ''],
+  ].map(([value, label, detail]) => el('div', { class: 'report-tile' },
+    el('span', { class: 'overview-value', text: value }),
+    el('span', { class: 'overview-label', text: label }),
+    detail ? el('span', { class: 'overview-label', text: detail }) : null)));
+
+  drawColumns($('#report-chart'), $('#table-report-days tbody'), spanBuckets(report.days ?? []));
+
+  const by = form.elements.by.value;
+  swapTheLabel($('#report-rows-by'), ...(REPORT_BY[by] ?? REPORT_BY.queue));
+
+  fillTable($('#table-report-rows tbody'), (report.rows ?? []).map((row) => {
+    const rowAnswers = keptShare(row.responseKept, row.responseOwed);
+    const rowSolutions = keptShare(row.solutionKept, row.solutionOwed);
+
+    return el('tr', {},
+      el('td', { class: 'text', text: reportRowName(row, by) }),
+      el('td', { class: 'num', text: fmtCount(row.opened) }),
+      el('td', { class: 'num', text: fmtCount(row.closed) }),
+      el('td', { class: 'num', text: rowAnswers.value, title: rowAnswers.of }),
+      el('td', { class: 'num', text: rowSolutions.value, title: rowSolutions.of }),
+      el('td', { class: 'num', text: fmtMinutesTaken(row.averageResponseMinutes) }),
+      el('td', { class: 'num', text: fmtMinutesTaken(row.averageResolutionMinutes) }));
+  }), 7, t('report.noRows', 'No tickets in this span.'));
+}
+
+/** Wires the statistics' form: every change asks again. */
+function wireReport() {
+  const form = $('#form-report');
+  if (!form) return;
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); loadReport().catch((err) => toastFailure(err)); });
+  form.addEventListener('change', () => loadReport().catch((err) => toastFailure(err)));
+}
+
+/**
+ * Fills the search's choices with every value tickets can carry, retired ones
+ * included: a ticket keeps a retired state or priority, and the search has to
+ * be able to find it by one.
+ */
+function fillTicketSearch(filter) {
+  const any = { placeholder: t('ticket.any', 'any'), labelKey: 'label', valueKey: 'value' };
+
+  fillSelect(filter.elements.state,
+    cache.states.map((state) => ({ value: String(state.id), label: statusName(state.name) })), any);
+  fillSelect(filter.elements.priority,
+    cache.priorities.map((priority) => ({ value: String(priority.id), label: priorityName(priority.name) })), any);
+  fillSelect(filter.elements.type,
+    cache.types.map((type) => ({ value: String(type.id), label: ticketTypeName(type.name) })), any);
+  fillSelect(filter.elements.serviceLevel,
+    cache.levels.map((level) => ({ value: String(level.id), label: level.name })), any);
+}
+
+/**
+ * What the search asks for beyond the queue and the words, as the listing's
+ * query takes it: only what is chosen, so that an untouched search asks for
+ * nothing.
+ */
+function ticketSearchQuery(filter, query) {
+  const chosen = filter.elements;
+
+  for (const name of ['state', 'priority', 'type', 'serviceLevel', 'responsible', 'locked',
+    'createdFrom', 'createdTo', 'changedFrom', 'changedTo']) {
+    if (chosen[name].value) query.set(name, chosen[name].value);
+  }
+
+  if (chosen.text.value.trim()) query.set('text', chosen.text.value.trim());
+  if (chosen.watched.checked) query.set('watched', 'true');
+  if (chosen.overdue.checked) query.set('overdue', 'true');
+
+  const [sort, order] = chosen.sort.value.split('-');
+  if (sort && sort !== 'changed') query.set('sort', sort);
+  if (order === 'asc') query.set('order', 'asc');
+}
+
+/**
+ * What the filter asks the ticket list for, without the page: what a saved
+ * search keeps, and what the list is asked with before the page is added.
+ */
+function listingQuery(filter) {
+  const query = new URLSearchParams();
+
+  if (filter.elements.queue.value) query.set('queue', filter.elements.queue.value);
+  if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
+  if (filter.elements.unfinished.checked) query.set('unfinished', 'true');
+  if (filter.elements.mine.checked) query.set('owner', 'me');
+  ticketSearchQuery(filter, query);
+
+  return query;
+}
+
+/**
+ * Puts the filter where a saved search had it: back to asking for nothing,
+ * then every field the query names, the further criteria folded out where it
+ * names one of them. A list the listing takes but a field cannot show - more
+ * than one state - is shown by its first.
+ */
+function applySavedSearch(filter, query) {
+  filter.reset();
+
+  const given = new URLSearchParams(query);
+  const first = (name) => (given.get(name) ?? '').split(',')[0];
+
+  filter.elements.queue.value = given.get('queue') ?? '';
+  filter.elements.q.value = given.get('q') ?? '';
+  filter.elements.unfinished.checked = given.get('unfinished') === 'true';
+  filter.elements.mine.checked = given.get('owner') === 'me';
+
+  for (const name of ['state', 'priority', 'type']) filter.elements[name].value = first(name);
+  for (const name of ['serviceLevel', 'responsible', 'locked']) filter.elements[name].value = given.get(name) ?? '';
+  for (const name of ['createdFrom', 'createdTo', 'changedFrom', 'changedTo']) {
+    setDateField(filter.elements[name], given.get(name) ?? '');
+  }
+
+  filter.elements.text.value = given.get('text') ?? '';
+  filter.elements.watched.checked = given.get('watched') === 'true';
+  filter.elements.overdue.checked = given.get('overdue') === 'true';
+  filter.elements.sort.value = [given.get('sort') ?? 'changed', given.get('order') === 'asc' ? 'asc' : '']
+    .filter(Boolean).join('-');
+
+  $('#ticket-search').open = ['state', 'priority', 'type', 'serviceLevel', 'responsible', 'locked', 'createdFrom',
+    'createdTo', 'changedFrom', 'changedTo', 'text', 'watched', 'overdue', 'sort'].some((name) => given.has(name));
+
+  ticketPaging.page = 1;
+  loadTicketPage().catch((err) => toastFailure(err));
+}
+
+/** The searches this agent saved, offered to run. */
+async function loadSavedSearches() {
+  const form = $('#form-ticket-saved');
+  if (!form || !can('tickets:read')) return;
+
+  const saved = (await api('/me/ticket-searches'))?.items ?? [];
+  cache.savedSearches = saved;
+
+  fillSelect(form.elements.saved, saved.map((search) => ({ value: String(search.id), label: search.name })),
+    { placeholder: t('ticket.savedSearchPick', 'a saved search…'), labelKey: 'label', valueKey: 'value' });
+  $('#ticket-saved-delete').hidden = !form.elements.saved.value;
+}
+
+/** Wires the saved searches: one chosen is run, the search as it stands kept, the chosen one let go. */
+function wireSavedSearches(filter) {
+  const form = $('#form-ticket-saved');
+  if (!form) return;
+
+  form.elements.saved.addEventListener('change', () => {
+    const chosen = (cache.savedSearches ?? []).find((search) => String(search.id) === form.elements.saved.value);
+    $('#ticket-saved-delete').hidden = !chosen;
+
+    if (chosen) applySavedSearch(filter, chosen.query);
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    saveForm(form, () => api('/me/ticket-searches', {
+      method: 'POST',
+      body: JSON.stringify({ name: form.elements.name.value.trim(), query: listingQuery(filter).toString() }),
+    }), t('ticket.searchSaved', 'Search saved.'), async (saved) => {
+      form.elements.name.value = '';
+      await loadSavedSearches();
+      if (saved?.id) form.elements.saved.value = String(saved.id);
+      $('#ticket-saved-delete').hidden = !form.elements.saved.value;
+    });
+  });
+
+  $('#ticket-saved-delete').addEventListener('click', () => {
+    const id = form.elements.saved.value;
+    if (!id) return;
+
+    mutate(() => api(`/me/ticket-searches/${id}`, { method: 'DELETE' }),
+      t('ticket.savedSearchDeleted', 'Saved search deleted.'), loadSavedSearches);
+  });
+}
+
+/** Puts every criterion of the search back to asking for nothing. */
+function clearTicketSearch(filter) {
+  for (const field of $$('select, input', $('#ticket-search'))) {
+    if (field.type === 'checkbox') field.checked = false;
+    else if (field.type === 'date') setDateField(field, '');
+    else if (field.tagName === 'SELECT') field.selectedIndex = 0;
+    else if (!field.classList.contains('date-shown')) field.value = '';
+  }
+
+  filter.dispatchEvent(new Event('change'));
+}
+
+/** Queues as choices, by their place in the tree. */
+function queueChoices(queues) {
+  const byId = new Map(cache.ticketQueues.map((queue) => [queue.id, queue]));
+
+  return queues
+    .map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+// --------------------------------------------------------- what I was told
+
+/**
+ * Draws what the notifications told the reader, the latest first, the ones not
+ * read yet marked so, and offers to mark them all read while any are unread.
+ */
+async function loadTold() {
+  if (!can('tickets:read')) return;
+
+  const page = await api('/me/notifications');
+  const told = page?.items ?? [];
+
+  fillTable($('#table-told tbody'), told.map(toldRow), 3, t('told.empty', 'Nothing yet.'));
+  $('#told-all-read').hidden = !(page?.unread > 0);
+}
+
+/** One thing the reader was told, as a row: when, what, and the ticket it is about. */
+function toldRow(notification) {
+  const unread = !notification.readAt;
+  const actions = el('td', { class: 'actions' },
+    el('button', {
+      class: 'link',
+      text: t('told.open', 'open the ticket'),
+      onclick: () => openToldTicket(notification),
+    }));
+
+  if (unread) {
+    actions.append(el('button', {
+      class: 'link',
+      text: t('told.read', 'mark as read'),
+      onclick: () => mutate(() => api(`/me/notifications/${notification.id}/read`, { method: 'PUT' }), null, loadTold),
+    }));
+  }
+
+  return el('tr', unread ? { class: 'unread' } : {},
+    el('td', { text: fmtMoment(notification.createdAt) }),
+    el('td', { class: 'text' },
+      el('strong', { class: 'told-subject', text: notification.subject }),
+      el('div', { class: 'muted told-body', text: notification.body })),
+    actions);
+}
+
+/** Opens the ticket a notification is about, which reads the notification. */
+function openToldTicket(notification) {
+  const read = notification.readAt
+    ? Promise.resolve()
+    : api(`/me/notifications/${notification.id}/read`, { method: 'PUT' });
+
+  mutate(() => read, null, async () => {
+    await loadTold();
+    await openTicket(notification.ticketId);
+  });
+}
+
+/**
+ * Draws what the reader may choose about what they are told: a switch for every
+ * queue they reach, on where they follow it, and one for every notification that
+ * lets them switch it off, on where they take it. Not over choices somebody is
+ * part way through.
+ */
+async function loadNotifyChoices() {
+  const form = $('#form-notify-choices');
+  if (!form || !can('tickets:read') || beingEdited(form)) return;
+
+  const choices = await api('/me/notification-choices');
+  const queues = choices?.queues ?? [];
+  const byId = new Map(queues.map((queue) => [queue.id, queue]));
+
+  $('#notify-queues').replaceChildren(...queues
+    .map((queue) => ({ id: queue.id, words: queuePath(queue, byId) }))
+    .sort((a, b) => a.words.localeCompare(b.words))
+    .map((queue) => choiceSwitch({ 'data-followed': String(queue.id) }, queue.words,
+      (choices?.followed ?? []).includes(queue.id))));
+
+  $('#notify-optional').replaceChildren(...(choices?.optional ?? []).map((definition) =>
+    choiceSwitch({ 'data-taken': String(definition.id) }, definition.name,
+      !(choices?.switchedOff ?? []).includes(definition.id))));
+}
+
+/** Sends what the reader chose about what they are told. */
+function saveNotifyChoices(form) {
+  const ids = (mark, on) => $$(`[data-${mark}]`, form).filter((box) => box.checked === on)
+    .map((box) => Number(box.getAttribute(`data-${mark}`)));
+
+  mutate(
+    () => api('/me/notification-choices', {
+      method: 'PUT',
+      body: JSON.stringify({ followed: ids('followed', true), switchedOff: ids('taken', false) }),
+    }),
+    t('msg.notifyChosen', 'Saved what you are told'),
+    async () => { form.reset(); await loadNotifyChoices(); },
+  );
+}
+
+/** Wires the card of what the reader was told, and their choices about it. */
+function wireTold() {
+  const choices = $('#form-notify-choices');
+
+  $('#told-all-read').addEventListener('click', () => mutate(
+    () => api('/me/notifications/read', { method: 'PUT' }), null, loadTold));
+  choices.addEventListener('submit', (e) => { e.preventDefault(); saveNotifyChoices(choices); });
+}
+
+/** Reads the page of tickets the filter asks for, and draws it. */
+async function loadTicketPage() {
+  const tbody = $('#table-tickets tbody');
+  const filter = $('#form-ticket-filter');
+  if (!tbody || !filter) return;
+
+  const query = listingQuery(filter);
+  query.set('limit', String(ticketPaging.limit));
+  query.set('page', String(ticketPaging.page));
+
+  const page = await api(`/tickets?${query}`);
+  ticketPaging.total = page?.totalCount ?? 0;
+
+  const byId = new Map(cache.ticketQueues.map((queue) => [queue.id, queue]));
+
+  fillTable(tbody, (page?.items ?? []).map((ticket) => ticketRow(ticket, byId)), 8,
+    t('ticket.empty', 'No tickets.'));
+
+  drawTicketPager();
+}
+
+/** One ticket as a row of the list. */
+function ticketRow(ticket, byId) {
+  const state = cache.states.find((candidate) => candidate.id === ticket.stateId);
+  const priority = cache.priorities.find((candidate) => candidate.id === ticket.priorityId);
+  const queue = byId.get(ticket.queueId);
+
+  return el('tr', {},
+    el('td', { class: 'text' },
+      el('button', { class: 'link', text: ticket.number, onclick: () => openTicket(ticket.id) })),
+    el('td', { class: 'text' },
+      ticket.escalated ? el('span', { class: 'escalated', text: t('sla.overdue', 'overdue') }) : null,
+      ticket.title),
+    el('td', { class: 'text', text: ticket.contactName || ticket.organisationName || '–' }),
+    el('td', { class: 'text', text: queue ? queuePath(queue, byId) : `#${ticket.queueId}` }),
+    el('td', {}, state ? statusBadge(state.name, state.type) : el('span', { text: `#${ticket.stateId}` })),
+    el('td', { class: 'text', text: priority ? priorityName(priority.name) : '' }),
+    el('td', { class: 'text', text: ticket.ownerName || '–' }),
+    el('td', { text: fmtMoment(ticket.updatedAt) }),
+  );
+}
+
+/** Where the list stands, and the way to the pages either side. */
+function drawTicketPager() {
+  const { page, limit, total } = ticketPaging;
+  const from = total === 0 ? 0 : (page - 1) * limit + 1;
+  const to = Math.min(page * limit, total);
+
+  $('#tickets-range').textContent = fillIn(t('ticket.range', '{0}–{1} of {2}'), [from, to, total]);
+  $('#tickets-previous').disabled = page <= 1;
+  $('#tickets-next').disabled = to >= total;
+}
+
+/**
+ * Opens a ticket: what it is, what was written in it and what happened to it,
+ * and the form holding it for correction.
+ *
+ * A ticket this reader cannot reach any more - moved, or the role changed - is
+ * said to be gone, which is what the server answers, and the list is read again.
+ */
+async function openTicket(id, { keepPlace = false } = {}) {
+  let ticket;
+  let articles;
+  let history;
+  let assignees;
+
+  let templates;
+
+  try {
+    [ticket, articles, history, templates] = await Promise.all([
+      api(`/tickets/${id}`), api(`/tickets/${id}/articles`), api(`/tickets/${id}/history`),
+      // Asked only of whoever may write in tickets, the right the server hands
+      // them out to; anybody else would turn the whole ticket into a refusal.
+      can('tickets:write') ? api(`/tickets/${id}/templates`) : { items: [] },
+    ]);
+
+    assignees = (await api(`/tickets/assignees?queue=${ticket.queueId}`))?.items ?? [];
+  } catch (err) {
+    toastFailure(err);
+    closeTicket();
+    await loadTicketPage();
+
+    return;
+  }
+
+  openTicketShown = ticket;
+  drawTicketDetail(ticket, articles?.items ?? [], history?.items ?? []);
+  offerTemplates(templates?.items ?? []);
+
+  // The items and the changes a ticket concerns, for whoever may read either; a
+  // link is made where the reader works the ticket, as any change to it is.
+  const linked = $('#ticket-links');
+  linked.hidden = !can('assets:read', 'changes:read');
+  if (!linked.hidden) {
+    offerLinkKinds($('#form-ticket-link'));
+    await drawLinks(linked, 'ticket', ticket.id, worksIn(ticket.queueId) && can('tickets:write'));
+  }
+
+  // Merged only where it is worked, and only once.
+  const merging = $('#form-ticket-merge');
+  merging.hidden = !worksIn(ticket.queueId) || !can('tickets:write') || Boolean(ticket.mergedInto);
+  forgetMergeChoice();
+
+  // Corrected only where the reader's role works in its queue: the server
+  // answers any change to a ticket of a queue only read as not found, and a form
+  // that offers what the server refuses teaches somebody the screen is broken.
+  const form = $('#form-ticket');
+  if (form && worksIn(ticket.queueId)) {
+    if (!beingEdited(form) || Number(form.elements.id.value) !== ticket.id) editTicket(form, ticket, assignees);
+  } else if (form?.elements.id.value) {
+    resetTicketForm();
+  }
+
+  const detail = $('#ticket-detail');
+  detail.hidden = false;
+
+  if (!keepPlace) detail.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+/** Whether the reader's role works in the queue - creates and changes its tickets. */
+function worksIn(queueID) {
+  return cache.ticketQueues.find((queue) => queue.id === queueID)?.reach === 'write';
+}
+
+/**
+ * Shows a control of the open ticket where the reader works in its queue and
+ * holds the right the control names, and hides it otherwise.
+ */
+function showWhereWorked(node, works) {
+  node.hidden = !works || (node.dataset.perm ? !can(...node.dataset.perm.split(',')) : false);
+}
+
+/** Closes the ticket that is open and puts the form back to opening one. */
+function closeTicket() {
+  forgetTheOpenTicket();
+  resetTicketForm();
+}
+
+/**
+ * Forgets which ticket is open and empties its card - what was written in it,
+ * what happened to it and the button that deletes it - rather than only hiding
+ * the card. The card is not a table and the memory is not a form, so nothing
+ * else on the way out of a session reaches either: a sign-out left the ticket in
+ * the document under the sign-in screen, and opened it again for whoever signed
+ * in next.
+ */
+function forgetTheOpenTicket() {
+  openTicketShown = null;
+
+  const card = $('#ticket-detail');
+  if (!card) return;
+
+  card.hidden = true;
+  for (const part of ['#ticket-heading', '#ticket-facts', '#ticket-delete-slot', '#ticket-articles', '#ticket-history-list']) {
+    $(part)?.replaceChildren();
+  }
+
+  forgetLinks($('#ticket-links'));
+  forgetMergeChoice();
+}
+
+/** Empties the merge form's search and its choices, for a ticket opened or closed. */
+function forgetMergeChoice() {
+  const form = $('#form-ticket-merge');
+
+  form.reset();
+  form.elements.intoId.replaceChildren(el('option', { value: '', text: '–' }));
+}
+
+/**
+ * Wires the merge form: a search for the ticket to merge into, which fills the
+ * choice with tickets not merged themselves, and the merge once it is
+ * confirmed - after which the ticket it went into is opened, holding both.
+ */
+function wireTicketMerge() {
+  const form = $('#form-ticket-merge');
+  let pending;
+
+  const offer = async () => {
+    const query = new URLSearchParams({ q: form.elements.find.value.trim(), limit: String(SEARCH_OFFERS) });
+    const found = (await api(`/tickets?${query}`))?.items ?? [];
+
+    form.elements.intoId.replaceChildren(el('option', { value: '', text: '–' }),
+      ...found
+        .filter((ticket) => ticket.id !== openTicketShown?.id && !ticket.mergedInto)
+        .map((ticket) => el('option', { value: String(ticket.id), text: `${ticket.number} ${ticket.title}` })));
+  };
+
+  form.elements.find.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => offer().catch((err) => toastFailure(err)), 250);
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const ticket = openTicketShown;
+    const into = Number(form.elements.intoId.value) || 0;
+    if (!ticket || !into) return;
+
+    const sure = await confirmDialog({
+      title: t('ticket.mergeConfirmTitle', 'Merge the ticket?'),
+      text: fillIn(t('ticket.mergeConfirmText',
+        '{0} goes into {1}: its articles, the time noted on it and its watchers go there, and it stays merged.'),
+      [ticket.number, form.elements.intoId.selectedOptions[0]?.textContent ?? '']),
+      confirmLabel: t('ticket.mergeConfirm', 'Merge it'),
+    });
+
+    if (!sure) return;
+
+    await mutate(() => api(`/tickets/${ticket.id}/merge`, { method: 'POST', body: JSON.stringify({ intoId: into }) }),
+      t('msg.ticketMerged', 'Ticket merged'),
+      async () => {
+        await openTicket(into);
+        await loadTicketPage();
+      });
+  });
+}
+
+/** What a ticket is, what was written in it and what happened to it. */
+function drawTicketDetail(ticket, articles, history) {
+  const byId = new Map(cache.ticketQueues.map((queue) => [queue.id, queue]));
+  const state = cache.states.find((candidate) => candidate.id === ticket.stateId);
+  const priority = cache.priorities.find((candidate) => candidate.id === ticket.priorityId);
+  const type = cache.types.find((candidate) => candidate.id === ticket.typeId);
+  const queue = byId.get(ticket.queueId);
+
+  $('#ticket-heading').textContent = `${ticketName(ticket.number)} – ${ticket.title}`;
+
+  const fact = (term, ...description) => [el('dt', { text: term }), el('dd', {}, ...description)];
+  const facts = [
+    ...fact(t('field.queue', 'Queue'), queue ? queuePath(queue, byId) : `#${ticket.queueId}`),
+    ...fact(t('field.state', 'State'), state ? statusBadge(state.name, state.type) : `#${ticket.stateId}`),
+    ...fact(t('field.priority', 'Priority'), priority ? priorityName(priority.name) : ''),
+    ...fact(t('field.type', 'Type'), type ? ticketTypeName(type.name) : ''),
+    ...fact(t('field.serviceLevelId', 'Service level'), levelName(ticket.serviceLevelId),
+      ticket.escalated ? el('span', { class: 'escalated', text: t('sla.overdue', 'overdue') }) : null),
+    ...(ticket.firstResponseDue ? fact(t('sla.firstResponseDue', 'First answer owed by'),
+      ticket.firstResponseAt
+        ? fillIn(t('sla.answeredAt', '{0} - answered {1}'), [fmtMoment(ticket.firstResponseDue), fmtMoment(ticket.firstResponseAt)])
+        : fmtMoment(ticket.firstResponseDue)) : []),
+    ...(ticket.updateDue ? fact(t('sla.updateDue', 'Next answer owed by'), fmtMoment(ticket.updateDue)) : []),
+    ...(ticket.solutionDue ? fact(t('sla.solutionDue', 'Solution owed by'), fmtMoment(ticket.solutionDue)) : []),
+    ...fact(t('ticket.owner', 'Owner'), ticket.ownerName || t('ticket.nobody', 'nobody')),
+    ...fact(t('field.responsibleId', 'Responsible'), ticket.responsibleName || t('ticket.nobody', 'nobody')),
+    ...fact(t('field.contactId', 'Contact'), ticket.contactName || t('ticket.nobody', 'nobody')),
+    ...fact(t('field.organisationId', 'Organisation'), ticket.organisationName || t('ticket.nobody', 'nobody')),
+    ...fact(t('ticket.locked', 'Locked'), ticket.locked ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no')),
+    ...(ticket.pendingUntil ? fact(t('field.pendingUntil', 'Pending until'), fmtMoment(ticket.pendingUntil)) : []),
+    ...(ticket.mergedInto ? fact(t('ticket.mergedInto', 'Merged into'), el('button', {
+      type: 'button',
+      class: 'link',
+      text: t('ticket.openMergedInto', 'the ticket it went into'),
+      onclick: () => openTicket(ticket.mergedInto).catch((err) => toastFailure(err)),
+    })) : []),
+    ...fact(t('ticket.opened', 'Opened'),
+      `${fmtMoment(ticket.createdAt)}${ticket.createdByName ? ` – ${ticket.createdByName}` : ''}`),
+    ...fact(t('ticket.accounted', 'Time noted'),
+      fillIn(t('ticket.minutes', '{0} minutes'), [ticket.accountedMinutes ?? 0])),
+  ];
+
+  $('#ticket-facts').replaceChildren(...facts);
+
+  const works = worksIn(ticket.queueId);
+
+  for (const node of [$('#ticket-lock'), $('#form-article'), $('#ticket-delete-slot')]) {
+    showWhereWorked(node, works);
+  }
+
+  const lock = $('#ticket-lock');
+  lock.textContent = ticket.locked ? t('ticket.unlock', 'Unlock') : t('ticket.lockIt', 'Lock');
+  lock.onclick = () => changeOpenTicket({ locked: !ticket.locked });
+
+  const watch = $('#ticket-watch');
+  watch.textContent = ticket.watching ? t('ticket.unwatch', 'Stop watching') : t('ticket.watchIt', 'Watch');
+  watch.onclick = () => mutate(
+    () => api(`/tickets/${ticket.id}/watch`, { method: ticket.watching ? 'DELETE' : 'PUT' }),
+    ticket.watching ? t('msg.ticketUnwatched', 'No longer watching') : t('msg.ticketWatched', 'Watching'),
+    () => openTicket(ticket.id, { keepPlace: true }),
+  );
+
+  $('#ticket-delete-slot').replaceChildren(deleteButton({
+    label: ticketName(ticket.number),
+    path: `/tickets/${ticket.id}`,
+    message: t('msg.ticketDeleted', 'Ticket deleted'),
+    after: async () => { closeTicket(); await refreshAll(); },
+  }));
+
+  $('#ticket-articles').replaceChildren(...articles.map((article) => el('li', {},
+    el('p', { class: 'muted', text: [
+      article.authorName || '–',
+      channelName(article.channel),
+      fmtMoment(article.createdAt),
+      article.customerVisible ? t('ticket.seenByCustomer', 'the customer sees it') : t('ticket.internal', 'internal'),
+    ].join(' · ') }),
+    article.subject ? el('strong', { text: article.subject }) : null,
+    el('div', { class: 'ticket-article-body', text: article.body }),
+    article.attachments?.length ? el('ul', { class: 'ticket-attachments' }, ...article.attachments.map((file) => el('li', {},
+      el('button', {
+        type: 'button',
+        class: 'link',
+        text: `${file.filename} (${fileSize(file.size)})`,
+        onclick: () => downloadAttachment(ticket.id, file).catch((err) => toastFailure(err)),
+      })))) : null,
+  )));
+
+  $('#ticket-history-list').replaceChildren(...history.map((entry) => el('li', {
+    text: `${fmtMoment(entry.at)} ${entry.actor === 'system' ? t('history.bySystem', 'the system') : (entry.actorName || '–')}: ${describeHistory(entry)}`,
+  })));
+}
+
+/** One line of a ticket's history, in the reader's words. */
+function describeHistory(entry) {
+  const word = {
+    state: (name) => (name ? statusName(name) : ''),
+    priority: (name) => (name ? priorityName(name) : ''),
+    type: (name) => (name ? ticketTypeName(name) : ''),
+    owner: (name) => name || t('ticket.nobody', 'nobody'),
+    responsible: (name) => name || t('ticket.nobody', 'nobody'),
+    contact: (name) => name || t('ticket.nobody', 'nobody'),
+    organisation: (name) => name || t('ticket.nobody', 'nobody'),
+    lock: (value) => (value === 'true' ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no')),
+    pending: (value) => (value ? fmtMoment(value) : t('ticket.notWaiting', 'not waiting')),
+    article: (value) => channelName(value),
+  }[entry.event] ?? ((value) => value);
+
+  const sentence = HISTORY_SENTENCES[entry.event];
+
+  return sentence ? fillIn(sentence(), [word(entry.oldValue), word(entry.newValue)]) : entry.event;
+}
+
+/** Changes what the request says about the ticket that is open, and reads it again. */
+function changeOpenTicket(change) {
+  if (!openTicketShown) return;
+
+  const id = openTicketShown.id;
+
+  mutate(
+    () => api(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(change) }),
+    t('msg.ticketSaved', 'Ticket saved'),
+    async () => { await openTicket(id, { keepPlace: true }); await loadTicketPage(); },
+  );
+}
+
+/**
+ * Fills the ticket form's choices. Opening a ticket is offered the queues the
+ * reader works in and the values still offered; correcting one keeps what the
+ * ticket already carries among them, retired or not, because it may stay.
+ */
+function fillTicketForm(form, ticket, assignees) {
+  const offered = (items, current) => items.filter((item) => item.valid || item.id === current);
+
+  fillLevelChoices(form.elements.serviceLevelId, ticket?.serviceLevelId ?? null,
+    ticket ? t('sla.none', 'none') : t('sla.asQueue', 'as the queue says'));
+  const working = cache.ticketQueues.filter((queue) =>
+    (queue.reach === 'write' && queue.valid) || queue.id === ticket?.queueId);
+
+  fillSelect(form.elements.queueId, queueChoices(working), { labelKey: 'label', valueKey: 'value' });
+
+  fillSelect(form.elements.typeId,
+    offered(cache.types, ticket?.typeId).map((type) => ({ value: String(type.id), label: ticketTypeName(type.name) })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  fillSelect(form.elements.priorityId,
+    offered(cache.priorities, ticket?.priorityId)
+      .map((priority) => ({ value: String(priority.id), label: priorityName(priority.name) })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  fillSelect(form.elements.stateId,
+    offered(cache.states, ticket?.stateId)
+      .filter((state) => state.type !== 'merged' || state.id === ticket?.stateId)
+      .map((state) => ({ value: String(state.id), label: statusName(state.name) })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  fillSelect(form.elements.channel,
+    AGENT_CHANNELS.map((channel) => ({ value: channel, label: channelName(channel) })),
+    { labelKey: 'label', valueKey: 'value' });
+
+  for (const [field, current, name] of [
+    ['ownerId', ticket?.ownerId, ticket?.ownerName],
+    ['responsibleId', ticket?.responsibleId, ticket?.responsibleName],
+  ]) {
+    const people = assignees.map((person) => ({ value: String(person.id), label: person.name }));
+    if (current && !people.some((person) => person.value === String(current))) {
+      people.push({ value: String(current), label: name || `#${current}` });
+    }
+
+    fillSelect(form.elements[field], people,
+      { placeholder: t('ticket.nobody', 'nobody'), labelKey: 'label', valueKey: 'value' });
+  }
+
+  offerFound('ticketContact', keptEntry(ticket?.contactId, ticket?.contactName));
+  offerFound('ticketOrganisation', keptEntry(ticket?.organisationId, ticket?.organisationName));
+
+  if (!ticket) {
+    const shipped = (items, name) => items.find((item) => item.name === name)?.id;
+
+    form.elements.typeId.value = String(shipped(cache.types, 'unclassified') ?? form.elements.typeId.value);
+    form.elements.priorityId.value = String(shipped(cache.priorities, 'normal') ?? form.elements.priorityId.value);
+  }
+}
+
+/**
+ * Shows the fields of one of the form's two jobs. The text a ticket is opened
+ * with goes with the opening: a hidden control that is still required cannot be
+ * submitted past and cannot be scrolled to, so it stops being required with it.
+ */
+function showTicketJob(form, correcting) {
+  const customers = can('customers:read');
+
+  for (const label of $$('.ticket-new-only', form)) label.hidden = correcting;
+  for (const label of $$('.ticket-edit-only', form)) label.hidden = !correcting;
+
+  // Who a ticket is for, where the reader may read customers - decided here
+  // with the job rather than by data-perm, which would show the organisation
+  // again on every reload whichever job the form is doing.
+  for (const label of $$('.ticket-customer', form)) {
+    label.hidden = !customers || (label.classList.contains('ticket-edit-only') && !correcting);
+  }
+
+  form.elements.body.required = !correcting;
+}
+
+/** Puts a ticket into the form, to correct it. */
+function editTicket(form, ticket, assignees) {
+  fillTicketForm(form, ticket, assignees);
+  showTicketJob(form, true);
+
+  form.elements.id.value = String(ticket.id);
+  form.elements.title.value = ticket.title;
+  form.elements.queueId.value = String(ticket.queueId);
+  form.elements.typeId.value = String(ticket.typeId);
+  form.elements.priorityId.value = String(ticket.priorityId);
+  form.elements.stateId.value = String(ticket.stateId);
+  form.elements.ownerId.value = ticket.ownerId ? String(ticket.ownerId) : '';
+  form.elements.responsibleId.value = ticket.responsibleId ? String(ticket.responsibleId) : '';
+
+  const waiting = ticket.pendingUntil ? dayAndTimeIn(ticket.pendingUntil, readerZone()) : { day: '', time: '' };
+  setDateField(form.elements.pendingDay, waiting.day);
+  form.elements.pendingTime.value = waiting.time;
+
+  // Drawn rather than declared with a key, because it carries the ticket's
+  // number; see editRole for why the key has to come off.
+  const heading = $('#ticket-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('ticketFormTitle', () => {
+    heading.textContent = t('ticket.edit', 'Correct {0}').replace('{0}', ticketName(ticket.number));
+  });
+
+  swapTheLabel($('#ticket-submit'), 'action.save', 'Save');
+  $('#ticket-cancel').hidden = false;
+}
+
+/** Puts the form back to opening a ticket. */
+function resetTicketForm() {
+  const form = $('#form-ticket');
+  if (!form) return;
+
+  form.reset();
+  form.elements.id.value = '';
+  setDateField(form.elements.pendingDay, '');
+
+  fillTicketForm(form, null, []);
+  showTicketJob(form, false);
+
+  stopRedrawing('ticketFormTitle');
+  swapTheLabel($('#ticket-form-title'), 'ticket.create', 'Open a ticket');
+  swapTheLabel($('#ticket-submit'), 'ticket.open', 'Open the ticket');
+  $('#ticket-cancel').hidden = true;
+}
+
+/**
+ * Sends the ticket form: a new ticket with the text it starts from, or the
+ * correction of the one that is open.
+ *
+ * A correction says nobody out loud, with clearOwner and clearResponsible, since
+ * an id sent as nothing cannot be told apart from one not sent. A moment to wait
+ * for goes only with a state that waits: the server refuses one for any other,
+ * rather than quietly dropping it.
+ */
+function saveTicket(form) {
+  const id = form.elements.id.value;
+  const value = (name) => (form.elements[name].value ? Number(form.elements[name].value) : undefined);
+
+  if (!id) {
+    const body = JSON.stringify({
+      title: form.elements.title.value.trim(),
+      queueId: value('queueId'),
+      typeId: value('typeId'),
+      priorityId: value('priorityId'),
+      channel: form.elements.channel.value,
+      customerVisible: form.elements.customerVisible.checked,
+      body: form.elements.body.value,
+      minutes: Number(form.elements.minutes.value) || 0,
+      ...(can('customers:read') && value('contactId') ? { contactId: value('contactId') } : {}),
+      ...(value('serviceLevelId') ? { serviceLevelId: value('serviceLevelId') } : {}),
+    });
+
+    mutate(() => api('/tickets', { method: 'POST', body }), t('msg.ticketOpened', 'Ticket opened'),
+      async (opened) => {
+        resetTicketForm();
+        await loadTicketPage();
+        if (opened?.id) await openTicket(opened.id);
+      });
+
+    return;
+  }
+
+  const state = cache.states.find((candidate) => candidate.id === value('stateId'));
+  const waits = state && (state.type === 'pending-reminder' || state.type === 'pending-auto');
+  const day = form.elements.pendingDay.value;
+
+  const change = {
+    title: form.elements.title.value.trim(),
+    queueId: value('queueId'),
+    typeId: value('typeId'),
+    priorityId: value('priorityId'),
+    stateId: value('stateId'),
+    ...(value('ownerId') ? { ownerId: value('ownerId') } : { clearOwner: true }),
+    ...(value('responsibleId') ? { responsibleId: value('responsibleId') } : { clearResponsible: true }),
+    ...(waits && day ? { pendingUntil: momentIn(day, form.elements.pendingTime.value, readerZone()) } : {}),
+    ...(can('customers:read') ? customerChange(form, openTicketShown) : {}),
+    ...(value('serviceLevelId') ? { serviceLevelId: value('serviceLevelId') } : { clearServiceLevel: true }),
+  };
+
+  // saveForm rather than mutate: a corrected ticket stays in the form, unlike a
+  // record any other form saves, so nothing resets the form after the save - and
+  // a form still protected went on showing what it was saved with while locking
+  // the ticket made somebody its owner.
+  saveForm(form, () => api(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(change) }),
+    t('msg.ticketSaved', 'Ticket saved'),
+    async () => { await openTicket(Number(id), { keepPlace: true }); await loadTicketPage(); });
+}
+
+/**
+ * What a correction says about who the ticket is for: only what changed, so a
+ * contact newly chosen brings its organisation along - the organisation is sent
+ * only when it was changed itself - and nobody said out loud.
+ */
+function customerChange(form, ticket) {
+  const change = {};
+  const contact = form.elements.contactId.value ? Number(form.elements.contactId.value) : null;
+  const organisation = form.elements.organisationId.value ? Number(form.elements.organisationId.value) : null;
+
+  if (contact !== (ticket?.contactId ?? null)) {
+    if (contact) change.contactId = contact;
+    else change.clearContact = true;
+  }
+
+  if (organisation !== (ticket?.organisationId ?? null)) {
+    if (organisation) change.organisationId = organisation;
+    else change.clearOrganisation = true;
+  }
+
+  return change;
+}
+
+/** Writes the article form's text in the ticket that is open. */
+function saveArticle(form) {
+  if (!openTicketShown) return;
+
+  const id = openTicketShown.id;
+  const files = [...(form.elements.files.files ?? [])];
+  const body = JSON.stringify({
+    channel: form.elements.channel.value,
+    customerVisible: form.elements.customerVisible.checked,
+    subject: form.elements.subject.value.trim(),
+    body: form.elements.body.value,
+    minutes: Number(form.elements.minutes.value) || 0,
+  });
+
+  // The files go once the article is written, after the form is emptied: a file
+  // refused then cannot leave the text behind for a second press to write again.
+  mutate(() => api(`/tickets/${id}/articles`, { method: 'POST', body }), t('msg.articleWritten', 'Written'),
+    async (article) => {
+      form.reset();
+      await attachFiles(id, article?.id, files);
+      await openTicket(id, { keepPlace: true });
+      await loadTicketPage();
+    });
+}
+
+/**
+ * Attaches the files chosen with an article that has been written, one after
+ * another: each is a request bounded on its own, and a file refused is named,
+ * while the rest still go.
+ */
+async function attachFiles(ticketID, articleID, files, area = 'tickets') {
+  if (!articleID) return;
+
+  for (const file of files) {
+    try {
+      await uploadAttachment(ticketID, articleID, file, area);
+    } catch (err) {
+      toastFailure(err, fillIn(t('ticket.fileRefused', '{0} was not attached.'), [file.name]));
+    }
+  }
+}
+
+/**
+ * Sends one file for an article. Not api(), which sends JSON: only the browser
+ * knows the multipart boundary it generated, so the request carries no
+ * Content-Type of its own.
+ */
+async function uploadAttachment(ticketID, articleID, file, area = 'tickets') {
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await reach(`${API}/${area}/${ticketID}/articles/${articleID}/attachments`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'X-CSRF-Token': readCookie('qubitdesk_csrf') },
+    body: form,
+  });
+
+  noticePermissionChange(res.headers.get('X-Permissions-Revision'));
+
+  if (res.ok) return;
+
+  let refusal = null;
+  try {
+    refusal = await res.json();
+  } catch {
+    // An error page rather than JSON; the status carries the meaning.
+  }
+
+  throw refusalFrom(res, refusal);
+}
+
+/** Fetches a file of a ticket and saves it under the name it came with. */
+function downloadAttachment(ticketID, file, area = 'tickets') {
+  return saveDownload(`${API}/${area}/${ticketID}/attachments/${file.id}`, file.filename);
+}
+
+/**
+ * A file's size the way the reader writes a number: in kilobytes, and in
+ * megabytes from one upwards.
+ */
+function fileSize(bytes) {
+  const mega = bytes >= 1024 * 1024;
+
+  return new Intl.NumberFormat(activeLocale(), {
+    style: 'unit', unit: mega ? 'megabyte' : 'kilobyte', maximumFractionDigits: 1,
+  }).format(bytes / (mega ? 1024 * 1024 : 1024));
+}
+
+/** Wires the ticket screens' forms and buttons. */
+function wireTickets() {
+  const filter = $('#form-ticket-filter');
+
+  const refilter = () => {
+    ticketPaging.page = 1;
+    loadTicketPage();
+  };
+
+  filter.addEventListener('submit', (e) => { e.preventDefault(); refilter(); });
+  filter.addEventListener('change', refilter);
+
+  let typing;
+  for (const words of [filter.elements.q, filter.elements.text]) {
+    words.addEventListener('input', () => {
+      clearTimeout(typing);
+      typing = setTimeout(refilter, 300);
+    });
+  }
+
+  $('#ticket-search-clear').addEventListener('click', () => clearTicketSearch(filter));
+  wireSavedSearches(filter);
+
+  wireReport();
+
+  $('#tickets-previous').addEventListener('click', () => {
+    ticketPaging.page = Math.max(1, ticketPaging.page - 1);
+    loadTicketPage();
+  });
+
+  $('#tickets-next').addEventListener('click', () => {
+    ticketPaging.page += 1;
+    loadTicketPage();
+  });
+
+  $('#ticket-close').addEventListener('click', closeTicket);
+  // Back to what the open ticket says: the form is reset first, which ends its
+  // being edited, so that reading the ticket again is allowed to fill it.
+  $('#ticket-cancel').addEventListener('click', () => {
+    if (!openTicketShown) {
+      resetTicketForm();
+
+      return;
+    }
+
+    $('#form-ticket').reset();
+    openTicket(openTicketShown.id, { keepPlace: true });
+  });
+
+  $('#form-ticket').addEventListener('submit', (e) => { e.preventDefault(); saveTicket(e.target); });
+
+  const article = $('#form-article');
+  fillSelect(article.elements.channel,
+    AGENT_CHANNELS.map((channel) => ({ value: channel, label: channelName(channel) })),
+    { labelKey: 'label', valueKey: 'value' });
+  article.addEventListener('submit', (e) => { e.preventDefault(); saveArticle(e.target); });
+
+  // What was chosen, beside the chooser that hides the browser's own words.
+  const chosen = () => {
+    $('#article-files').textContent = [...article.elements.files.files].map((file) => file.name).join(', ');
+  };
+
+  article.elements.files.addEventListener('change', chosen);
+  article.addEventListener('reset', () => setTimeout(chosen));
+}
+
+// ------------------------------------------------- what tickets are sorted by
+
+/** The English for the states a ticket ships with, by the identifier each is stored under. */
+const SHIPPED_STATE_TITLES = {
+  new: 'new',
+  open: 'open',
+  'pending-reminder': 'pending reminder',
+  'pending-auto-close': 'pending auto close',
+  closed: 'closed',
+  removed: 'removed',
+  merged: 'merged',
+};
+
+/** The English for the priorities that ship, as for the states. */
+const SHIPPED_PRIORITY_TITLES = {
+  'very-high': 'very high',
+  high: 'high',
+  normal: 'normal',
+  low: 'low',
+  'very-low': 'very low',
+};
+
+/** The English for the ticket types that ship, as for the states. */
+const SHIPPED_TYPE_TITLES = {
+  unclassified: 'unclassified',
+  incident: 'incident',
+  'service-request': 'service request',
+};
+
+/**
+ * The English for the types a state can have, which are the server's
+ * model.StateTypes: what the code does with a ticket in such a state. The type
+ * field offers exactly these, so a state the server would refuse cannot be
+ * chosen.
+ */
+const STATE_TYPE_TITLES = {
+  new: 'new',
+  open: 'open',
+  'pending-reminder': 'pending, with a reminder',
+  'pending-auto': 'pending, then moving by itself',
+  closed: 'closed',
+  removed: 'removed',
+  merged: 'merged',
+};
+
+/** What a priority is called, in the reader's language, as statusName says for a state. */
+function priorityName(name) {
+  return t(`priority.${name}`, SHIPPED_PRIORITY_TITLES[name] ?? name);
+}
+
+/** What a ticket type is called, in the reader's language, as statusName says for a state. */
+function ticketTypeName(name) {
+  return t(`tickettype.${name}`, SHIPPED_TYPE_TITLES[name] ?? name);
+}
+
+/** What a state's type is called, in the reader's language. */
+function stateTypeName(type) {
+  return t(`statetype.${type}`, STATE_TYPE_TITLES[type] ?? type);
+}
+
+/**
+ * The three cards of the ticket setup screen - states, priorities, types - each a
+ * table and one form that makes a value or corrects one.
+ *
+ * What differs between them is one column and one field - a state's type, a
+ * priority's level - and their words; the rest is the same and lives here once.
+ * A shipped value the code relies on (isSystem) is shown and not offered for
+ * editing or deleting, because the server refuses both: a button that is always
+ * refused teaches somebody the screen is broken.
+ */
+const CATALOGS = {
+  state: {
+    path: '/ticket-states',
+    columns: 5,
+    create: ['catalog.stateCreate', 'Add a state'],
+    title: (name) => statusName(name),
+    editing: (name) => t('catalog.stateEdit', 'Edit the state {0}').replace('{0}', name),
+    kind: () => t('field.state', 'State'),
+    empty: () => t('catalog.statesEmpty', 'No states.'),
+    created: () => t('msg.stateCreated', 'State created'),
+    saved: () => t('msg.stateSaved', 'State saved'),
+    deleted: () => t('msg.stateDeleted', 'State deleted'),
+    cells: (entry) => [el('td', { class: 'text', text: stateTypeAndNext(entry) })],
+    fill: (form, entry) => {
+      form.elements.type.value = entry.type;
+      form.elements.nextStateId.value = entry.nextStateId ? String(entry.nextStateId) : '';
+      showNextState(form);
+    },
+    sent: (form) => (form.elements.type.value === 'pending-auto'
+      ? { type: 'pending-auto', nextStateId: Number(form.elements.nextStateId.value) }
+      : { type: form.elements.type.value }),
+    reset: (form) => showNextState(form),
+  },
+  priority: {
+    path: '/ticket-priorities',
+    columns: 5,
+    create: ['catalog.priorityCreate', 'Add a priority'],
+    title: (name) => priorityName(name),
+    editing: (name) => t('catalog.priorityEdit', 'Edit the priority {0}').replace('{0}', name),
+    kind: () => t('field.priority', 'Priority'),
+    empty: () => t('catalog.prioritiesEmpty', 'No priorities.'),
+    created: () => t('msg.priorityCreated', 'Priority created'),
+    saved: () => t('msg.prioritySaved', 'Priority saved'),
+    deleted: () => t('msg.priorityDeleted', 'Priority deleted'),
+    cells: (entry) => [el('td', { class: 'num', text: String(entry.level) })],
+    fill: (form, entry) => { form.elements.level.value = String(entry.level); },
+    sent: (form) => ({ level: Number(form.elements.level.value) }),
+    reset: () => {},
+  },
+  type: {
+    path: '/ticket-types',
+    columns: 4,
+    create: ['catalog.typeCreate', 'Add a type'],
+    title: (name) => ticketTypeName(name),
+    editing: (name) => t('catalog.typeEdit', 'Edit the type {0}').replace('{0}', name),
+    kind: () => t('field.type', 'Type'),
+    empty: () => t('catalog.typesEmpty', 'No types.'),
+    created: () => t('msg.typeCreated', 'Type created'),
+    saved: () => t('msg.typeSaved', 'Type saved'),
+    deleted: () => t('msg.typeDeleted', 'Type deleted'),
+    cells: () => [],
+    fill: () => {},
+    sent: () => ({}),
+    reset: () => {},
+  },
+};
+
+/**
+ * Fills the ticket setup screen, for whoever may set it up. The three lists are
+ * read by anybody who works tickets as well, but this screen is where they are
+ * changed, and it is behind the same right.
+ */
+async function loadTicketSetup() {
+  if (!can('queues:write')) return;
+
+  const [queues, states, priorities, types, levels, unlocking] = await Promise.all(
+    ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path, '/service-levels',
+      '/unlock-state-types']
+      .map((path) => api(path)),
+  );
+
+  cache.levels = levels?.items ?? [];
+  loadQueueCard(queues?.items ?? []);
+
+  const lists = { state: states?.items ?? [], priority: priorities?.items ?? [], type: types?.items ?? [] };
+
+  // Not over a state somebody is part way through choosing a type for: this runs
+  // on every reload of the screens, and refilling the select puts it back on its
+  // first entry.
+  const stateForm = $('#form-state');
+  cache.ticketStates = lists.state;
+  if (stateForm && !beingEdited(stateForm)) {
+    fillSelect(stateForm.elements.type,
+      Object.keys(STATE_TYPE_TITLES).map((type) => ({ value: type, label: stateTypeName(type) })),
+      { labelKey: 'label', valueKey: 'value' });
+    fillSelect(stateForm.elements.nextStateId,
+      lists.state.filter(endsAWait).map((state) => ({ value: String(state.id), label: statusName(state.name) })),
+      { labelKey: 'label', valueKey: 'value' });
+    showNextState(stateForm);
+  }
+
+  for (const [kind, catalog] of Object.entries(CATALOGS)) {
+    const tbody = $(`#table-${kind} tbody`);
+    if (!tbody) continue;
+
+    fillTable(tbody, lists[kind].map((entry) => catalogRow(kind, entry)), catalog.columns, catalog.empty());
+  }
+
+  drawUnlockTypes(unlocking?.items ?? []);
+  await loadCalendars();
+  loadSlaCard();
+}
+
+/**
+ * Fills the communication screen, for whoever may set communication up: the
+ * notifications and the answer templates, KIX18's communication area. What a
+ * notification's criteria and a template's queue name is read through the
+ * rules' own choices, which this right reads as the automation's does, so that
+ * setting communication up takes no right to set the queues up.
+ */
+async function loadCommunication() {
+  if (!can('communication:write')) return;
+
+  const [notifying, templates, choices] = await Promise.all(
+    ['/notification-definitions', '/response-templates', '/automation/choices'].map((path) => api(path)),
+  );
+
+  drawNotifications(notifying, {
+    queues: choices?.queues ?? [], states: choices?.states ?? [], priorities: choices?.priorities ?? [],
+    types: choices?.types ?? [],
+  });
+  drawTemplates(templates, choices?.queues ?? []);
+}
+
+/**
+ * The state types a lock runs out in, one switch each. The shipped ones are on
+ * and cannot be switched off, because the server refuses a list leaving them
+ * out. Not redrawn over a choice somebody is part way through.
+ */
+function drawUnlockTypes(kept) {
+  const form = $('#form-unlock-types');
+  if (!form || beingEdited(form)) return;
+
+  $('#unlock-types').replaceChildren(...Object.keys(STATE_TYPE_TITLES).map((type) => {
+    const entry = kept.find((candidate) => candidate.type === type);
+
+    return el('label', { class: `switch perm-switch${entry?.isSystem ? ' muted' : ''}` },
+      el('input', {
+        type: 'checkbox', name: 'types', value: type, checked: Boolean(entry), disabled: Boolean(entry?.isSystem),
+      }),
+      el('span', { class: 'switch-track' }),
+      el('span', { class: 'perm-name', text: stateTypeName(type) }));
+  }));
+}
+
+/** Wires the form that names the state types a lock runs out in. */
+function wireUnlockTypes() {
+  const form = $('#form-unlock-types');
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const types = [...form.querySelectorAll('input[name="types"]')]
+      .filter((box) => box.checked).map((box) => box.value);
+
+    mutate(
+      () => api('/unlock-state-types', { method: 'PUT', body: JSON.stringify({ types }) }),
+      t('msg.unlockTypesSaved', 'Saved where a lock runs out'),
+      refreshAll,
+    );
+  });
+}
+
+/**
+ * Whether a ticket whose wait is over may move on to a state - offered, not
+ * waiting itself, not merged - as the server holds a waiting state's next state
+ * to.
+ */
+function endsAWait(state) {
+  return state.valid && !['pending-auto', 'pending-reminder', 'merged'].includes(state.type);
+}
+
+/**
+ * Shows the choice of the state a waiting state moves a ticket on to only for
+ * a state of that type, and makes it needed there: hidden, it must not be
+ * required, or the form could not be sent and would not say why.
+ */
+function showNextState(form) {
+  const waits = form.elements.type.value === 'pending-auto';
+
+  $('#state-next').hidden = !waits;
+  form.elements.nextStateId.required = waits;
+}
+
+/** A state's type, and for a waiting state the state it moves a ticket on to. */
+function stateTypeAndNext(entry) {
+  const next = (cache.ticketStates ?? []).find((state) => state.id === entry.nextStateId);
+
+  return next ? `${stateTypeName(entry.type)} → ${statusName(next.name)}` : stateTypeName(entry.type);
+}
+
+/** One value as a row of its card's table. */
+function catalogRow(kind, entry) {
+  const catalog = CATALOGS[kind];
+  const actions = el('td', { class: 'actions' });
+
+  if (entry.isSystem) {
+    actions.append(el('span', { class: 'muted', text: t('catalog.shipped', 'ships with the application') }));
+  } else {
+    actions.append(el('button', {
+      class: 'link',
+      text: t('action.edit', 'edit'),
+      onclick: () => editCatalogEntry(kind, entry),
+    }));
+
+    actions.append(deleteButton({
+      label: `${catalog.kind()} "${catalog.title(entry.name)}"`,
+      path: `${catalog.path}/${entry.id}`,
+      message: catalog.deleted(),
+      after: refreshAll,
+    }));
+  }
+
+  return el('tr', {},
+    el('td', { class: 'text', text: catalog.title(entry.name) }),
+    ...catalog.cells(entry),
+    el('td', { class: 'text', text: entry.description || '–' }),
+    el('td', { text: entry.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    actions,
+  );
+}
+
+/** Opens a value in its card's form, to correct it. */
+function editCatalogEntry(kind, entry) {
+  const catalog = CATALOGS[kind];
+  const form = $(`#form-${kind}`);
+
+  form.elements.id.value = String(entry.id);
+  form.elements.name.value = entry.name;
+  form.elements.description.value = entry.description ?? '';
+  form.elements.valid.checked = entry.valid;
+  catalog.fill(form, entry);
+
+  // Drawn rather than declared with a key, because it carries the value's name;
+  // see editRole for why the key has to come off.
+  const heading = $(`#${kind}-form-title`);
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable(`${kind}FormTitle`, () => {
+    heading.textContent = catalog.editing(catalog.title(entry.name));
+  });
+
+  swapTheLabel($(`#${kind}-submit`), 'action.save', 'Save');
+  $(`#${kind}-cancel`).hidden = false;
+
+  form.elements.name.focus();
+}
+
+/** Puts a card's form back to making a new value. */
+function resetCatalogForm(kind) {
+  const catalog = CATALOGS[kind];
+  const form = $(`#form-${kind}`);
+
+  form.reset();
+  form.elements.id.value = '';
+  catalog.reset(form);
+
+  stopRedrawing(`${kind}FormTitle`);
+  swapTheLabel($(`#${kind}-form-title`), ...catalog.create);
+  swapTheLabel($(`#${kind}-submit`), 'action.create', 'Create');
+  $(`#${kind}-cancel`).hidden = true;
+}
+
+/** Sends a card's form: a new value, or the correction of the one it holds. */
+function saveCatalogEntry(kind, form) {
+  const catalog = CATALOGS[kind];
+  const id = form.elements.id.value;
+  const body = JSON.stringify({
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    valid: form.elements.valid.checked,
+    ...catalog.sent(form),
+  });
+
+  mutate(
+    () => (id
+      ? api(`${catalog.path}/${id}`, { method: 'PUT', body })
+      : api(catalog.path, { method: 'POST', body })),
+    id ? catalog.saved() : catalog.created(),
+    async () => { resetCatalogForm(kind); await refreshAll(); },
+  );
+}
+
+// ------------------------------------------------------------------ queues
+
+/** The English for what an answer to a closed ticket does, which are the server's model.FollowUps. */
+const FOLLOW_UP_TITLES = {
+  reopen: 'opens it again',
+  reject: 'is refused',
+  'new-ticket': 'opens a new ticket',
+};
+
+/** The English for how far a role reaches into a queue, which are the server's model.AccessLevels. */
+const ACCESS_TITLES = {
+  read: 'reads its tickets',
+  write: 'works in it',
+};
+
+/** What an answer to a closed ticket does, in the reader's language. */
+function followUpName(followUp) {
+  return t(`followup.${followUp}`, FOLLOW_UP_TITLES[followUp] ?? followUp);
+}
+
+/** How far a role reaches into a queue, in the reader's language. */
+function accessName(level) {
+  return t(`queueaccess.${level}`, ACCESS_TITLES[level] ?? level);
+}
+
+/**
+ * A queue's place in the tree: its parents' names before its own.
+ *
+ * Stops at a queue it has passed, as the server's walk up the tree does, so a
+ * tree somebody broke by hand in the database draws a name rather than hanging
+ * the page.
+ */
+function queuePath(queue, byId) {
+  const names = [queue.name];
+  const passed = new Set([queue.id]);
+
+  for (let at = byId.get(queue.parentId); at && !passed.has(at.id); at = byId.get(at.parentId)) {
+    names.unshift(at.name);
+    passed.add(at.id);
+  }
+
+  return names.join(' › ');
+}
+
+/** Whether a queue sits under another - or is it - however many levels down. */
+function sitsUnder(queue, ancestor, byId) {
+  const passed = new Set();
+
+  for (let at = queue; at && !passed.has(at.id); at = byId.get(at.parentId)) {
+    if (at.id === ancestor.id) return true;
+    passed.add(at.id);
+  }
+
+  return false;
+}
+
+/** The name of the role with this id, as the role list has it. */
+function roleNameOf(roleId) {
+  return (cache.roles ?? []).find((role) => role.id === roleId)?.name ?? `#${roleId}`;
+}
+
+/**
+ * Fills the queue card from the queues the screen just read.
+ *
+ * Not over a queue somebody is part way through: refilling the parent list and
+ * the access would put a half-chosen form back to what it was.
+ */
+function loadQueueCard(queues) {
+  cache.queues = queues;
+
+  const byId = new Map(queues.map((queue) => [queue.id, queue]));
+  const tbody = $('#table-queue tbody');
+
+  if (tbody) {
+    const rows = [...queues]
+      .sort((a, b) => queuePath(a, byId).localeCompare(queuePath(b, byId)))
+      .map((queue) => queueRow(queue, byId));
+
+    fillTable(tbody, rows, 6, t('catalog.queuesEmpty', 'No queues.'));
+  }
+
+  const form = $('#form-queue');
+  if (form && !beingEdited(form)) {
+    fillFollowUps(form);
+    fillParents(form, null);
+    fillLevelChoices(form.elements.serviceLevelId, null, t('sla.none', 'none'));
+    drawQueueAccess([]);
+  }
+}
+
+/** One queue as a row of the queue card's table. */
+function queueRow(queue, byId) {
+  const access = (queue.access ?? [])
+    .map((entry) => `${roleTitle(roleNameOf(entry.roleId))}: ${accessName(entry.level)}`)
+    .join(', ');
+
+  return el('tr', {},
+    el('td', { class: 'text', text: queuePath(queue, byId) }),
+    el('td', { class: 'text', text: followUpName(queue.followUp) }),
+    el('td', {
+      class: 'num',
+      text: queue.unlockMinutes ? String(queue.unlockMinutes) : t('catalog.never', 'never'),
+    }),
+    el('td', { class: 'text', text: access || t('catalog.onlySetup', 'only whoever sets up queues') }),
+    el('td', { text: queue.valid ? t('catalog.validYes', 'yes') : t('catalog.validNo', 'no') }),
+    el('td', { class: 'actions' },
+      el('button', { class: 'link', text: t('action.edit', 'edit'), onclick: () => editQueue(queue) }),
+      deleteButton({
+        label: `${t('field.queue', 'Queue')} "${queue.name}"`,
+        path: `/queues/${queue.id}`,
+        message: t('msg.queueDeleted', 'Queue deleted'),
+        after: refreshAll,
+      })),
+  );
+}
+
+/** The three things an answer to a closed ticket can do, as the form's choices. */
+function fillFollowUps(form) {
+  fillSelect(form.elements.followUp,
+    Object.keys(FOLLOW_UP_TITLES).map((followUp) => ({ value: followUp, label: followUpName(followUp) })),
+    { labelKey: 'label', valueKey: 'value' });
+}
+
+/**
+ * The queues a queue can sit under: every one but itself and those below it,
+ * which the server refuses because the tree would loop.
+ */
+function fillParents(form, editing) {
+  const byId = new Map(cache.queues.map((queue) => [queue.id, queue]));
+  const choices = cache.queues
+    .filter((queue) => !editing || !sitsUnder(queue, editing, byId))
+    .map((queue) => ({ value: String(queue.id), label: queuePath(queue, byId) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  fillSelect(form.elements.parentId, choices,
+    { placeholder: t('catalog.topLevel', 'nothing - at the top'), labelKey: 'label', valueKey: 'value' });
+}
+
+/**
+ * One choice per role of how far it reaches into the queue.
+ *
+ * Hidden without the roles, which only somebody who may read them has: the form
+ * then sends no access at all, and the server leaves it as it is rather than
+ * taking it away.
+ */
+function drawQueueAccess(access) {
+  const fieldset = $('#queue-access');
+  const list = $('#queue-access-list');
+  if (!fieldset || !list) return;
+
+  const roles = cache.roles ?? [];
+  fieldset.hidden = roles.length === 0;
+
+  list.replaceChildren(...roles.map((role) => {
+    const select = el('select', { name: 'access', 'data-role': String(role.id) },
+      el('option', { value: '', text: t('catalog.noAccess', 'no access') }),
+      ...Object.keys(ACCESS_TITLES).map((level) => el('option', { value: level, text: accessName(level) })));
+
+    select.value = access.find((entry) => entry.roleId === role.id)?.level ?? '';
+
+    return el('label', {}, el('span', { text: roleTitle(role.name) }), select);
+  }));
+}
+
+/** Opens a queue in the form, to correct it. */
+function editQueue(queue) {
+  const form = $('#form-queue');
+
+  form.elements.id.value = String(queue.id);
+  form.elements.name.value = queue.name;
+  form.elements.description.value = queue.description ?? '';
+  form.elements.unlockMinutes.value = String(queue.unlockMinutes);
+  form.elements.valid.checked = queue.valid;
+  form.elements.portal.checked = queue.portal;
+
+  fillFollowUps(form);
+  form.elements.followUp.value = queue.followUp;
+
+  fillParents(form, queue);
+  form.elements.parentId.value = queue.parentId ? String(queue.parentId) : '';
+  fillLevelChoices(form.elements.serviceLevelId, queue.serviceLevelId, t('sla.none', 'none'));
+
+  drawQueueAccess(queue.access ?? []);
+
+  // Drawn rather than declared with a key, because it carries the queue's name;
+  // see editRole for why the key has to come off.
+  const heading = $('#queue-form-title');
+  delete heading.dataset.i18n;
+  delete heading.dataset.i18nSource;
+
+  redrawable('queueFormTitle', () => {
+    heading.textContent = t('catalog.queueEdit', 'Edit the queue {0}').replace('{0}', queue.name);
+  });
+
+  swapTheLabel($('#queue-submit'), 'action.save', 'Save');
+  $('#queue-cancel').hidden = false;
+
+  form.elements.name.focus();
+}
+
+/** Puts the queue form back to making a new queue. */
+function resetQueueForm() {
+  const form = $('#form-queue');
+
+  form.reset();
+  form.elements.id.value = '';
+
+  fillFollowUps(form);
+  fillParents(form, null);
+  fillLevelChoices(form.elements.serviceLevelId, null, t('sla.none', 'none'));
+  drawQueueAccess([]);
+
+  stopRedrawing('queueFormTitle');
+  swapTheLabel($('#queue-form-title'), 'catalog.queueCreate', 'Add a queue');
+  swapTheLabel($('#queue-submit'), 'action.create', 'Create');
+  $('#queue-cancel').hidden = true;
+}
+
+/** Sends the queue form: a new queue, or the correction of the one it holds. */
+function saveQueue(form) {
+  const id = form.elements.id.value;
+  const parent = form.elements.parentId.value;
+  const level = form.elements.serviceLevelId.value;
+
+  const sent = {
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    followUp: form.elements.followUp.value,
+    unlockMinutes: Number(form.elements.unlockMinutes.value),
+    valid: form.elements.valid.checked,
+    portal: form.elements.portal.checked,
+
+    // Said out loud when there is none: a parent sent as nothing cannot be told
+    // apart from one that was not sent, and a correction would keep the old one.
+    ...(parent ? { parentId: Number(parent) } : { clearParent: true }),
+    ...(level ? { serviceLevelId: Number(level) } : { clearServiceLevel: true }),
+  };
+
+  if (!$('#queue-access').hidden) {
+    sent.access = $$('#queue-access-list select', form)
+      .filter((select) => select.value)
+      .map((select) => ({ roleId: Number(select.dataset.role), level: select.value }));
+  }
+
+  const body = JSON.stringify(sent);
+
+  mutate(
+    () => (id ? api(`/queues/${id}`, { method: 'PUT', body }) : api('/queues', { method: 'POST', body })),
+    id ? t('msg.queueSaved', 'Queue saved') : t('msg.queueCreated', 'Queue created'),
+    async () => { resetQueueForm(); await refreshAll(); },
+  );
+}
+
+// ---------------------------------------------------------- public holidays
+
+/** A date as its calendar day in the browser's own zone, YYYY-MM-DD. */
+const ISO_DAY = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /**
  * The calendar day it is right now, in the zone that applies to this user.
  *
  * Not `new Date().toISOString().slice(0, 10)`, which is the day in UTC: for
  * anyone east of Greenwich that is yesterday for part of every evening, and for
- * anyone west it is tomorrow for part of every morning. Booking hours against
- * the wrong day is the kind of error nobody notices until a month-end total is
- * short.
+ * anyone west it is tomorrow for part of every morning - the kind of error nobody
+ * notices until a month-end figure is short.
  *
  * Intl is used rather than date arithmetic because it is the only thing in the
  * platform that knows about daylight saving.
@@ -6700,227 +11883,17 @@ function todayISO() {
       timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
     }).format(new Date());
   } catch {
-    // A zone the browser does not know must not break booking entirely.
+    // A zone the browser does not know must not break the screen entirely.
     return ISO_DAY(new Date());
   }
 }
 
 /**
- * Every entry in a range, however many pages the answer takes.
+ * What each country public holidays can be kept in is called, in words.
  *
- * The listing answers a page - a hundred entries unless asked for more, newest
- * first - so a caller that totals what one request brought back has totalled a
- * page. The calendar did: a month of a hundred and one entries lost its first
- * days, and its month total with them. Paged by the count the server reports
- * rather than by a page size written down here as well.
- */
-async function everyTimesheet(params) {
-  const entries = [];
-
-  for (;;) {
-    const query = new URLSearchParams(params);
-    query.set('offset', String(entries.length));
-
-    const answer = await api(`/timesheets?${query}`);
-    const page = answer?.items ?? [];
-
-    entries.push(...page);
-
-    if (page.length === 0 || entries.length >= (answer?.totalCount ?? 0)) return entries;
-  }
-}
-
-/**
- * Renders the month grid with the hours booked on each day.
- *
- * The whole month is fetched and grouped client-side; asking per day would be
- * dozens of round trips for one screen.
- */
-async function loadCalendar() {
-  if (!can('timesheets:read:own')) return;
-
-  const first = currentCalendarMonth();
-  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
-
-  const span = { from: ISO_DAY(first), to: ISO_DAY(last) };
-
-  // The month's days beside its entries, for what each day is besides worked on:
-  // a day somebody is away.
-  const [entries, month] = await Promise.all([
-    everyTimesheet(forSubject(span)),
-    api(`/me/days?${forSubject(span)}`),
-  ]);
-
-  // Not drawn if the arrows have moved on while it was on its way. Two quick
-  // presses ask for two months at once, and the fuller one answers later: drawn
-  // anyway, it put the month left behind under arrows already past it.
-  if (calendarMonth !== first) return;
-
-  const byDay = new Map();
-  for (const entry of entries) {
-    if (!byDay.has(entry.date)) byDay.set(entry.date, []);
-    byDay.get(entry.date).push(entry);
-  }
-
-  const marks = new Map((month?.days ?? []).map((day) => [day.date, day]));
-
-  renderCalendarGrid(first, last, byDay, marks);
-
-  // And the month's working time, which follows the arrows the calendar does.
-  await loadWorkDays();
-}
-
-function renderCalendarGrid(first, last, byDay, marks) {
-  const monthNames = t('cal.months', 'January,February,March,April,May,June,July,August,September,October,November,December').split(',');
-  $('#calendar-title').textContent = `${monthNames[first.getMonth()]} ${first.getFullYear()}`;
-
-  const weekdays = t('cal.weekdays', 'Mon,Tue,Wed,Thu,Fri,Sat,Sun').split(',');
-  $('#calendar-weekdays').replaceChildren(...weekdays.map((d) => el('span', { text: d })));
-
-  // Weeks start on Monday, so Sunday (0) becomes the last column.
-  const leading = (first.getDay() + 6) % 7;
-  const cells = [];
-
-  for (let i = 0; i < leading; i += 1) {
-    cells.push(el('div', { class: 'cal-day outside' }));
-  }
-
-  const todayIso = todayISO();
-  const maxHours = Math.max(8, ...[...byDay.values()].map(
-    (list) => list.reduce((sum, e) => sum + e.durationHours, 0)));
-
-  let monthTotal = 0;
-
-  for (let d = 1; d <= last.getDate(); d += 1) {
-    const date = new Date(first.getFullYear(), first.getMonth(), d);
-    const iso = ISO_DAY(date);
-    const dayEntries = byDay.get(iso) ?? [];
-    const hours = dayEntries.reduce((sum, e) => sum + e.durationHours, 0);
-    monthTotal += hours;
-
-    const away = marks.get(iso)?.absence;
-    const holiday = marks.get(iso)?.holiday;
-
-    const classes = ['cal-day'];
-    if (dayEntries.length) classes.push('has-entries');
-    if (iso === todayIso) classes.push('today');
-    if (away || holiday) classes.push('away');
-
-    const cell = el(dayEntries.length ? 'button' : 'div', {
-      class: classes.join(' '),
-      ...(dayEntries.length ? { type: 'button' } : {}),
-    }, el('span', { class: 'cal-daynum', text: String(d) }));
-
-    if (holiday) cell.append(el('span', { class: 'cal-away', text: holidayOf(marks.get(iso)) }));
-    if (away) cell.append(el('span', { class: 'cal-away', text: absenceName(away) }));
-
-    if (hours > 0) {
-      cell.append(el('span', { class: 'cal-hours', text: fmtHours(hours) }));
-
-      const names = [...new Set(dayEntries.map(
-        (e) => (e.projectId ? projectName(e.projectId) : t('ts.noProject', 'No project'))))];
-      cell.append(el('span', { class: 'cal-projects', text: names.join(', ') }));
-
-      const bar = el('div', { class: 'cal-bar' });
-      bar.style.width = `${Math.min(100, (hours / maxHours) * 100)}%`;
-      cell.append(bar);
-
-      cell.addEventListener('click', () => showCalendarDay(iso, dayEntries));
-    }
-
-    cells.push(cell);
-  }
-
-  $('#calendar-days').replaceChildren(...cells);
-  $('#calendar-summary').textContent =
-    `${t('cal.monthTotal', 'Month total')}: ${fmtHours(monthTotal)}`;
-  $('#calendar-day-card').hidden = true;
-}
-
-/** Shows the entries behind one day. */
-function showCalendarDay(iso, entries) {
-  $('#calendar-day-title').textContent = fmtDate(iso);
-
-  const rows = entries.map((entry) => {
-    const row = el('tr', {},
-      el('td', { class: 'text', text: entry.projectId ? projectName(entry.projectId) : t('ts.noProject', 'No project') }),
-      el('td', { class: 'num', text: fmtNumber(entry.durationHours) }),
-      el('td', { class: 'text' }, entry.description || '–', ...actedByLines(entry)),
-      timesheetActions(entry),
-    );
-
-    if (mayEditTimesheet(entry)) {
-      row.classList.add('clickable');
-      row.tabIndex = 0;
-      row.title = t('cal.clickToEdit', 'Click an entry to edit it.');
-
-      // Anywhere on the row, except on the buttons it carries - a click on
-      // "delete" must not also open the entry behind the confirmation.
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('button')) return;
-
-        editTimesheet(entry);
-      });
-
-      // Reachable without a mouse, since a row is not a control the browser
-      // would have given a keyboard behaviour to.
-      row.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-
-        e.preventDefault();
-        editTimesheet(entry);
-      });
-    }
-
-    return row;
-  });
-
-  fillTable($('#table-calendar-day tbody'), rows, 4, t('ot.empty', 'No bookings in this period.'));
-  $('#calendar-day-card').hidden = false;
-}
-
-function wireCalendar() {
-  const shift = (months) => {
-    const from = currentCalendarMonth();
-    calendarMonth = new Date(from.getFullYear(), from.getMonth() + months, 1);
-    mutate(loadCalendar, null, null);
-  };
-
-  $('#calendar-prev').addEventListener('click', () => shift(-1));
-  $('#calendar-next').addEventListener('click', () => shift(1));
-  $('#calendar-today').addEventListener('click', () => {
-    // This person's today, not the browser's - the same reason the grid highlights
-    // it from todayISO(). The two disagreeing is what sent the button to a month
-    // that did not contain the day it was named after.
-    calendarMonth = monthOf(todayISO());
-    mutate(loadCalendar, null, null);
-  });
-  $('#calendar-day-close').addEventListener('click', () => { $('#calendar-day-card').hidden = true; });
-}
-
-/**
- * What a kind of absence is called, in words.
- *
- * Each written out rather than looked up as absence.${kind}: the translation
+ * Each written out rather than looked up as country.${code}: the translation
  * checks read literal keys, and a key built at run time is one they cannot see
  * go missing.
- */
-function absenceName(kind) {
-  const names = {
-    vacation: () => t('absence.vacation', 'Leave'),
-    halfVacation: () => t('absence.halfVacation', 'Half a day of leave'),
-    sick: () => t('absence.sick', 'Sick'),
-    flexDay: () => t('absence.flexDay', 'Day off against overtime'),
-    localHoliday: () => t('absence.localHoliday', 'Holiday where I work'),
-    away: () => t('absence.away', 'Away'),
-  };
-
-  return names[kind]?.() ?? kind;
-}
-
-/**
- * What each country public holidays can be kept in is called, in words -
- * written out for the reason absenceName gives.
  */
 function countryName(code) {
   const names = {
@@ -6982,125 +11955,15 @@ function regionName(place) {
   return names[place]?.() ?? place;
 }
 
-/** A place in words: its country, and its region after it where it has one. */
-function placeName(place) {
-  const [country, region] = place.split('-');
-
-  return region ? `${countryName(country)}, ${regionName(place)}` : countryName(country);
-}
-
-/** What each public holiday is called, in words, written out for the same reason. */
-function holidayName(name) {
-  const names = {
-    newYear: () => t('holiday.newYear', 'New Year’s Day'),
-    secondJanuary: () => t('holiday.secondJanuary', '2 January'),
-    epiphany: () => t('holiday.epiphany', 'Epiphany'),
-    martinLutherKingDay: () => t('holiday.martinLutherKingDay', 'Martin Luther King Jr. Day'),
-    stBrigidsDay: () => t('holiday.stBrigidsDay', 'St Brigid’s Day'),
-    washingtonsBirthday: () => t('holiday.washingtonsBirthday', 'Washington’s Birthday'),
-    womensDay: () => t('holiday.womensDay', 'International Women’s Day'),
-    stPatricksDay: () => t('holiday.stPatricksDay', 'St Patrick’s Day'),
-    maundyThursday: () => t('holiday.maundyThursday', 'Maundy Thursday'),
-    goodFriday: () => t('holiday.goodFriday', 'Good Friday'),
-    easterSunday: () => t('holiday.easterSunday', 'Easter Sunday'),
-    easterMonday: () => t('holiday.easterMonday', 'Easter Monday'),
-    freedomDay: () => t('holiday.freedomDay', 'Freedom Day'),
-    queensDay: () => t('holiday.queensDay', 'Queen’s Day'),
-    kingsDay: () => t('holiday.kingsDay', 'King’s Day'),
-    labourDay: () => t('holiday.labourDay', 'Labour Day'),
-    mayBankHoliday: () => t('holiday.mayBankHoliday', 'May Bank Holiday'),
-    earlyMayBankHoliday: () => t('holiday.earlyMayBankHoliday', 'Early May Bank Holiday'),
-    constitutionDay: () => t('holiday.constitutionDay', 'Constitution Day'),
-    liberationDay: () => t('holiday.liberationDay', 'Liberation Day'),
-    victoryInEurope: () => t('holiday.victoryInEurope', 'Victory in Europe Day'),
-    europeDay: () => t('holiday.europeDay', 'Europe Day'),
-    greatPrayerDay: () => t('holiday.greatPrayerDay', 'General Prayer Day'),
-    ascension: () => t('holiday.ascension', 'Ascension Day'),
-    whitSunday: () => t('holiday.whitSunday', 'Whit Sunday'),
-    whitMonday: () => t('holiday.whitMonday', 'Whit Monday'),
-    azoresDay: () => t('holiday.azoresDay', 'Azores Day'),
-    memorialDay: () => t('holiday.memorialDay', 'Memorial Day'),
-    springBankHoliday: () => t('holiday.springBankHoliday', 'Spring Bank Holiday'),
-    corpusChristi: () => t('holiday.corpusChristi', 'Corpus Christi'),
-    republicDay: () => t('holiday.republicDay', 'Republic Day'),
-    juneBankHoliday: () => t('holiday.juneBankHoliday', 'June Bank Holiday'),
-    nationalDay: () => t('holiday.nationalDay', 'National Day'),
-    uprisingDay: () => t('holiday.uprisingDay', 'Anniversary of the uprising of 17 June 1953'),
-    juneteenth: () => t('holiday.juneteenth', 'Juneteenth'),
-    midsummerEve: () => t('holiday.midsummerEve', 'Midsummer Eve'),
-    midsummerDay: () => t('holiday.midsummerDay', 'Midsummer Day'),
-    madeiraDay: () => t('holiday.madeiraDay', 'Madeira Day'),
-    independenceDay: () => t('holiday.independenceDay', 'Independence Day'),
-    cyrilAndMethodiusDay: () => t('holiday.cyrilAndMethodiusDay', 'Saints Cyril and Methodius Day'),
-    janHusDay: () => t('holiday.janHusDay', 'Jan Hus Day'),
-    battleOfTheBoyne: () => t('holiday.battleOfTheBoyne', 'Battle of the Boyne'),
-    augustBankHoliday: () => t('holiday.augustBankHoliday', 'August Bank Holiday'),
-    summerBankHoliday: () => t('holiday.summerBankHoliday', 'Summer Bank Holiday'),
-    assumption: () => t('holiday.assumption', 'Assumption Day'),
-    childrensDay: () => t('holiday.childrensDay', 'World Children’s Day'),
-    statehoodDay: () => t('holiday.statehoodDay', 'Czech Statehood Day'),
-    germanUnity: () => t('holiday.germanUnity', 'German Unity Day'),
-    stFrancisDay: () => t('holiday.stFrancisDay', 'St Francis of Assisi’s Day'),
-    columbusDay: () => t('holiday.columbusDay', 'Columbus Day'),
-    octoberBankHoliday: () => t('holiday.octoberBankHoliday', 'October Bank Holiday'),
-    reformationDay: () => t('holiday.reformationDay', 'Reformation Day'),
-    allSaints: () => t('holiday.allSaints', 'All Saints’ Day'),
-    armisticeDay: () => t('holiday.armisticeDay', 'Armistice Day'),
-    veteransDay: () => t('holiday.veteransDay', 'Veterans Day'),
-    freedomAndDemocracyDay: () => t('holiday.freedomAndDemocracyDay', 'Struggle for Freedom and Democracy Day'),
-    repentanceDay: () => t('holiday.repentanceDay', 'Day of Prayer and Repentance'),
-    thanksgiving: () => t('holiday.thanksgiving', 'Thanksgiving'),
-    stAndrewsDay: () => t('holiday.stAndrewsDay', 'St Andrew’s Day'),
-    restorationOfIndependence: () => t('holiday.restorationOfIndependence', 'Restoration of Independence'),
-    immaculateConception: () => t('holiday.immaculateConception', 'Immaculate Conception'),
-    christmasEve: () => t('holiday.christmasEve', 'Christmas Eve'),
-    christmasDay: () => t('holiday.christmasDay', 'Christmas Day'),
-    stStephensDay: () => t('holiday.stStephensDay', 'Boxing Day'),
-    newYearsEve: () => t('holiday.newYearsEve', 'New Year’s Eve'),
-    royalWedding: () => t('holiday.royalWedding', 'Royal wedding'),
-    diamondJubilee: () => t('holiday.diamondJubilee', 'The Queen’s Diamond Jubilee'),
-    platinumJubilee: () => t('holiday.platinumJubilee', 'The Queen’s Platinum Jubilee'),
-    stateFuneral: () => t('holiday.stateFuneral', 'State funeral of Queen Elizabeth II'),
-    coronation: () => t('holiday.coronation', 'Coronation of King Charles III'),
-    dayOfRemembrance: () => t('holiday.dayOfRemembrance', 'Day of Remembrance and Recognition'),
-    worldCup: () => t('holiday.worldCup', 'Bank holiday for the World Cup'),
-  };
-
-  return names[name]?.() ?? name;
-}
-
-/**
- * The public holiday a day is, in words - said to be kept in place of one where
- * it fell on a weekend and the country keeps it on this day instead, which would
- * otherwise read as Christmas on the 27th.
- */
-function holidayOf(day) {
-  const name = holidayName(day.holiday);
-
-  return day.holidaySubstitute ? fillIn(t('holiday.substitute', '{0} (substitute day)'), [name]) : name;
-}
-
 /** The countries public holidays can be kept in and their regions, as last loaded. */
 let holidayCountries = [];
 
-/** Whose public holidays this account keeps, as last loaded. */
-let myHolidays = null;
-
-/** Loads where this account keeps public holidays into "My account". */
-async function loadMyHolidays() {
-  myHolidays = await api('/me/holidays');
-  holidayCountries = myHolidays?.countries ?? holidayCountries;
-
-  redrawable('myHolidays', fillMyHolidays);
-}
-
 /**
- * Fills a holiday card's two pickers from a choice: the countries after
+ * Fills the holiday card's two pickers from a choice: the countries after
  * whatever comes before them, and the regions of the one chosen.
  *
- * emptyCountry is what an empty choice shows: following the installation for a
- * person, and Germany for the installation - where nobody has chosen yet, with no
- * state, which keeps none until one is saved.
+ * emptyCountry is what an empty choice shows: Germany, where nobody has chosen
+ * yet, with no state - which keeps none until one is saved.
  */
 function fillHolidayPickers(form, choice, emptyCountry, ...before) {
   const locale = activeLocale();
@@ -7150,7 +12013,7 @@ function fillRegions(form, chosen) {
   select.value = regions.includes(chosen) ? chosen : '';
 }
 
-/** The choice a holiday card's pickers make: a place, or what stands in for one. */
+/** The choice the holiday card's pickers make: a place, or what stands in for one. */
 function chosenPlace(form) {
   const country = form.elements.country.value;
   const region = form.elements.region.value;
@@ -7160,439 +12023,33 @@ function chosenPlace(form) {
   return region ? `${country}-${region}` : country;
 }
 
-function fillMyHolidays() {
-  const form = $('#form-my-holidays');
-
-  // Not over a choice somebody has made and not yet saved.
-  if (!form || !myHolidays || beingEdited(form)) return;
-
-  const instance = myHolidays.instancePlace;
-  const kept = instance && instance !== 'none' ? placeName(instance) : t('holiday.noneKept', 'none');
-
-  fillHolidayPickers(form, myHolidays.place, '',
-    el('option', { value: '', text: fillIn(t('holiday.inherit', 'Follow the installation ({0})'), [kept]) }),
-    el('option', { value: 'none', text: t('holiday.noRegion', 'No public holidays') }));
-}
-
 function wireHolidays() {
-  for (const [form, endpoint] of [['#form-my-holidays', '/me/holidays'], ['#form-holidays', '/settings/holidays']]) {
-    $(form)?.elements.country.addEventListener('change', (event) => fillRegions(event.target.form, ''));
+  const form = $('#form-holidays');
+  if (!form) return;
 
-    $(form)?.addEventListener('submit', (event) => {
-      event.preventDefault();
+  form.elements.country.addEventListener('change', (event) => fillRegions(event.target.form, ''));
 
-      saveForm(event.target,
-        () => api(endpoint, { method: 'PUT', body: JSON.stringify({ place: chosenPlace(event.target) }) }),
-        t('holiday.saved', 'Public holidays saved'),
-        refreshAll);
-    });
-  }
-}
-
-/** Loads this year's absences into their card. */
-async function loadAbsences() {
-  if (!can('timesheets:read:own')) return;
-
-  const absences = (await api('/me/absences'))?.items ?? [];
-
-  const rows = absences.map((absence) => el('tr', {},
-    el('td', { text: fmtDate(absence.day) }),
-    el('td', { class: 'text', text: absenceName(absence.kind) }),
-    el('td', { class: 'actions' }, can('timesheets:write:own') ? deleteButton({
-      label: `${fmtDate(absence.day)}, ${absenceName(absence.kind)}`,
-      path: `/me/absences/${absence.day}`,
-      message: t('absence.removed', 'Absence taken back'),
-      after: reloadAbsences,
-    }) : null),
-  ));
-
-  fillTable($('#table-absences tbody'), rows, 3, t('absence.empty', 'No absence recorded this year.'));
-}
-
-/** Everything that shows somebody's absences, drawn again after one changed. */
-async function reloadAbsences() {
-  await loadAbsences();
-  await loadVacation();
-  await reloadTimeViews();
-}
-
-/** The year the leave card shows, or null before it was first drawn. */
-let vacationYear = null;
-
-/** What the leave card was last drawn from, kept so a language change can redraw it. */
-let vacationAccount = null;
-
-/** Loads a year of this account's leave into its card. */
-async function loadVacation() {
-  if (!can('timesheets:read:own')) return;
-
-  // This person's year, which is not the browser's for part of the last day of it.
-  if (!vacationYear) vacationYear = Number(todayISO().slice(0, 4));
-
-  const year = vacationYear;
-  const account = await api(`/me/vacation?year=${year}`);
-
-  // Overtaken by a step to another year while this was on its way.
-  if (year !== vacationYear) return;
-
-  vacationAccount = account;
-
-  redrawable('vacation', drawVacation);
-}
-
-function drawVacation() {
-  const account = vacationAccount;
-  if (!account) return;
-
-  $('#vacation-title').textContent = fillIn(t('vacation.title', 'Leave {0}'), [account.year]);
-
-  const given = account.entitlements.length > 0 && account.year >= account.entitlements[0].fromYear;
-
-  $('#vacation-left').textContent = given
-    ? fillIn(t('vacation.left', 'Days left: {0}'), [account.remaining])
-    : t('vacation.none', 'No leave given for this year yet: say below how many days a year give.');
-
-  $('#vacation-detail').textContent = given
-    ? fillIn(t('vacation.detail', 'Given: {0} · carried over: {1} · taken: {2} · planned: {3}'),
-      [account.entitlement, account.carriedOver, account.taken, account.planned])
-    : '';
-
-  const rows = account.entitlements.map((entitlement) => el('tr', {},
-    el('td', { text: String(entitlement.fromYear) }),
-    el('td', { class: 'num', text: fmtNumber(entitlement.days) }),
-    el('td', { class: 'actions' }, can('settings:write:own') ? deleteButton({
-      label: fillIn(t('vacation.from', 'from {0}'), [entitlement.fromYear]),
-      path: `/me/vacation/${entitlement.fromYear}`,
-      message: t('vacation.withdrawn', 'Entitlement taken back'),
-      after: loadVacation,
-    }) : null),
-  ));
-
-  fillTable($('#table-vacation tbody'), rows, 3, t('vacation.noEntitlements', 'No days of leave given yet.'));
-}
-
-/** Forgets the leave the card showed, for an account that has signed out. */
-function forgetTheVacation() {
-  vacationYear = null;
-  vacationAccount = null;
-
-  for (const said of ['#vacation-title', '#vacation-left', '#vacation-detail']) {
-    const node = $(said);
-    if (node) node.textContent = '';
-  }
-}
-
-function wireVacation() {
-  const step = (years) => {
-    vacationYear = (vacationYear ?? Number(todayISO().slice(0, 4))) + years;
-    mutate(loadVacation, null, null);
-  };
-
-  $('#vacation-prev')?.addEventListener('click', () => step(-1));
-  $('#vacation-next')?.addEventListener('click', () => step(1));
-
-  $('#form-vacation')?.addEventListener('submit', (event) => {
+  form.addEventListener('submit', (event) => {
     event.preventDefault();
 
-    const form = event.target;
-    const body = { fromYear: Number(form.elements.fromYear.value), days: Number(form.elements.days.value) };
-
-    saveForm(form, () => api('/me/vacation', { method: 'PUT', body: JSON.stringify(body) }),
-      t('vacation.saved', 'Leave saved'),
-      async () => {
-        form.reset();
-        await loadVacation();
-      });
+    saveForm(form,
+      () => api('/settings/holidays', { method: 'PUT', body: JSON.stringify({ place: chosenPlace(form) }) }),
+      t('holiday.saved', 'Public holidays saved'),
+      refreshAll);
   });
 }
 
-function wireAbsences() {
-  $('#form-absence')?.addEventListener('submit', (event) => {
-    event.preventDefault();
-
-    const form = event.target;
-    const body = formData(form);
-
-    mutate(() => api('/me/absences', { method: 'POST', body: JSON.stringify(body) }), null,
-      async (recorded) => {
-        toast(fillIn(t('absence.recorded', 'Days recorded: {0}'), [recorded?.totalCount ?? 0]), 'ok');
-
-        // Emptied through setDateField: reset empties the box the browser keeps,
-        // not the one shown beside it.
-        form.reset();
-        setDateField(form.elements.from, '');
-        setDateField(form.elements.to, '');
-
-        await reloadAbsences();
-      });
-  });
-}
-
+/** Draws what the account screen says about the account, from the account as it was last read. */
 function fillSettingsForm() {
   if (!me.user) return;
 
-  const form = $('#form-working-times');
-
-  // The zone picker first: it is a different form on the same screen and guards
-  // itself, so leaving it behind this one meant typing a daily target stopped the
-  // zone card following the server - a second form frozen by a guard that was
-  // never about it.
+  // Each of these guards itself against somebody part way through its form.
   fillMyTimezone();
-
-  // The same for the reminders, which guard themselves too.
-  fillReminders();
   drawNotifyState();
   drawPushState();
-
-  // Not over somebody who is part way through filling it in. This runs after
-  // every save on the screen and after a language is chosen, and it used to
-  // replace whatever had been typed with the server's copy.
-  if (beingEdited(form)) return;
-
-  form.elements.dailyTargetHours.value = me.user.dailyTargetHours || '';
-  form.elements.maxDailyHours.value = me.user.maxDailyHours || '';
-  setDateField(form.elements.everyDayCountsFrom, me.user.everyDayCountsFrom ?? '');
-}
-
-// ------------------------------------------------------------------ the year
-
-/** The year the tiles show, or null before they were first drawn. */
-let yearShown = null;
-
-/** What the tiles were last drawn from, kept so a language change can redraw them. */
-let yearData = null;
-
-/** Loads a year of days, and the year before it to compare with. */
-async function loadYearMap() {
-  if (!can('timesheets:read:own')) return;
-
-  // This person's year, which is not the browser's for part of the last day of it.
-  if (!yearShown) yearShown = Number(todayISO().slice(0, 4));
-
-  const year = yearShown;
-  const span = (y) => new URLSearchParams({ from: `${y}-01-01`, to: `${y}-12-31` });
-
-  const [shown, before] = await Promise.all([
-    api(`/me/days?${forSubject(span(year))}`),
-    api(`/me/days?${forSubject(span(year - 1))}`),
-  ]);
-
-  // Overtaken by a step to another year while this was on its way.
-  if (year !== yearShown) return;
-
-  yearData = { year, days: shown?.days ?? [], before: before?.days ?? [] };
-
-  redrawable('yearMap', drawYearMap);
-}
-
-/** How dark a day's tile is: by the hours booked on it, two hours a step. */
-function yearLevel(hours) {
-  if (!(hours > 0)) return 0;
-
-  return Math.min(5, Math.ceil(hours / 2));
-}
-
-function drawYearMap() {
-  if (!yearData) return;
-
-  const { year, days, before } = yearData;
-  const today = todayISO();
-
-  $('#year-title').textContent = fillIn(t('year.title', 'The year {0}'), [year]);
-
-  // The two years compared up to the same day: today, in the year that is running,
-  // and the whole of a year gone by. Comparing a year half done with a whole one
-  // would always say less.
-  const upTo = String(year) === today.slice(0, 4) ? today.slice(5) : '12-31';
-  const bookedUpTo = (list) => list
-    .filter((daily) => daily.date.slice(5) <= upTo)
-    .reduce((total, daily) => total + daily.booked, 0);
-
-  const summary = [
-    fillIn(t('year.booked', 'Booked: {0} · days with hours: {1}'),
-      [fmtHours(bookedUpTo(days)), days.filter((daily) => daily.booked > 0).length]),
-    fillIn(t('year.compare', '{0} to the same day: {1}'), [year - 1, fmtHours(bookedUpTo(before))]),
-  ].join(' · ');
-
-  $('#year-summary').textContent = summary;
-
-  // A column a week, Monday first: the first column starts with the days before
-  // the first of January, drawn but not shown, so every row is one weekday.
-  const first = new Date(Date.UTC(year, 0, 1));
-  const lead = (first.getUTCDay() + 6) % 7;
-
-  const tiles = Array.from({ length: lead }, () => el('span', { class: 'year-tile outside' }));
-
-  for (const daily of days) {
-    const classes = ['year-tile', `level-${yearLevel(daily.booked)}`];
-
-    if (daily.holiday) classes.push('holiday');
-    else if (daily.absence) classes.push('away');
-
-    if (daily.date === today) classes.push('today');
-
-    const why = daily.holiday ? holidayOf(daily) : (daily.absence ? absenceName(daily.absence) : '');
-
-    tiles.push(el('span', {
-      class: classes.join(' '),
-      title: [fmtDate(daily.date), fmtHours(daily.booked), why].filter(Boolean).join(' · '),
-    }));
-  }
-
-  const grid = $('#year-tiles');
-  grid.replaceChildren(...tiles);
-  grid.setAttribute('aria-label', `${$('#year-title').textContent}: ${summary}`);
-
-  // Each month's name above the column its first day falls in.
-  const months = t('cal.months',
-    'January,February,March,April,May,June,July,August,September,October,November,December').split(',');
-
-  $('#year-months').replaceChildren(...months.map((name, m) => {
-    const offset = lead + Math.round((Date.UTC(year, m, 1) - first.getTime()) / 86400000);
-    const label = el('span', { text: name.slice(0, 3) });
-
-    label.style.gridColumnStart = String(Math.floor(offset / 7) + 1);
-
-    return label;
-  }));
-
-  // The same two years as figures, month by month - what the tiles say, for
-  // somebody who cannot see them and for anybody who wants the numbers.
-  $('#year-this').textContent = String(year);
-  $('#year-before').textContent = String(year - 1);
-
-  const perMonth = (list) => months.map((_, m) => list
-    .filter((daily) => Number(daily.date.slice(5, 7)) === m + 1)
-    .reduce((total, daily) => total + daily.booked, 0));
-
-  const shown = perMonth(days);
-  const earlier = perMonth(before);
-
-  fillTable($('#table-year tbody'), months.map((name, m) => el('tr', {},
-    el('td', { class: 'text', text: name }),
-    el('td', { class: 'num', text: fmtHours(shown[m]) }),
-    el('td', { class: 'num', text: fmtHours(earlier[m]) }),
-  )), 3, '');
-}
-
-/** Forgets the year the tiles showed, for an account that has signed out. */
-function forgetTheYearMap() {
-  yearShown = null;
-  yearData = null;
-
-  for (const said of ['#year-title', '#year-summary', '#year-this', '#year-before']) {
-    const node = $(said);
-    if (node) node.textContent = '';
-  }
-
-  $('#year-tiles')?.replaceChildren();
-  $('#year-months')?.replaceChildren();
-}
-
-function wireYearMap() {
-  const step = (years) => {
-    yearShown = (yearShown ?? Number(todayISO().slice(0, 4))) + years;
-    mutate(loadYearMap, null, null);
-  };
-
-  $('#year-prev')?.addEventListener('click', () => step(-1));
-  $('#year-next')?.addEventListener('click', () => step(1));
 }
 
 // --------------------------------------------------------------- API tokens
-
-// ---------------------------------------------------------------- the week
-
-/** The weekday names the calendar uses, Monday first, in the reader's language. */
-function weekdayNames() {
-  return t('cal.weekdays', 'Mon,Tue,Wed,Thu,Fri,Sat,Sun').split(',');
-}
-
-/**
- * Draws the plan form's seven fields and the table's weekday headings.
- *
- * Written by the script rather than into the markup so the names are the
- * calendar's own - one list of seven words rather than a second set of keys that
- * could come to call a day something else. Drawn again on a language change, and
- * only the names: the fields keep what was typed into them.
- */
-function drawScheduleDays() {
-  const names = weekdayNames();
-  const days = $('#schedule-days');
-
-  if (days && !days.children.length) {
-    const most = longestEntryHours();
-
-    for (let i = 0; i < 7; i += 1) {
-      days.append(el('label', { 'data-weekday': String(i) },
-        el('span', { class: 'weekday-name' }),
-        el('input', {
-          type: 'number', name: `day${i}`, step: 'any', min: '0', max: String(most), required: '',
-        })));
-    }
-  }
-
-  for (const label of $$('#schedule-days label[data-weekday]')) {
-    label.querySelector('.weekday-name').textContent = names[Number(label.dataset.weekday)] ?? '';
-  }
-
-  for (const head of $$('#table-schedules th[data-weekday]')) {
-    head.textContent = names[Number(head.dataset.weekday)] ?? '';
-  }
-}
-
-/** The week a plan form would save, read from its seven fields. */
-function scheduleHours(form) {
-  return Array.from({ length: 7 }, (_, i) => Number(form.elements[`day${i}`].value || 0));
-}
-
-/**
- * Loads the planned weeks and the week before the first.
- *
- * The form is filled with the week in force today - what somebody changing their
- * plan most likely starts from - unless it is being edited, and its first day
- * with today: a plan made now applies from now.
- */
-async function loadSchedules() {
-  if (!can('settings:write:own')) return;
-
-  const answer = await api('/me/schedules');
-  const items = answer?.items ?? [];
-  const before = answer?.before ?? [8, 8, 8, 8, 8, 0, 0];
-
-  redrawable('scheduleDays', drawScheduleDays);
-
-  const form = $('#form-schedule');
-
-  if (form && !beingEdited(form)) {
-    const today = todayISO();
-    const current = items.filter((item) => item.validFrom <= today).at(-1);
-    const week = current?.hours ?? before;
-
-    week.forEach((hours, i) => { form.elements[`day${i}`].value = String(hours); });
-    setDateField(form.elements.validFrom, today);
-  }
-
-  redrawable('scheduleBefore', () => {
-    $('#schedule-before').textContent = fillIn(t('schedule.before',
-      'Before the first plan, and without one: {0} h from Monday to Friday, nothing at the weekend.'),
-    [fmtShare(before[0])]);
-  });
-
-  const rows = items.map((item) => el('tr', {},
-    el('td', { text: fmtDate(item.validFrom) }),
-    ...item.hours.map((hours) => el('td', { class: 'num', text: fmtShare(hours) })),
-    el('td', { class: 'actions' }, deleteButton({
-      label: fillIn(t('schedule.label', 'The plan from {0}'), [fmtDate(item.validFrom)]),
-      path: `/me/schedules/${item.validFrom}`,
-      message: t('schedule.removed', 'Plan removed'),
-      after: loadSchedules,
-    })),
-  ));
-
-  fillTable($('#table-schedules tbody'), rows, 9,
-    t('schedule.empty', 'No plan yet - the daily target applies from Monday to Friday.'));
-}
 
 async function loadTokens() {
   const tokens = (await api('/me/tokens'))?.items ?? [];
@@ -7910,322 +12367,19 @@ function wireOpenID() {
   });
 }
 
-// ------------------------------------------------------------ working time
-
-/** The month of working days last loaded, which the document is made from. */
-let workDays = null;
-
-/**
- * When the days of the calendar's month began and finished, beside the hours
- * booked on them. A day booked on with no times recorded is among them, so the
- * record shows where it has a gap.
- */
-async function loadWorkDays() {
-  if (!can('timesheets:read:own')) return;
-
-  const first = currentCalendarMonth();
-  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
-  const span = { from: ISO_DAY(first), to: ISO_DAY(last) };
-
-  const month = await api(`/me/workdays?${new URLSearchParams(span)}`);
-
-  // Not drawn for a month the arrows have already left, as the calendar is not.
-  if (calendarMonth !== first) return;
-
-  workDays = month;
-  redrawable('workdays', drawWorkDays);
-
-  const form = $('#form-workday');
-  if (form && !beingEdited(form)) {
-    if (!form.elements.date.value) setDateField(form.elements.date, todayISO());
-
-    proposeTheClocksStart(form);
-  }
-}
-
-function drawWorkDays() {
-  const days = workDays?.days ?? [];
-  const writes = can('timesheets:write:own');
-
-  const rows = days.map((day) => el('tr', { class: day.recorded ? '' : 'unrecorded' },
-    el('td', { text: fmtDate(day.date) }),
-    el('td', { text: day.recorded ? day.start : '–' }),
-    el('td', { text: day.recorded ? day.end : '–' }),
-    el('td', { class: 'num', text: day.recorded ? String(day.breakMinutes) : '–' }),
-    el('td', { class: 'num', text: day.recorded ? fmtHours(day.workedHours) : '–' }),
-    el('td', { class: 'num', text: fmtHours(day.bookedHours) }),
-    el('td', { class: 'act' }, ...(day.notices ?? []).map(actNotice)),
-    el('td', { class: 'actions' }, ...(writes ? workDayActions(day) : [])),
-  ));
-
-  fillTable($('#table-workdays tbody'), rows, 8,
-    t('work.empty', 'Nothing recorded or booked this month.'));
-
-  const past = days.filter((day) => day.notices?.length).length;
-
-  $('#workday-total').textContent = [
-    days.length ? fillIn(t('work.total', 'Worked {0}, booked {1}'),
-      [fmtHours(workDays.totalWorked), fmtHours(workDays.totalBooked)]) : '',
-    past ? fillIn(t('work.noticeCount', '{0} days past a limit of the Working Hours Act.'), [past]) : '',
-  ].filter(Boolean).join(' · ');
-}
-
-/**
- * One limit of the Working Hours Act a shift went past, as the server read it.
- * Written as a sentence rather than a mark, because the PDF is made from this
- * table and a mark alone would mean nothing on paper.
- */
-function actNotice(notice) {
-  const said = {
-    longDay: () => t('work.longDay', 'More than ten hours (Working Hours Act § 3)'),
-    shortBreak: () => fillIn(t('work.shortBreak', '{0} minutes of breaks needed (Working Hours Act § 4)'),
-      [notice.minutes]),
-    shortRest: () => fillIn(t('work.shortRest', 'Only {0} of rest since the day before (Working Hours Act § 5)'),
-      [fmtHours(notice.minutes / 60)]),
-  }[notice.rule];
-
-  return el('span', { class: 'act-notice', text: said ? said() : notice.rule });
-}
-
-/** What can be done with a day: correct it, and take back what was recorded. */
-function workDayActions(day) {
-  const correct = el('button', { type: 'button', class: 'link', text: t('action.edit', 'edit') });
-  correct.addEventListener('click', () => fillTheWorkDayForm(day));
-
-  if (!day.recorded) return [correct];
-
-  return [correct, deleteButton({
-    label: fmtDate(day.date),
-    path: `/me/workdays/${day.date}`,
-    message: t('work.removed', 'Working time taken back'),
-    after: loadWorkDays,
-  })];
-}
-
-/** Puts a day into the form, to be corrected or recorded at last. */
-function fillTheWorkDayForm(day) {
-  const form = $('#form-workday');
-
-  setDateField(form.elements.date, day.date);
-  form.elements.start.value = day.start ?? '';
-  form.elements.end.value = day.end ?? '';
-  form.elements.breakMinutes.value = String(day.breakMinutes ?? 0);
-
-  if (!day.recorded) proposeTheClocksStart(form);
-
-  form.scrollIntoView({ block: 'nearest' });
-  form.elements.start.focus();
-}
-
-/**
- * Offers the running stopwatch's start as the day's, where the form shows that
- * day with no start yet: the clock already knows when the work began, and
- * somebody who started it on arriving should not have to type it again.
- * Offered, not recorded - nothing is kept until the form is saved.
- */
-function proposeTheClocksStart(form) {
-  if (!runningTimer || form.elements.start.value) return;
-
-  const started = wallClock(runningTimer.startedAt);
-  if (started.date === form.elements.date.value) form.elements.start.value = started.time;
-}
-
-/** The working time as the screen shows it, for the document. */
-async function workDayDocument() {
-  return {
-    title: t('work.title', 'Working time'),
-    colours: screenColours(),
-    subtitle: $('#calendar-title').textContent.trim(),
-    sections: [{
-      heading: t('work.title', 'Working time'),
-      caption: t('work.documentCaption',
-        'A record kept by its owner for themselves: when each day began and finished, its breaks, and the hours booked on it.'),
-      table: tableAsFigures($('#table-workdays')),
-    }],
-    // In the tone of the sentence that says the same under the table.
-    summary: [
-      { label: t('work.worked', 'Worked'), value: fmtHours(workDays?.totalWorked ?? 0), tone: toneOf($('#workday-total')) },
-      { label: t('work.booked', 'Booked'), value: fmtHours(workDays?.totalBooked ?? 0), tone: toneOf($('#workday-total')) },
-    ],
-  };
-}
-
-function wireWorkDays() {
-  const form = $('#form-workday');
-  if (!form) return;
-
-  form.elements.date.addEventListener('change', () => proposeTheClocksStart(form));
-
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-
-    const date = form.elements.date.value;
-    const body = {
-      start: form.elements.start.value,
-      end: form.elements.end.value,
-      breakMinutes: Number(form.elements.breakMinutes.value || 0),
-    };
-
-    saveForm(form, () => api(`/me/workdays/${date}`, { method: 'PUT', body: JSON.stringify(body) }),
-      t('work.saved', 'Working time recorded'),
-      loadWorkDays);
-  });
-}
-
-// ------------------------------------------------------------ calendar feed
-
-/** Whether this person has a calendar feed, as last read. */
-let calendarFeed = null;
-
-/**
- * Says whether this person has a calendar feed, since when, and when it was last
- * read - which is how somebody finds out whether their calendar is reading the
- * address at all, since a calendar that cannot reach it says nothing.
- */
-async function loadCalendarFeed() {
-  if (!can('timesheets:read:own')) return;
-
-  calendarFeed = await api('/me/calendar-feed');
-
-  // An address on the card that is no longer this person's - replaced or removed
-  // in another tab - reads nothing, and the card went on saying "add it now".
-  const shown = $('#feed-address')?.dataset.prefix;
-  if (shown && shown !== calendarFeed?.prefix) forgetTheFeedAddress();
-
-  const active = Boolean(calendarFeed?.active);
-
-  $('#feed-state').textContent = active
-    ? fillIn(t('feed.active', 'Address {0}… since {1}, last read: {2}.'), [
-      calendarFeed.prefix,
-      fmtMoment(calendarFeed.createdAt),
-      calendarFeed.lastReadAt ? fmtMoment(calendarFeed.lastReadAt) : t('feed.unread', 'not yet'),
-    ])
-    : t('feed.none', 'No address yet.');
-
-  if (active) swapTheLabel($('#feed-create'), 'feed.replace', 'New address');
-  else swapTheLabel($('#feed-create'), 'feed.create', 'Create address');
-  $('#feed-remove').hidden = !active;
-}
-
-/**
- * Takes a feed's address off the screen.
- *
- * It is a key to somebody's recorded days, working until it is replaced, and it
- * exists once, in the answer that made it - so it goes when the screen is left or
- * the session ends, as a token's value does, rather than staying for whoever sits
- * down next.
- */
-function forgetTheFeedAddress() {
-  const panel = $('#feed-address');
-  if (!panel) return;
-
-  panel.hidden = true;
-  delete panel.dataset.prefix;
-  $('#feed-address-value').textContent = '';
-
-  // The code carries the same key, in its picture, so it goes with the text.
-  const qr = $('#feed-qr');
-  qr.hidden = true;
-  qr.removeAttribute('src');
-  $('#feed-qr-hint').hidden = true;
-}
-
-/**
- * Takes the card back to knowing nothing about an account's feed, for the next
- * account: the address, and what the card said about it - the start of its key,
- * when it was made and last read. The next sign-in loads its own, but only for an
- * account whose role shows the card, and what the last one left in it stayed for
- * every other.
- */
-function forgetTheCalendarFeed() {
-  calendarFeed = null;
-  forgetTheFeedAddress();
-
-  const state = $('#feed-state');
-  if (state) state.textContent = '';
-
-  swapTheLabel($('#feed-create'), 'feed.create', 'Create address');
-
-  const remove = $('#feed-remove');
-  if (remove) remove.hidden = true;
-}
-
-function wireCalendarFeed() {
-  $('#feed-create').addEventListener('click', async () => {
-    // Replacing one stops every calendar that was given it, which is what replacing
-    // it is for - and worth saying before it happens, not after.
-    if (calendarFeed?.active) {
-      const replace = await confirmDialog({
-        title: t('feed.replaceTitle', 'Create a new address?'),
-        text: t('feed.replaceText', 'Every calendar given the current address stops showing your days. That is what you want if somebody may have seen it.'),
-        confirmLabel: t('feed.replace', 'New address'),
-      });
-      if (!replace) return;
-    }
-
-    mutate(async () => {
-      const feed = await api('/me/calendar-feed', { method: 'POST' });
-
-      // The answer says where the feed is read relative to this installation, and
-      // the address a calendar needs is the one this page was reached at.
-      $('#feed-address-value').textContent = `${location.origin}${feed.path}`;
-      $('#feed-address').dataset.prefix = feed.prefix;
-
-      // The same address as a code, for the phone a calendar is usually on. The
-      // server builds it from this page's own origin, so it is the text above.
-      const qr = $('#feed-qr');
-      qr.hidden = !feed.qr;
-      qr.alt = feed.qr ? t('feed.qrAlt', 'QR code of the calendar address') : '';
-      if (feed.qr) qr.src = feed.qr;
-      $('#feed-qr-hint').hidden = !feed.qr;
-
-      $('#feed-address').hidden = false;
-
-      await loadCalendarFeed();
-    }, null, null);
-  });
-
-  $('#feed-remove').addEventListener('click', async () => {
-    const remove = await confirmDialog({
-      title: t('feed.removeTitle', 'Remove the address?'),
-      text: t('feed.removeText', 'Every calendar given this address stops showing your days.'),
-      confirmLabel: t('feed.remove', 'Remove address'),
-    });
-    if (!remove) return;
-
-    mutate(() => api('/me/calendar-feed', { method: 'DELETE' }),
-      t('feed.removed', 'Address removed'),
-      async () => {
-        forgetTheFeedAddress();
-        await loadCalendarFeed();
-      });
-  });
-}
-
 // ------------------------------------------------------------ administration
 
 /**
- * Whether this account administers the installation and has no working day.
+ * Whether this account administers the installation: the built-in administrator,
+ * or anybody whose role holds settings:manage.
  *
- * The built-in administrator, and anybody holding the admin role - which is the
- * same thing said twice: that role is the administration and none of the working
- * day, and an installation that hands it to somebody has decided that person
- * administers. This asked whether the caller *was* the built-in account, so the
- * few things reserved for it stayed reserved for it, and the way to reach them
- * was to sign in as the one account nobody can attribute to a person.
- *
- * Asked as a shape rather than by the role's name, which an installation may have
- * changed. The combined role is deliberately not this: somebody who also books
- * time keeps their own screens, their walk through and their working times, and
- * was never meant to inherit the directory purge with them.
- *
- * Mirrors Authorizer.AdministersOnly, and has to: this decides what is offered
- * and that decides what is answered. A screen offering what the server refuses is
- * worse than one that offers nothing.
+ * Mirrors Authorizer.RequireInstallationAdmin, and has to: this decides what is
+ * offered and that decides what is answered. A screen offering what the server
+ * refuses is worse than one that offers nothing.
  */
-const administersOnly = () => !me.authEnabled
+const administers = () => !me.authEnabled
   || (me.user?.isSystem ?? false)
-  || (can('settings:manage') && !can('timesheets:write:own'));
+  || can('settings:manage');
 
 /**
  * Applies the instance branding.
@@ -8266,7 +12420,7 @@ function drawWelcome(title) {
  * is added to it after a bar and never takes its place; the server writes the
  * same rule in model.Named, and the two have to agree.
  */
-const BRAND = 'TimePulse';
+const BRAND = 'QubitDesk';
 
 /** What an installation is called with the addition written beside the brand. */
 function named(addition) {
@@ -8294,7 +12448,7 @@ function drawBranding(branding) {
   // chose. The tab's name resolved rather than both fields, since the tab is the
   // only thing that reads it.
   try {
-    localStorage.setItem('timepulse.branding', JSON.stringify({
+    localStorage.setItem('qubitdesk.branding', JSON.stringify({
       title: tabTitle,
     }));
   } catch {
@@ -8309,12 +12463,12 @@ function drawBranding(branding) {
 
   // The one place an installation's logo is drawn: the left of the bar, once
   // somebody has signed in. The sign-in screen and the browser tab carry
-  // TimePulse's own mark whatever is uploaded - decided by the maintainer on
+  // QubitDesk's own mark whatever is uploaded - decided by the maintainer on
   // 2026-11-18 - and the button beside the title carries it as well.
   //
   // It is the installation's slot, so with no logo it does not fall back to our
   // mark - that would make an unbranded installation look branded by somebody
-  // else - but to the chip with the T, which showBrandMark draws.
+  // else - but to the chip with the G, which showBrandMark draws.
   //
   // At the size it draws, made when the logo was saved: the banner-sized copy,
   // which is the one the old sign-in card drew at the same 96 pixels. The
@@ -8598,7 +12752,6 @@ async function loadAdmin() {
   if (!can('settings:manage')) return;
 
   await loadMaintenance();
-  await loadManagersSwitch();
   await loadPushSwitch();
 
   const branding = await api('/branding');
@@ -8787,28 +12940,7 @@ async function loadAdmin() {
 
   await loadOpenIDSettings();
 
-  // The directory run belongs to the built-in administrator, because it deletes
-  // the accounts the directory no longer holds along with everything they
-  // recorded. Somebody holding settings:manage saw the card and both buttons, and
-  // was refused by the server on pressing either - and could set the schedule that
-  // performs the same deletion unattended, which the server now refuses too.
-  //
-  // data-perm cannot express this: it names a permission, and this is about which
-  // account it is.
-  $('#sync-card').hidden = !administersOnly();
-
   await loadSyncRuns();
-
-  // And said, to the account it is taken from. Everybody who reaches this screen
-  // administers; the ones who also record time found one card fewer and nothing
-  // about why, on a screen the tour had told them carried it.
-  $('#sync-elsewhere').hidden = administersOnly();
-  $('#sync-elsewhere-text').textContent = t('sync.elsewhere',
-    'Not offered to this account. A run deletes the accounts the directory no longer holds, '
-    + 'together with the time recorded on them, so it belongs to an account that administers and '
-    + 'records no time of its own: the built-in administrator, or one holding the role "{0}". '
-    + 'Sign in with one of those to preview, run or schedule it.')
-    .replace('{0}', roleTitle(ADMINISTERING_ROLE));
 
   const schedule = $('#form-sync-schedule');
   if (schedule) {
@@ -8884,12 +13016,29 @@ const CHANGE_SENTENCES = {
   'user.role': () => t('change.userRole', 'Gave {0} the role {1}'),
   'user.password': () => t('change.userPassword', 'Set a new password for {0}'),
   'user.secondFactor': () => t('change.userSecondFactor', 'Removed the second factor of {0}'),
-  'user.managers': () => t('change.userManagers', 'Assigned managers to {0}'),
+  'user.recovered': () => t('change.userRecovered', 'Recovered {0}: a new password, no second factor'),
   'users.imported': () => t('change.usersImported', 'Imported accounts from a spreadsheet'),
+  'contact.portalGiven': () => t('change.contactPortalGiven', 'Gave {0} access to the customer portal'),
+  'contact.portalTaken': () => t('change.contactPortalTaken', 'Took the customer portal away from {0}'),
   'role.created': () => t('change.roleCreated', 'Created the role {0}'),
   'role.updated': () => t('change.roleUpdated', 'Changed the role {0}'),
   'role.deleted': () => t('change.roleDeleted', 'Deleted the role {0}'),
   'roles.imported': () => t('change.rolesImported', 'Imported roles from a spreadsheet'),
+  'catalog.created': () => t('change.catalogCreated', 'Added {0} to the general catalog'),
+  'catalog.updated': () => t('change.catalogUpdated', 'Changed {0} in the general catalog'),
+  'classDefinition.created': () => t('change.classDefinitionCreated', 'Wrote a new definition of the class {0}'),
+  'queue.created': () => t('change.queueCreated', 'Created the queue {0}'),
+  'queue.updated': () => t('change.queueUpdated', 'Changed the queue {0}'),
+  'queue.deleted': () => t('change.queueDeleted', 'Deleted the queue {0}'),
+  'state.created': () => t('change.stateCreated', 'Created the ticket state {0}'),
+  'state.updated': () => t('change.stateUpdated', 'Changed the ticket state {0}'),
+  'state.deleted': () => t('change.stateDeleted', 'Deleted the ticket state {0}'),
+  'priority.created': () => t('change.priorityCreated', 'Created the priority {0}'),
+  'priority.updated': () => t('change.priorityUpdated', 'Changed the priority {0}'),
+  'priority.deleted': () => t('change.priorityDeleted', 'Deleted the priority {0}'),
+  'type.created': () => t('change.typeCreated', 'Created the ticket type {0}'),
+  'type.updated': () => t('change.typeUpdated', 'Changed the ticket type {0}'),
+  'type.deleted': () => t('change.typeDeleted', 'Deleted the ticket type {0}'),
   'settings.maintenance': () => t('change.maintenance', 'Switched maintenance mode {1}'),
   'settings.branding': () => t('change.branding', 'Changed the appearance'),
   'settings.ldap': () => t('change.ldap', 'Changed the LDAP connection'),
@@ -8900,26 +13049,52 @@ const CHANGE_SENTENCES = {
   'settings.holidays': () => t('change.holidays', 'Changed the public holidays'),
   'settings.datasource': () => t('change.datasource', 'Changed the database connection'),
   'settings.telemetry': () => t('change.telemetry', 'Changed logging, metrics and tracing'),
-  'settings.managers': () => t('change.managers', 'Switched managers {1}'),
   'settings.push': () => t('change.push', 'Switched push notifications {1}'),
   'installation.restart': () => t('change.restart', 'Restarted the application'),
   'installation.update': () => t('change.update', 'Started an update'),
   'installation.setup': () => t('change.setup', 'Completed the setup'),
-  'user.recovered': () => t('change.userRecovered', 'Recovered {0}: a new password, no second factor'),
   'installation.backup': () => t('change.backup', 'Made a backup'),
   'installation.backupDownloaded': () => t('change.backupDownloaded', 'Downloaded a backup'),
   'installation.backupDeleted': () => t('change.backupDeleted', 'Deleted a backup'),
   'settings.backup': () => t('change.backupPlan', 'Changed when backups are made'),
+  'calendar.created': () => t('change.calendarCreated', 'Created the calendar {0}'),
+  'calendar.updated': () => t('change.calendarUpdated', 'Changed the calendar {0}'),
+  'calendar.deleted': () => t('change.calendarDeleted', 'Deleted the calendar {0}'),
+  'serviceLevel.created': () => t('change.serviceLevelCreated', 'Created the service level {0}'),
+  'serviceLevel.updated': () => t('change.serviceLevelUpdated', 'Changed the service level {0}'),
+  'serviceLevel.deleted': () => t('change.serviceLevelDeleted', 'Deleted the service level {0}'),
+  'unlockStateTypes.changed': () => t('change.unlockStateTypesChanged', 'Changed where a lock runs out'),
+  'macro.created': () => t('change.macroCreated', 'Created the macro {0}'),
+  'macro.updated': () => t('change.macroUpdated', 'Changed the macro {0}'),
+  'macro.deleted': () => t('change.macroDeleted', 'Deleted the macro {0}'),
+  'execPlan.created': () => t('change.execPlanCreated', 'Created the execution plan {0}'),
+  'execPlan.updated': () => t('change.execPlanUpdated', 'Changed the execution plan {0}'),
+  'execPlan.deleted': () => t('change.execPlanDeleted', 'Deleted the execution plan {0}'),
+  'job.created': () => t('change.jobCreated', 'Created the job {0}'),
+  'job.updated': () => t('change.jobUpdated', 'Changed the job {0}'),
+  'job.deleted': () => t('change.jobDeleted', 'Deleted the job {0}'),
+  'job.run': () => t('change.jobRun', 'Ran the job {0}'),
+  'template.created': () => t('change.templateCreated', 'Created the answer template {0}'),
+  'template.updated': () => t('change.templateUpdated', 'Changed the answer template {0}'),
+  'template.deleted': () => t('change.templateDeleted', 'Deleted the answer template {0}'),
+  'notification.created': () => t('change.notificationCreated', 'Created the notification {0}'),
+  'notification.updated': () => t('change.notificationUpdated', 'Changed the notification {0}'),
+  'notification.deleted': () => t('change.notificationDeleted', 'Deleted the notification {0}'),
+  'sysconfig.set': () => t('change.sysconfigSet', 'Changed the option {1}'),
+  'sysconfig.reset': () => t('change.sysconfigReset', 'Put the option {1} back to its default'),
 };
 
 /** One change as a sentence: what was done, to whom, and the value it kept. */
 function describeChange(entry) {
-  const target = entry.target ? (entry.target.name || entry.detail || `#${entry.target.id}`) : '';
+  // A class is named by its identifier, which the screen writes in the
+  // reader's words wherever else it shows one.
+  const named = entry.action.startsWith('classDefinition.') ? catalogValueTitle : (name) => name;
+  const target = entry.target
+    ? ((entry.target.name && named(entry.target.name)) || entry.detail || `#${entry.target.id}`)
+    : '';
   const detail = {
     'user.role': () => roleTitle(entry.detail),
     'settings.maintenance': () => (entry.detail === 'true'
-      ? t('change.on', 'on') : t('change.off', 'off')),
-    'settings.managers': () => (entry.detail === 'true'
       ? t('change.on', 'on') : t('change.off', 'off')),
     'settings.push': () => (entry.detail === 'true'
       ? t('change.on', 'on') : t('change.off', 'off')),
@@ -8939,7 +13114,7 @@ function describeChange(entry) {
  */
 async function loadSyncRuns() {
   const tbody = $('#table-sync-runs tbody');
-  if (!tbody || !administersOnly()) return;
+  if (!tbody) return;
 
   const runs = await api('/settings/ldap/sync/runs');
 
@@ -8951,7 +13126,7 @@ async function loadSyncRuns() {
         : t('sync.unattended', 'Schedule or script'),
     }),
     el('td', { class: 'num', text: String(run.deleted) }),
-    el('td', { class: 'num', text: String(run.entriesDeleted) }),
+    el('td', { class: 'num', text: String(run.ticketsReleased) }),
     el('td', { class: 'num', text: String(run.created) }),
   ));
 
@@ -8965,7 +13140,7 @@ let pendingLogo = '';
  * Shows the chosen image at the size the bar will give it, before saving.
  *
  * The left of the bar is the one place the logo is drawn - the sign-in screen
- * and the browser tab carry TimePulse's own mark - and it draws the banner-sized
+ * and the browser tab carry QubitDesk's own mark - and it draws the banner-sized
  * copy, so the preview shows the part chosen for the banner.
  */
 function setLogoPreview(dataURI) {
@@ -9087,7 +13262,7 @@ function wireAdmin() {
 
     // No reload after it, though there was one for as long as the logo was the
     // tab's icon: every engine takes that from the document it was given, so a
-    // changed logo meant a new document. The tab keeps TimePulse's mark now, and
+    // changed logo meant a new document. The tab keeps QubitDesk's mark now, and
     // the one place the logo is drawn is redrawn by loadBranding like everything
     // else on the page.
     saveForm(e.target, async () => {
@@ -9251,8 +13426,9 @@ function sayAtLeastSomething(result) {
 /**
  * Runs a directory reconciliation, or previews one.
  *
- * The real run asks for confirmation naming the exact number of accounts and
- * recorded entries at stake, because it cannot be undone.
+ * The real run asks for confirmation naming the exact number of accounts it
+ * deletes and of the unfinished tickets they leave without an owner, because it
+ * cannot be undone.
  */
 function wireDirectorySync() {
   const status = $('#sync-status');
@@ -9267,7 +13443,7 @@ function wireDirectorySync() {
     const rows = report.candidates.map((c) => el('tr', {},
       el('td', { class: 'text', text: c.name }),
       el('td', { text: c.email }),
-      el('td', { class: `num ${c.timesheets > 0 ? 'minus' : ''}`, text: String(c.timesheets) }),
+      el('td', { class: `num ${c.tickets > 0 ? 'minus' : ''}`, text: String(c.tickets) }),
     ));
 
     fillTable($('#table-sync tbody'), rows, 3, t('sync.none', 'No accounts are missing from the directory.'));
@@ -9326,12 +13502,13 @@ function wireDirectorySync() {
 
       if (preview.aborted) return;
 
-      const hours = preview.candidates.reduce((sum, c) => sum + c.timesheets, 0);
+      const tickets = preview.candidates.reduce((sum, c) => sum + c.tickets, 0);
 
       if (preview.candidates.length > 0) {
-        const question = t('sync.confirm', 'WARNING: {n} account(s) and {h} time entries will be deleted irreversibly. Continue?')
+        const question = t('sync.confirm', 'WARNING: {n} account(s) will be deleted irreversibly, '
+          + 'and {t} unfinished ticket(s) left without an owner. Continue?')
           .replace('{n}', String(preview.candidates.length))
-          .replace('{h}', String(hours));
+          .replace('{t}', String(tickets));
 
         const proceed = await confirmDialog({
           title: t('sync.confirmTitle', 'Run the synchronisation?'),
@@ -9459,9 +13636,6 @@ async function mutate(fn, successMessage, after) {
     toastFailure(err, t('msg.loadFailed', 'Could not load everything'));
   }
 }
-
-const post = (path, body, msg, after) => mutate(
-  () => api(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }), msg, after);
 
 const patch = (path, body, msg, after) => mutate(
   () => api(path, { method: 'PUT', body: JSON.stringify(body) }), msg, after);
@@ -9693,15 +13867,15 @@ const removeAfterConfirm = async (what, path, msg, after) => {
 };
 
 /**
- * Deletes a user, asking first when it would destroy recorded time.
+ * Deletes a user, asking first when it would leave tickets without an owner.
  *
  * The server refuses that deletion rather than performing it, and its refusal
- * carries the number of entries. So the question put to the administrator has
- * the real number in it rather than a general warning: "42 entries" is a
- * different decision from "some data may be lost", and only the server knows
- * which it is.
+ * carries the number of unfinished tickets the account owns. So the question put
+ * to the administrator has the real number in it rather than a general warning:
+ * "42 tickets" is a different decision from "some tickets may be affected", and
+ * only the server knows which it is.
  *
- * An account with nothing recorded is deleted straight away. Asking about
+ * An account owning no unfinished ticket is deleted straight away. Asking about
  * something with no consequence trains people to click through the dialog that
  * does have one.
  */
@@ -9723,10 +13897,10 @@ async function deleteUser(user) {
 
     // The refusal explains what is attached, so it becomes the question - the
     // server's own sentence as the detail, because it carries the count, and
-    // "42 entries" is a different decision from "some data may be lost".
+    // "42 tickets" is a different decision from "some tickets may be affected".
     const proceed = await confirmDialog({
       title: t('confirm.deleteTitle', 'Delete for good?'),
-      text: t('user.deleteConfirm', 'Delete anyway? The recorded time cannot be recovered.'),
+      text: t('user.deleteConfirm', 'Delete anyway? The tickets it owns stay, without an owner.'),
       detail: err.message,
       confirmLabel: t('action.delete', 'delete'),
     });
@@ -9735,7 +13909,7 @@ async function deleteUser(user) {
   }
 
   mutate(
-    () => api(`/users/${user.id}?purge=true`, { method: 'DELETE' }),
+    () => api(`/users/${user.id}?confirm=true`, { method: 'DELETE' }),
     done,
     refreshAll);
 }
@@ -9780,6 +13954,8 @@ function showLogin(message) {
   const error = $('#login-error');
   error.textContent = message ?? '';
   error.hidden = !message;
+
+  if ($('#public-faq').hidden) offerPublicFAQ();
 }
 
 function hideLogin() {
@@ -9800,6 +13976,9 @@ function hideLogin() {
   $('#login-error').hidden = true;
   backToThePasswordForm();
   $('#form-login').reset();
+
+  if (!$('#public-faq').hidden) closePublicFAQ();
+  $('#login-faq-offer').hidden = true;
 }
 
 /**
@@ -9836,9 +14015,9 @@ async function submitLogin(e) {
   const form = e.target;
 
   // The second step of a ticket sign-in, which asks for the code and nothing
-  // else. See askForTheCodeAfterATicket.
+  // else. See askForTheCodeAfterKerberos.
   if (form.dataset.via === 'ticket') {
-    await signInWithTicket({ totp: form.elements.totp.value.trim() });
+    await signInWithKerberos({ totp: form.elements.totp.value.trim() });
 
     return;
   }
@@ -9918,7 +14097,7 @@ async function arriveAfterSignIn() {
 }
 
 /** Whether this installation offers a sign-in with the browser's Kerberos ticket. */
-let ticketsOffered = false;
+let kerberosOffered = false;
 
 /**
  * Where a tab remembers not to try a ticket by itself.
@@ -9931,12 +14110,12 @@ let ticketsOffered = false;
  * sign-in that works clears it. sessionStorage, so it is this tab's and ends
  * with it.
  */
-const TICKET_HELD_BACK_KEY = 'timepulse.kerberos.heldBack';
+const KERBEROS_HELD_BACK_KEY = 'qubitdesk.kerberos.heldBack';
 
 /** Whether the page may try the ticket before anybody asks it to. */
-function mayTryTheTicketUnasked() {
+function mayTryKerberosUnasked() {
   try {
-    return window.sessionStorage.getItem(TICKET_HELD_BACK_KEY) === null;
+    return window.sessionStorage.getItem(KERBEROS_HELD_BACK_KEY) === null;
   } catch {
     // Without storage a sign-out could not be remembered past a reload, so the
     // page would sign straight back in. The button still works.
@@ -9944,17 +14123,17 @@ function mayTryTheTicketUnasked() {
   }
 }
 
-function holdTheTicketBack() {
+function holdKerberosBack() {
   try {
-    window.sessionStorage.setItem(TICKET_HELD_BACK_KEY, '1');
+    window.sessionStorage.setItem(KERBEROS_HELD_BACK_KEY, '1');
   } catch {
-    // Nothing to remember it in; mayTryTheTicketUnasked already says no.
+    // Nothing to remember it in; mayTryKerberosUnasked already says no.
   }
 }
 
-function letTheTicketTryAgain() {
+function letKerberosTryAgain() {
   try {
-    window.sessionStorage.removeItem(TICKET_HELD_BACK_KEY);
+    window.sessionStorage.removeItem(KERBEROS_HELD_BACK_KEY);
   } catch {
     // Nothing was stored, so nothing is held back by it.
   }
@@ -9967,14 +14146,14 @@ function letTheTicketTryAgain() {
  * configured - so a browser is never sent the Negotiate challenge by an
  * installation that could do nothing with the answer.
  */
-async function loadTicketSupport() {
+async function loadKerberosSupport() {
   try {
-    ticketsOffered = Boolean((await api('/auth/kerberos'))?.available);
+    kerberosOffered = Boolean((await api('/auth/kerberos'))?.available);
   } catch {
-    ticketsOffered = false;
+    kerberosOffered = false;
   }
 
-  $('#login-kerberos').hidden = !ticketsOffered;
+  $('#login-kerberos').hidden = !kerberosOffered;
 }
 
 /**
@@ -9990,7 +14169,7 @@ async function loadTicketSupport() {
  * nothing, because the form is the answer, and holds the ticket back for the
  * rest of the tab. Asked for with the button, a failure is said.
  */
-async function signInWithTicket({ quietly = false, totp = '' } = {}) {
+async function signInWithKerberos({ quietly = false, totp = '' } = {}) {
   let result;
 
   try {
@@ -10000,7 +14179,7 @@ async function signInWithTicket({ quietly = false, totp = '' } = {}) {
     });
   } catch (err) {
     if (quietly) {
-      holdTheTicketBack();
+      holdKerberosBack();
 
       return;
     }
@@ -10027,12 +14206,12 @@ async function signInWithTicket({ quietly = false, totp = '' } = {}) {
   // The ticket was good and the account has a second factor: the ticket stands in
   // for the password and for nothing else.
   if (result?.totpRequired) {
-    askForTheCodeAfterATicket();
+    askForTheCodeAfterKerberos();
 
     return;
   }
 
-  letTheTicketTryAgain();
+  letKerberosTryAgain();
   await arriveAfterSignIn();
 }
 
@@ -10046,7 +14225,7 @@ async function signInWithTicket({ quietly = false, totp = '' } = {}) {
  * and stop being required - a hidden field that is still required cannot be
  * submitted past, and the form would silently do nothing.
  */
-function askForTheCodeAfterATicket() {
+function askForTheCodeAfterKerberos() {
   const form = $('#form-login');
 
   form.dataset.via = 'ticket';
@@ -10086,15 +14265,15 @@ function backToThePasswordForm() {
 
   form.elements.totp.value = '';
   showCodeField($('#login-totp-field'), false);
-  $('#login-kerberos').hidden = !ticketsOffered;
+  $('#login-kerberos').hidden = !kerberosOffered;
   $('#login-passkey').hidden = !passkeysAvailable;
   $('#login-kerberos-leave').hidden = true;
   $('#login-error').hidden = true;
 }
 
 /** The two buttons a ticket sign-in adds to the form. */
-function wireTicketSignIn() {
-  $('#login-kerberos').addEventListener('click', () => signInWithTicket());
+function wireKerberosSignIn() {
+  $('#login-kerberos').addEventListener('click', () => signInWithKerberos());
   $('#login-kerberos-leave').addEventListener('click', backToThePasswordForm);
 }
 
@@ -10162,17 +14341,67 @@ function forgetTheLastAccount() {
   }
 
   cache.users = [];
-  cache.projects = [];
   cache.roles = [];
   cache.permissions = [];
-
-  // Whose time was on screen, and whom this account looked after: the next
-  // account to sign in starts on its own.
-  viewingFor = null;
-  myTeam = [];
-  delete document.documentElement.dataset.viewingFor;
-  $('#viewing-banner').hidden = true;
-  $('#viewing-for').hidden = true;
+  cache.queues = [];
+  cache.ticketQueues = [];
+  cache.states = [];
+  cache.priorities = [];
+  cache.types = [];
+  cache.found = {};
+  cache.sysconfig = [];
+  cache.calendars = [];
+  cache.levels = [];
+  cache.macros = [];
+  cache.macroSteps = [];
+  cache.stepChoices = { queues: [], states: [], priorities: [], types: [], accounts: [] };
+  cache.plans = [];
+  cache.planEvents = [];
+  cache.jobs = [];
+  cache.notifying = notifyingNothing();
+  cache.templates = [];
+  cache.templateQueues = [];
+  cache.ticketTemplates = [];
+  cache.faqCategories = [];
+  cache.faqVisibilities = [];
+  closeFAQArticle();
+  closePortalTicket();
+  generalCatalogClasses = [];
+  resetGeneralCatalogForm();
+  ciClasses = [];
+  $('#form-classdef').reset();
+  $('#table-classdef-versions tbody').replaceChildren();
+  assetLists.classes = [];
+  assetLists.deployment = [];
+  assetLists.incident = [];
+  assetLists.catalogs.clear();
+  assetLists.definitions.clear();
+  closeConfigItem();
+  $('#form-configitem-filter').reset();
+  // And the searches the last account saved, which the list emptied on the way
+  // out does not take with it.
+  cache.savedSearches = [];
+  $('#ticket-saved-delete').hidden = true;
+  // And the overview and the statistics, which count the last account's work and
+  // name its queues.
+  cache.overviewDays = [];
+  reportShown = null;
+  for (const drawn of ['#overview-tiles', '#table-overview-queues tbody', '#overview-chart',
+    '#table-overview-days tbody', '#report-tiles', '#report-chart', '#table-report-days tbody',
+    '#table-report-rows tbody']) {
+    $(drawn).replaceChildren();
+  }
+  ticketPaging.page = 1;
+  itemPaging.page = 1;
+  Object.keys(itsmChangeLists).forEach((list) => { itsmChangeLists[list] = []; });
+  closeItsmChange();
+  $('#form-itsmchange-filter').reset();
+  itsmChangePaging.page = 1;
+  closePublishedFAQ('portal');
+  $('#form-portal-faq').reset();
+  $('#portal-faq-list').replaceChildren();
+  publishedCategories.portal = [];
+  $('#told-all-read').hidden = true;
 
   // Emptied rather than left to the next render, which may never come: a table
   // whose loader returns early keeps whatever it last held.
@@ -10185,13 +14414,9 @@ function forgetTheLastAccount() {
   // between them.
   for (const body of $$('table[id] tbody')) body.replaceChildren();
 
-  // And the lists, which are not tables and were left standing. loadProjects
-  // fills four of them - the stopwatch's, the booking form's, the report form's
-  // and the entry filter's - and every loader here returns at its first line when
-  // the right is absent, so an account that may book time and may not read
-  // projects was shown the last person's project names. Those are private: a
-  // project belongs to exactly one person, which is why the record was hidden in
-  // the first place.
+  // And the lists, which are not tables and were left standing: a loader that
+  // returns at its first line when the right is absent leaves the last person's
+  // choices in every list it filled.
   //
   // Only the ones a loader filled, by the mark fillSelect leaves. The rule is the
   // same one the tables above are chosen by, and for the same reason - the legend
@@ -10206,19 +14431,8 @@ function forgetTheLastAccount() {
   // empty table offering to delete three things.
   for (const bar of $$('.bulk-bar')) bar.remove();
 
-  // And the entry list's own memory, with the line that counts it. "Showing 25 of
-  // 26 entries" is how much the last account recorded, and it is a div beside the
-  // list rather than a table, so the sweep above did not reach it: it stood over
-  // an emptied table until some loader replaced it, which for an account without
-  // timesheets:read:own never happens. How much somebody recorded is theirs, by
-  // the same reasoning that hides the project record.
-  //
-  // Through showTimesheetTally rather than by emptying the span here, so one place
-  // still knows how that line is drawn - and it takes the "load more" row down
-  // with it, which would otherwise offer to fetch the rest of somebody else's.
-  timesheetEntries = [];
-  timesheetTotal = 0;
-  showTimesheetTally();
+  // And the ticket that was open, which is neither.
+  forgetTheOpenTicket();
 
   // And an enrolment somebody was half way through. The panel holds a shared
   // secret, the otpauth URI that carries it together with the account's address,
@@ -10238,10 +14452,6 @@ function forgetTheLastAccount() {
   // a working credential rather than an enrolment nobody finished.
   forgetTheTokenValue();
 
-  // And a calendar feed's address, which is one too - a key to somebody's days -
-  // with what the card said about it.
-  forgetTheCalendarFeed();
-
   // And the installation's address as a code, so that no code outlives a session.
   forgetTheAndroidCode();
 
@@ -10253,71 +14463,37 @@ function forgetTheLastAccount() {
   // theirs into one that shows it.
   hideEveryRevealedPassword();
 
-  // And where the calendar was left. It is worked out once and remembered, and
-  // the arrows write to it, so somebody who paged back to March and signed out
-  // left March for whoever signed in next.
-  //
-  // Not only untidy: the memo was made in the previous account's zone, and its
-  // own comment says why that is the whole reason the month is worked out late
-  // rather than early - "which month somebody is in is a question about their own
-  // zone, and the zone is not known until they are signed in". Held across a
-  // sign-out it is the same wrong answer that comment was written against,
-  // reached from the other side.
-  calendarMonth = null;
-
-  // And the month it drew. The grid is not a table, so emptying the tables left
-  // its days and their projects, and an account that may not read entries never
-  // draws over them - loadCalendar returns first.
-  $('#calendar-days').replaceChildren();
-  $('#calendar-summary').textContent = '';
-  $('#calendar-day-card').hidden = true;
-
-  // And the greeting, which names whoever it greeted beside their day's hours
-  // and last entries, and is drawn again only when somebody arrives on it.
+  // And the greeting, which names whoever it greeted and is drawn again only
+  // when somebody arrives on it.
   $('#welcome-title').textContent = '';
-  $('#welcome-today').textContent = '';
-  $('#welcome-recent-list').replaceChildren();
-  $('#welcome-recent').hidden = true;
-
-  // The week beside them, and the week on the grid: this account's hours, which
-  // must not wait behind the sign-in screen for whoever comes next.
-  $('#welcome-week-bars').replaceChildren();
-  $('#welcome-week').hidden = true;
-  forgetTheWeek();
-
-  // And the templates: the sweeps above empty the picker and the card's rows, and
-  // this hides the two, which would otherwise stand empty for the next account.
-  forgetTheTemplates();
-
-  // And how many of the last account's entries were waiting for a project.
-  unassignedEntries = 0;
-  drawUnassigned();
-
-  // And their leave, whose figures are theirs.
-  forgetTheVacation();
-
-  // And their year, tile by tile.
-  forgetTheYearMap();
-
-
 
   // And each form's own reset, which resetting the form does not reach: a hidden
   // field keeps its value through one, so a form left correcting a record kept
   // the record's id under its "edit" heading - and an administrator filling it in
-  // to add somebody changed the account their predecessor had open. After the
-  // caches and the account are gone, because two of them draw from those.
+  // to add somebody changed the account their predecessor had open. Every form
+  // holding a hidden id, which is how the sign-out case finds them; after the
+  // caches and the account are gone, because some of them draw from those.
   resetUserForm();
   resetRoleForm();
-  resetProjectForm();
-  resetTimesheetForm();
+  resetQueueForm();
+  for (const kind of Object.keys(CATALOGS)) resetCatalogForm(kind);
+  for (const kind of Object.keys(CUSTOMER_FORMS)) resetCustomerForm(kind);
+  resetSysConfigForm();
+  resetCalendarForm();
+  resetSlaForm();
+  resetMacroForm();
+  resetPlanForm();
+  resetJobForm();
+  resetNotificationForm();
+  resetTemplateForm();
+  resetFAQArticleForm();
+  resetFAQCategoryForm();
+  resetTicketForm();
 
   // And the imports this account had checked. The cards are not forms, so the
   // reset of every form never reached the file, the verdict or the button that
   // writes it.
   forgetEveryImport();
-
-  // And what it evaluated, which nothing asks for again at the next sign-in.
-  forgetEveryEvaluation();
 
   // Last, after the tables are emptied: the sign-out applies the language next,
   // and every draw still registered would put its account's rows back.
@@ -10355,7 +14531,7 @@ async function doLogout() {
   // sign them straight back in with the ticket. Here rather than wherever a
   // session ends, because a session the server ended is not a choice anybody
   // made.
-  holdTheTicketBack();
+  holdKerberosBack();
 
   handBackTheScreen();
 }
@@ -10427,20 +14603,6 @@ function handBackTheScreen(message) {
   // under it. The reason a session ends is said on the sign-in form instead.
   $('#toast')?.replaceChildren();
 
-  // And the stopwatch, which is the fifth of them. It is cleared in one place
-  // only - inside renderTimer, on a pass where nothing is running - so signing
-  // out with a clock going left setInterval firing once a second, painting one
-  // person's elapsed time onto a screen that had been handed back.
-  //
-  // What would have cleared it is the next account's loadTimer, and that returns
-  // at its first line for an account without timesheets:write:own. For those it
-  // was never cleared at all.
-  //
-  // Through renderTimer rather than clearing the interval here, so there is one
-  // place that knows how the clock is put away.
-  runningTimer = null;
-  renderTimer();
-
   // And the notice those two could have put up. It is about what the account
   // that is leaving may do, and it must not be waiting for whoever signs in at
   // the same desk next.
@@ -10464,28 +14626,6 @@ function handBackTheScreen(message) {
   forgetEveryDraft();
 
   for (const form of $$('form')) form.reset();
-
-  // And the typed work that belongs to no form, which the line above cannot
-  // reach. The stopwatch's project and description sit beside the clock rather
-  // than in a form - starting a timer is a button, not a submission - and that is
-  // the whole reason the loose-draft machinery exists for them.
-  //
-  // So the store was emptied and the screen was not: signing out left the
-  // description standing, and the next person at that desk signed in and found
-  // it. Free text about what somebody was doing is exactly what must not be
-  // handed on, and it is the same failure the paragraph above describes for the
-  // forms - fixed there, and not here, because these came later and are
-  // deliberately not forms.
-  //
-  // Cleared by the same declaration that decides what is kept, data-keep, so the
-  // two cannot drift apart. A select with no empty option would be left showing
-  // nothing at all, which reads as broken rather than as cleared, so it goes back
-  // to its first entry instead.
-  for (const field of $$('[data-keep]')) {
-    field.value = '';
-
-    if (field.tagName === 'SELECT' && field.selectedIndex < 0) field.selectedIndex = 0;
-  }
 
   // And what this installation is waiting to restart into, which is the
   // administration of the installation and none of the next person's business.
@@ -10642,7 +14782,7 @@ async function loadLanguages() {
  * Each step names a real selector rather than describing a control in prose,
  * so a step whose target has been removed can be detected and dropped instead
  * of pointing at nothing. `view` switches to the tab first, because explaining
- * the calendar while the timesheet is on screen helps nobody.
+ * a card on one screen while another is showing helps nobody.
  *
  * `permission` keeps the tour honest about what this person can actually do:
  * a user has no Roles tab, and a tour that mentions one is a tour that
@@ -10654,8 +14794,8 @@ const TOUR_STEPS = [
     view: null,
     title: () => t('tour.welcome.title', 'The way back'),
     text: () => t('tour.welcome.text',
-      'The title takes you to the welcome screen from wherever you are. It says what '
-      + 'today already has on it, and it can start this walk again.'),
+      'The title takes you to the welcome screen from wherever you are, and the welcome '
+      + 'screen can start this walk again.'),
   },
   {
     target: '#tabs',
@@ -10666,199 +14806,13 @@ const TOUR_STEPS = [
       + 'so this bar is shorter for some people than for others.'),
   },
   {
-    target: '#timesheets-tabs',
-    view: 'timesheets',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.timesheetsTabs.title', 'Time entries, by task'),
-    text: () => t('tour.timesheetsTabs.text',
-      'Recording, templates and the spreadsheet each have a tab of their own. The walk '
-      + 'opens each one as it gets there.'),
-  },
-  {
-    target: '#timer-card',
-    view: 'timesheets',
-    permission: 'timesheets:write:own',
-    title: () => t('tour.timer.title', 'The stopwatch'),
-    text: () => t('tour.timer.text',
-      'Start it when you start, stop it when you are done, and it books the time it '
-      + 'measured. It keeps running if you close the browser, because it runs on the '
-      + 'server rather than in this tab.'),
-  },
-  {
-    target: '#form-timesheet',
-    view: 'timesheets',
-    permission: 'timesheets:write:own',
-    title: () => t('tour.book.title', 'Booking time'),
-    text: () => t('tour.book.text',
-      'Pick a date, enter the hours, done. A project is optional, so hours can be recorded '
-      + 'now and sorted later. What you write is what is stored, to the minute: nothing '
-      + 'here rounds to a quarter of an hour.'),
-  },
-  {
-    target: '#table-timesheets',
-    view: 'timesheets',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.entries.title', 'Your entries'),
-    text: () => t('tour.entries.text',
-      'Everything you booked, filterable by project. Click a row to correct it, or tick '
-      + 'several and delete them in one go. It stays yours to change: there is nobody to '
-      + 'submit it to.'),
-  },
-  {
-    target: '#templates-card',
-    view: 'timesheets',
-    permission: 'timesheets:write:own',
-    title: () => t('tour.templates.title', 'Templates'),
-    text: () => t('tour.templates.text',
-      'Bookings you make often, kept with "Save as template" in the booking form on the '
-      + 'Record tab. A template only fills that form in: nothing is booked until you press Book.'),
-  },
-  {
-    target: '#workbook-card',
-    view: 'timesheets',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.sheet.title', 'In and out as a spreadsheet'),
-    text: () => t('tour.sheet.text',
-      'Your hours as a spreadsheet, with the column headings in the language you are '
-      + 'reading. An import shows you what it would change before it changes anything. '
-      + 'Every table worth moving this way has the same pair on its own screen.'),
-  },
-  {
-    target: '#week-card',
-    view: 'week',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.week.title', 'The week as a grid'),
-    text: () => t('tour.week.text',
-      'A row for each project and a column for each day. A number typed into an empty cell '
-      + 'books it, and a changed number corrects the entry behind it.'),
-  },
-  {
-    target: '#calendar-tabs',
-    view: 'calendar',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.calendarTabs.title', 'The calendar, by subject'),
-    text: () => t('tour.calendarTabs.text',
-      'The month, your working time, and your leave and days away each have a tab of '
-      + 'their own.'),
-  },
-  {
-    target: '#calendar-days',
-    view: 'calendar',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.calendar.title', 'The month at a glance'),
-    text: () => t('tour.calendar.text',
-      'Which days have hours on them, and how many. Click a day to see what is behind '
-      + 'it, and click one of those entries to correct it.'),
-  },
-  {
-    target: '#workday-card',
-    view: 'calendar',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.workday.title', 'Your working time'),
-    text: () => t('tour.workday.text',
-      'When you began, when you finished and how long your breaks were, beside the hours you '
-      + 'booked - and as a PDF. Days past a limit of the Working Hours Act are marked.'),
-  },
-  {
-    target: '#vacation-card',
-    view: 'calendar',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.leave.title', 'Your leave'),
-    text: () => t('tour.leave.text',
-      'How many days of leave a year gives you, what was carried over, taken and planned, '
-      + 'and how many are left.'),
-  },
-  {
-    target: '#absence-card',
-    view: 'calendar',
-    permission: 'timesheets:write:own',
-    title: () => t('tour.absence.title', 'Days away'),
-    text: () => t('tour.absence.text',
-      'Leave, illness and days taken against overtime, recorded over a range. Only the days '
-      + 'your week asks something of count, so a fortnight of leave is ten working days.'),
-  },
-  {
-    target: '#chart-days',
-    view: 'overtime',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.stats.title', 'Your own figures'),
-    text: () => t('tour.stats.text',
-      'Hours per day, per project and per activity, over any period you choose. Yours alone, '
-      + 'and nobody else sees them.'),
-  },
-  {
-    target: '#year-card',
-    view: 'overtime',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.year.title', 'The year at a glance'),
-    text: () => t('tour.year.text',
-      'Every day of the year as a tile, darker the more you booked, with public holidays and '
-      + 'days away marked - and the year so far beside the last one up to the same day.'),
-  },
-  {
-    target: '#form-overtime',
-    view: 'overtime',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.overtime.title', 'Your overtime balance'),
-    text: () => t('tour.overtime.text',
-      'Booked hours against what the day asks of you: your weekly plan, or without one '
-      + 'your daily target from Monday to Friday. Only days with bookings count until you choose '
-      + 'a day under My account; from then on every working day counts, and public holidays and '
-      + 'absences ask less.'),
-  },
-  {
-    target: '#form-project',
-    view: 'projects',
-    permission: 'projects:write',
-    title: () => t('tour.projects.title', 'Your projects'),
-    text: () => t('tour.projects.text',
-      'Somewhere to put your hours, and yours alone: only you see them and only you book '
-      + 'on them. Two people on the same job keep a project each.'),
-  },
-  {
-    target: '#table-projects',
-    view: 'projects',
-    permission: 'projects:read',
-    title: () => t('tour.projectList.title', 'Where each project stands'),
-    text: () => t('tour.projectList.text',
-      'Only an active project takes hours. Complete one when the work is done, and archive it '
-      + 'once it is completed: its hours stay readable.'),
-  },
-  {
-    target: '#report-tabs',
-    view: 'report',
-    permission: 'reports:read:own',
-    title: () => t('tour.reportTabs.title', 'Reports, in two parts'),
-    text: () => t('tour.reportTabs.text',
-      'The report and the statement of work each have a tab of their own.'),
-  },
-  {
-    target: '#form-report',
-    view: 'report',
-    permission: 'reports:read:own',
-    title: () => t('tour.report.title', 'Reports'),
-    text: () => t('tour.report.text',
-      'What you booked over a period: on one project, across all of them at once, or only '
-      + 'the hours you never assigned to one. Your own hours - there is no breakdown per '
-      + 'colleague, because nobody sees what anybody else recorded.'),
-  },
-  {
-    target: '#form-statement',
-    view: 'report',
-    permission: 'reports:read:own',
-    title: () => t('tour.statement.title', 'A statement of work'),
-    text: () => t('tour.statement.text',
-      'The hours of your billable projects in a period, at their rate and totalled per '
-      + 'currency. Not an invoice: the number, the tax and the customer are yours to write.'),
-  },
-  {
     target: '#form-user',
     view: 'users',
     permission: 'users:write',
     title: () => t('tour.users.title', 'The people who work here'),
     text: () => t('tour.users.text',
-      'Add an account and give it a role. It starts on the instance default, and its owner '
-      + 'changes their own working times from My account.'),
+      'Add an account and give it a role: an agent works on tickets, a customer reaches the '
+      + 'portal and nothing else.'),
   },
   {
     target: '#table-users',
@@ -10880,63 +14834,237 @@ const TOUR_STEPS = [
       + 'hidden button. Tick what the role may do; every account holding it changes with it.'),
   },
   {
+    target: '#overview-tabs',
+    view: 'overview',
+    permission: 'reports:read',
+    title: () => t('tour.overviewTabs.title', 'The overview, on two tabs'),
+    text: () => t('tour.overviewTabs.text',
+      'At a glance shows your work and what waits in your queues today; the statistics count any span of days. '
+      + 'The walk opens each as it gets there.'),
+  },
+  {
+    target: '#overview-mine-card',
+    view: 'overview',
+    permission: 'tickets:read',
+    title: () => t('tour.overviewMine.title', 'Your work at a glance'),
+    text: () => t('tour.overviewMine.text',
+      'What is yours and still to do, what you answer for, what you watch and what is overdue in your queues. '
+      + 'Each number opens the tickets it counts.'),
+  },
+  {
+    target: '#overview-queues-card',
+    view: 'overview',
+    permission: 'tickets:read',
+    title: () => t('tour.overviewQueues.title', 'What waits in each queue'),
+    text: () => t('tour.overviewQueues.text',
+      'Every queue you reach, with what is new, being worked on, waiting and overdue in it. '
+      + 'A queue\'s name opens its tickets.'),
+  },
+  {
+    target: '#overview-days-card',
+    view: 'overview',
+    permission: 'tickets:read',
+    title: () => t('tour.overviewDays.title', 'Whether the work is kept up with'),
+    text: () => t('tour.overviewDays.text',
+      'The tickets opened and finished on each of the last fourteen days. Point at a day for its numbers, '
+      + 'or read them all as a table beneath.'),
+  },
+  {
+    target: '#report-card',
+    view: 'overview',
+    permission: 'reports:read',
+    title: () => t('tour.reportSpan.title', 'Statistics over a span'),
+    text: () => t('tour.reportSpan.text',
+      'Choose a span of days and what to count by. The figures say how many tickets were opened and finished in it, '
+      + 'how many first answers and solutions came in time, and how long they took.'),
+  },
+  {
+    target: '#report-days-card',
+    view: 'overview',
+    permission: 'reports:read',
+    title: () => t('tour.reportDays.title', 'The span as columns'),
+    text: () => t('tour.reportDays.text',
+      'The tickets opened and finished in the span, by day - by week or by month over a longer one. '
+      + 'Point at a column for its numbers, or read them as a table beneath.'),
+  },
+  {
+    target: '#report-rows-card',
+    view: 'overview',
+    permission: 'reports:read',
+    title: () => t('tour.reportRows.title', 'Broken down by what you chose'),
+    text: () => t('tour.reportRows.text',
+      'The same figures for each queue, priority, type, owner, organisation or service level the span\'s tickets carry.'),
+  },
+  {
+    target: '#ticket-list-card',
+    view: 'tickets',
+    permission: 'tickets:read',
+    title: () => t('tour.tickets.title', 'The tickets of your queues'),
+    text: () => t('tour.tickets.text',
+      'Every ticket in a queue your role reaches, what is still to do first. Open one by its number '
+      + 'to read what was written in it, write in it, and see what happened to it.'),
+  },
+  {
+    target: '#form-ticket',
+    view: 'tickets',
+    permission: 'tickets:create',
+    title: () => t('tour.openTicket.title', 'Opening a ticket'),
+    text: () => t('tour.openTicket.text',
+      'A title, the queue it goes to and what was said - the rest starts as the installation '
+      + 'ships it, and can be corrected here once the ticket is open.'),
+  },
+  {
+    target: '#organisation-card',
+    view: 'customers',
+    permission: 'customers:read',
+    title: () => t('tour.organisations.title', 'Who tickets come from'),
+    text: () => t('tour.organisations.text',
+      'The companies your customers work for, each with its customer number where it has one. An '
+      + 'organisation that contacts or tickets belong to is made invalid rather than deleted.'),
+  },
+  {
+    target: '#contact-card',
+    view: 'customers',
+    permission: 'customers:read',
+    title: () => t('tour.contacts.title', 'The people behind the tickets'),
+    text: () => t('tour.contacts.text',
+      'A ticket is for a contact, and for the organisation the contact belongs to unless it says otherwise. '
+      + 'Deleting a contact keeps the tickets for them, for nobody. A contact given portal access signs in '
+      + 'with their address and follows their own tickets there.'),
+  },
+  {
+    target: '#told-card',
+    view: 'tickets',
+    permission: 'tickets:read',
+    title: () => t('tour.told.title', 'What you were told'),
+    text: () => t('tour.told.text',
+      'What the notifications tell you about the tickets around you waits here until you have read it. Opening a '
+      + 'ticket from here reads it, and where you let this browser, it is pushed to you as well.'),
+  },
+  {
+    target: '#portal-list-card',
+    view: 'portal',
+    permission: 'portal:use',
+    title: () => t('tour.portal.title', 'Your tickets'),
+    text: () => t('tour.portal.text',
+      'Every ticket opened for you, the ones still being worked on first. Open one to read what the service desk '
+      + 'answered and to answer it.'),
+  },
+  {
+    target: '#portal-faq-card',
+    view: 'portal',
+    permission: 'portal:use',
+    title: () => t('tour.portalFAQ.title', 'Answers already written'),
+    text: () => t('tour.portalFAQ.text',
+      'What the service desk has written down for customers, searched by words and by category. It may answer '
+      + 'your question before you open a ticket.'),
+  },
+  {
+    target: '#portal-new-card',
+    view: 'portal',
+    permission: 'portal:use',
+    title: () => t('tour.portalNew.title', 'Something new'),
+    text: () => t('tour.portalNew.text',
+      'Open a ticket here: what it is about, what happened, and any files that show it.'),
+  },
+  {
+    target: '#faq-card',
+    view: 'faq',
+    permission: 'faq:read',
+    title: () => t('tour.faq.title', 'What is known'),
+    text: () => t('tour.faq.text',
+      'The knowledge base, searched by the words in an article\'s title, keywords or text. Each article says who '
+      + 'may read it: the staff alone, customers signed in as well, or anybody.'),
+  },
+  {
+    target: '#form-faq-article',
+    view: 'faq',
+    permission: 'faq:write',
+    title: () => t('tour.faqArticle.title', 'Writing it down'),
+    text: () => t('tour.faqArticle.text',
+      'An article is for the staff alone unless you say otherwise. One that has stopped being true is made '
+      + 'invalid: then only those who write the knowledge base see it.'),
+  },
+  {
+    target: '#faq-category-card',
+    view: 'faq',
+    permission: 'faq:write',
+    title: () => t('tour.faqCategories.title', 'Where it is filed'),
+    text: () => t('tour.faqCategories.text',
+      'Categories are headings, each under one or none. One that holds articles is made invalid rather than '
+      + 'deleted.'),
+  },
+  {
+    target: '#queue-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.queues.title', 'Where tickets go'),
+    text: () => t('tour.queues.text',
+      'A queue is where tickets are sorted to, and each role reaches the queues it is given - to '
+      + 'read their tickets, or to work in them. A role with no access does not see a queue at all.'),
+  },
+  {
+    target: '#state-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.states.title', 'Where a ticket can stand'),
+    text: () => t('tour.states.text',
+      'Every state has a type, and the type is what the application does with a ticket in it. '
+      + 'Add the states your desk works with; the ones the application moves tickets into by '
+      + 'itself ship with it and stay as they are.'),
+  },
+  {
+    target: '#unlock-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.unlockTypes.title', 'Where a lock runs out'),
+    text: () => t('tour.unlockTypes.text',
+      'The state types a queue\'s unlock time frees a lock in. New and open ship with the application; switch on '
+      + 'another, and a lock nobody uses runs out there too.'),
+  },
+  {
+    target: '#priority-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.priorities.title', 'How urgent a ticket is'),
+    text: () => t('tour.priorities.text',
+      'Priorities are ordered by their level, 1 the most urgent. Normal is what a ticket starts '
+      + 'with when nobody says otherwise.'),
+  },
+  {
+    target: '#type-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.types.title', 'What kind of ticket it is'),
+    text: () => t('tour.types.text',
+      'Types are words to sort, filter and count by - nothing behaves differently by type. A '
+      + 'value tickets carry is made invalid rather than deleted, here as in the two cards above.'),
+  },
+  {
     target: '#settings-tabs',
     view: 'settings',
     title: () => t('tour.settingsTabs.title', 'My account, by subject'),
     text: () => t('tour.settingsTabs.text',
-      'Working time, how you sign in, apps and the calendar, and your data each have a '
-      + 'tab of their own. You only see the tabs that have something for you.'),
+      'What you are told and your timezone, how you sign in, apps and tokens, and your data '
+      + 'each have a tab of their own. You only see the tabs that have something for you.'),
   },
   {
-    target: '#form-working-times',
+    target: '#notify-card',
     view: 'settings',
-    title: () => t('tour.account.title', 'My account'),
-    text: () => t('tour.account.text',
-      'Your daily target and your daily ceiling. The target is what the overtime balance '
-      + 'is measured against, and nobody but you sets it.'),
-  },
-  {
-    target: '#form-balance-bounds',
-    view: 'settings',
-    permission: 'settings:write:own',
-    title: () => t('tour.bounds.title', 'Bounds for your balance'),
-    text: () => t('tour.bounds.text',
-      'Two figures your running balance should stay between, as on a flexitime account. '
-      + 'While it lies outside them, a banner says so on every screen.'),
-  },
-  {
-    target: '#form-reminders',
-    view: 'settings',
-    permission: 'timesheets:write:own',
-    title: () => t('tour.reminders.title', 'Reminders'),
-    text: () => t('tour.reminders.text',
-      'A banner when the stopwatch has run longer than you choose, or when your last working '
-      + 'day has nothing booked on it. For the stopwatch, this browser can notify you as well.'),
-  },
-  {
-    target: '#schedule-card',
-    view: 'settings',
-    permission: 'settings:write:own',
-    title: () => t('tour.schedule.title', 'Your week'),
-    text: () => t('tour.schedule.text',
-      'How many hours each weekday asks of you, for the overtime balance. A plan applies from '
-      + 'the day you choose; the weeks before it keep the plan they had.'),
+    title: () => t('tour.notify.title', 'Being told'),
+    text: () => t('tour.notify.text',
+      'What happens to your tickets is said on the screen while a page is open. Here this '
+      + 'browser can say it as a notification as well, and receive it while it is closed '
+      + 'where the installation allows that.'),
   },
   {
     target: '#form-my-timezone',
     view: 'settings',
     title: () => t('tour.myZone.title', 'Your timezone'),
     text: () => t('tour.myZone.text',
-      'It decides which calendar day a booking lands on. It is taken from your browser the '
-      + 'first time you sign in, and this is where you disagree with that.'),
-  },
-  {
-    target: '#form-my-holidays',
-    view: 'settings',
-    title: () => t('tour.myHolidays.title', 'Your public holidays'),
-    text: () => t('tour.myHolidays.text',
-      'The public holidays where you work: marked in the calendar and on the week, and left '
-      + 'out of your leave. Leave it on the installation\'s unless you work somewhere else.'),
+      'Moments are written in it for you: when a ticket arrived, when a deadline falls. It is '
+      + 'taken from your browser the first time you sign in, and this is where you disagree '
+      + 'with that.'),
   },
   {
     target: '#form-password',
@@ -10980,34 +15108,17 @@ const TOUR_STEPS = [
     title: () => t('tour.install.title', 'The Android app'),
     text: () => t('tour.install.text',
       'Scan this code with an Android phone to download the app of the release this '
-      + 'installation runs. It shows this interface, reminds you with notifications, and at '
-      + 'every start offers its new version once this installation has been updated.'),
-  },
-  {
-    target: '#feed-card',
-    view: 'settings',
-    permission: 'timesheets:read:own',
-    title: () => t('tour.feed.title', 'Your days in your own calendar'),
-    text: () => t('tour.feed.text',
-      'An address that puts your booked hours and your days away into Outlook, Google or your '
-      + 'phone\'s calendar. Whoever has it can read them, so it is shown only once.'),
+      + 'installation runs. It shows this interface, and at every start offers its new '
+      + 'version once this installation has been updated.'),
   },
   {
     target: '#token-card',
     view: 'settings',
     title: () => t('tour.tokens.title', 'Tokens for scripts and the app'),
     text: () => t('tour.tokens.text',
-      'A personal token lets a script book time as you, and connects the Android app that '
+      'A personal token lets a script use the API as you, and connects the Android app that '
       + 'scans its code. It carries exactly the rights your role has when it is used, and is '
       + 'shown once, when it is created.'),
-  },
-  {
-    target: '#managers-card',
-    view: 'settings',
-    title: () => t('tour.myManagers.title', 'Who may see your time'),
-    text: () => t('tour.myManagers.text',
-      'Nobody but you, unless the installation has managers and an administrator assigns you '
-      + 'one. Whoever may would be named here.'),
   },
   {
     target: '#export-card',
@@ -11032,17 +15143,9 @@ const TOUR_STEPS = [
     permission: 'settings:manage',
     title: () => t('tour.branding.title', 'What this installation looks like'),
     text: () => t('tour.branding.text',
-      'What follows TimePulse, banner, logo and footer. The logo stands at the left of the header once '
-      + "somebody has signed in; the browser tab and the sign-in screen always show TimePulse's own."),
-  },
-  {
-    target: '#form-managers',
-    view: 'admin',
-    permission: 'settings:manage',
-    title: () => t('tour.managers.title', 'Managers'),
-    text: () => t('tour.managers.text',
-      'Switched on, a manager looks after the time and projects of the accounts you assign '
-      + 'to them under Users. A manager learns that a day was away, never why.'),
+      'What follows QubitDesk, banner, logo and footer. The logo stands at the left of '
+      + "the header once somebody has signed in; the browser tab and the sign-in screen always "
+      + "show QubitDesk's own."),
   },
   {
     target: '#form-push',
@@ -11050,7 +15153,7 @@ const TOUR_STEPS = [
     permission: 'settings:manage',
     title: () => t('tour.push.title', 'Push notifications'),
     text: () => t('tour.push.text',
-      'Whether the reminders reach a browser that is closed. Off until you switch it on, '
+      'Whether notifications reach a browser that is closed. Off until you switch it on, '
       + 'because every push leaves through the push service of the browser\'s maker.'),
   },
   {
@@ -11059,8 +15162,9 @@ const TOUR_STEPS = [
     permission: 'settings:manage',
     title: () => t('tour.zone.title', 'The installation\'s timezone'),
     text: () => t('tour.zone.text',
-      'Which calendar day a booking falls on, for everybody who has not chosen their own '
-      + 'under My account.'),
+      'The day a ticket\'s number is taken from and the zone the service hours are read in - '
+      + 'and the zone moments are written in for everybody who has not chosen their own under '
+      + 'My account.'),
   },
   {
     target: '#form-holidays',
@@ -11068,26 +15172,26 @@ const TOUR_STEPS = [
     permission: 'settings:manage',
     title: () => t('tour.holidays.title', 'The installation\'s public holidays'),
     text: () => t('tour.holidays.text',
-      'A country and, where its holidays differ, a state or a region, for everybody who has '
-      + 'not chosen their own. Until a choice is saved, nobody keeps any.'),
+      'A country and, where its holidays differ, a state or a region. The service hours leave '
+      + 'its public holidays out; until a choice is saved, none is left out.'),
+  },
+  {
+    target: '#sysconfig-card',
+    view: 'admin',
+    permission: 'settings:manage',
+    title: () => t('tour.sysconfig.title', 'How the installation behaves'),
+    text: () => t('tour.sysconfig.text',
+      'The options of the system configuration with their defaults, under the names KIX18 gives them. '
+      + 'Only what was changed is kept, and putting an option back to its default forgets it again.'),
   },
   {
     target: '#form-ldap',
     view: 'admin',
     permission: 'settings:manage',
     title: () => t('tour.ldap.title', 'Signing in against a directory'),
-
-    // Two sentences, because the card under this one is not on every
-    // administrator's screen, and the tour is walked by the ones it is missing
-    // for: an account that only administers gets the setup wizard instead.
-    text: () => (administersOnly()
-      ? t('tour.ldap.text',
-        'Accounts can come from LDAP instead of being created here. Below it, the '
-        + 'reconciliation runs on a schedule, and can be previewed before it is run by hand.')
-      : t('tour.ldap.textElsewhere',
-        'Accounts can come from LDAP instead of being created here. Reconciling them deletes '
-        + 'accounts, and is left to the built-in administrator or the role "{0}".')
-        .replace('{0}', roleTitle(ADMINISTERING_ROLE))),
+    text: () => t('tour.ldap.text',
+      'Accounts can come from LDAP instead of being created here. Below it, the '
+      + 'reconciliation runs on a schedule, and can be previewed before it is run by hand.'),
   },
   {
     target: '#form-openid',
@@ -11142,8 +15246,8 @@ const TOUR_STEPS = [
     permission: 'settings:manage',
     title: () => t('tour.limits.title', 'Limits and lifetimes'),
     text: () => t('tour.limits.text',
-      'How long a session lasts, how many requests a caller may make, and the figures a '
-      + 'new account starts on.'),
+      'How long a session lasts, how many requests a caller may make, and how much of the '
+      + 'directory one synchronisation may remove.'),
   },
   {
     target: '#form-datasource',
@@ -11182,6 +15286,117 @@ const TOUR_STEPS = [
       + 'when something refused and the reason was not on screen.'),
   },
   {
+    target: '#calendar-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.calendars.title', 'When the service is given'),
+    text: () => t('tour.calendars.text',
+      'The hours of each weekday, less public holidays and free days of its own, in which a service level\'s '
+      + 'minutes are counted. A calendar that names no timezone or public holidays follows the installation\'s.'),
+  },
+  {
+    target: '#sla-card',
+    view: 'ticketsetup',
+    permission: 'queues:write',
+    title: () => t('tour.sla.title', 'What a ticket is owed'),
+    text: () => t('tour.sla.text',
+      'Minutes until the first answer and until the solution, counted in the level\'s calendar, in the installation\'s '
+      + 'where it names none, or around the clock. A queue '
+      + 'names the level its new tickets start with, and a ticket past its moment is marked overdue.'),
+  },
+  {
+    target: '#notification-card',
+    view: 'communication',
+    permission: 'communication:write',
+    title: () => t('tour.notifications.title', 'Who is told what'),
+    text: () => t('tour.notifications.text',
+      'A notification tells the agents around a ticket - its owner, those watching it, those who work in its queue - '
+      + 'when something happens to it, each in their language. It is shown to them here and pushed to their browsers.'),
+  },
+  {
+    target: '#template-card',
+    view: 'communication',
+    permission: 'communication:write',
+    title: () => t('tour.templates.title', 'Answers written once'),
+    text: () => t('tour.templates.text',
+      'An answer template is offered to whoever writes in a ticket of its queue, or of every queue, with the '
+      + 'ticket\'s placeholders filled in their words. It starts an article; it does not send one.'),
+  },
+  {
+    target: '#configitem-card',
+    view: 'assets',
+    permission: 'assets:read',
+    title: () => t('tour.configitem.title', 'The inventory'),
+    text: () => t('tour.configitem.text',
+      'The configuration items, a page of them by class and words, each opened below the list in a form drawn '
+      + 'from its class\'s definition. A change is kept as the item\'s next version, and every version stays '
+      + 'readable as it was written.'),
+  },
+  {
+    target: '#catalog-card',
+    view: 'assets',
+    permission: 'catalog:write',
+    title: () => t('tour.catalog.title', 'What there is to pick from'),
+    text: () => t('tour.catalog.text',
+      'The general catalog: the classes a configuration item can be of, where in its life one is and how it is '
+      + 'doing, and the lists its details pick from. A value nobody should pick any more is retired, never deleted.'),
+  },
+  {
+    target: '#classdef-card',
+    view: 'assets',
+    permission: 'catalog:write',
+    title: () => t('tour.classdef.title', 'What an item holds'),
+    text: () => t('tour.classdef.text',
+      'Each class\'s definition: the attributes an item of it holds, written as one document. A change is kept as '
+      + 'a new version, so an item written before it is still read the way it was written.'),
+  },
+  {
+    target: '#itsmchange-card',
+    view: 'changes',
+    permission: 'changes:read',
+    title: () => t('tour.itsmchange.title', 'Changes and their work orders'),
+    text: () => t('tour.itsmchange.text',
+      'The changes to what the organisation runs, a page of them by state and words, each opened below the list '
+      + 'with the work orders it is carried out in. A change moves on only as its states allow, and whoever a '
+      + 'work order is given to reports on it here.'),
+  },
+  {
+    target: '#macro-card',
+    view: 'automation',
+    permission: 'automation:write',
+    title: () => t('tour.macros.title', 'What the application does by itself'),
+    text: () => t('tour.macros.text',
+      'A macro is a run of steps taken on a ticket, in order. A job runs macros on the tickets it finds, as the '
+      + 'application, so every step meets the rules a person\'s change meets and is written down with the ticket.'),
+  },
+  {
+    target: '#plan-card',
+    view: 'automation',
+    permission: 'automation:write',
+    title: () => t('tour.plans.title', 'When jobs run'),
+    text: () => t('tour.plans.text',
+      'An execution plan runs the jobs that name it at times of day on the weekdays it names, in the '
+      + 'installation\'s timezone, or when something happens to a ticket - once a person\'s change is written.'),
+  },
+  {
+    target: '#job-card',
+    view: 'automation',
+    permission: 'automation:write',
+    title: () => t('tour.jobs.title', 'What runs the macros'),
+    text: () => t('tour.jobs.text',
+      'A job takes the tickets its criteria name - by queue, state, priority, type and lock - and runs its macros '
+      + 'on each in order, when one of its plans says so or when you run it here.'),
+  },
+  {
+    target: '#run-card',
+    view: 'automation',
+    permission: 'automation:write',
+    title: () => t('tour.runs.title', 'What the jobs did'),
+    text: () => t('tour.runs.text',
+      'Every run is kept for thirty days with the steps it could not take, each with the reason a person would '
+      + 'have been given.'),
+  },
+  {
     target: '#theme-picker',
     view: null,
     title: () => t('tour.theme.title', 'Appearance and language'),
@@ -11209,9 +15424,8 @@ function applicableTourSteps() {
  * This asked for offsetParent, and offsetParent is null for everything inside a
  * screen that is not the current one - every `.view` but one is display:none. So
  * every step outside the screen the tour happened to start on measured as absent
- * and was dropped: a tour begun on the time entries came to four steps and looked
- * complete, and the calendar, the projects, the reports and My account were simply
- * never mentioned. A step switches to its own screen before it runs, so where
+ * and was dropped: a tour begun on one screen came to four steps and looked
+ * complete, and every other screen was simply never mentioned. A step switches to its own screen before it runs, so where
  * somebody is standing right now says nothing about whether the control exists.
  *
  * What does say so is a hidden that is not a screen, nor a tab of one - a card
@@ -11403,7 +15617,7 @@ async function startTour() {
  * pointer-events: none so that it does not swallow presses meant for the
  * control it is drawing a ring around. The result was that every press landed -
  * on the highlighted control, and on everything under the dimming too. A tour
- * explaining the stopwatch while somebody starts it is a tour narrating
+ * explaining a card while somebody presses its buttons is a tour narrating
  * something that is no longer on the screen it describes.
  *
  * inert is the other half, and the blocker cannot do it: a blocker stops the
@@ -11505,9 +15719,13 @@ function wireTour() {
     if (node) placeTour(node);
   };
 
-  for (const event of ['resize', 'scroll']) {
-    window.addEventListener(event, redraw, { passive: true });
-  }
+  // Scrolling is listened for on the way down rather than on the way up,
+  // because a scroll does not bubble: an open menu on a telephone is a scroller
+  // of its own once it is taller than the window, the step about the navigation
+  // scrolled the tabs into view inside it, and the window heard nothing - the
+  // ring stood 139 pixels under the tabs it was about.
+  window.addEventListener('resize', redraw, { passive: true });
+  window.addEventListener('scroll', redraw, { passive: true, capture: true });
 
   // And when the page itself changes under it, which neither of those reports.
   // A step is drawn two frames after its screen is switched to, and the card it
@@ -11561,7 +15779,7 @@ async function greetAfterSignIn() {
 function greetedThisVisit() {
   if (!me.user) return true;
 
-  const key = `timepulse_greeted_${me.user.id}`;
+  const key = `qubitdesk_greeted_${me.user.id}`;
 
   try {
     if (sessionStorage.getItem(key)) return true;
@@ -11585,17 +15803,11 @@ function greetedThisVisit() {
  * Never while the setup wizard is up: being walked through the application by
  * two things at once is worse than either alone, and the wizard is the one
  * that has to happen first.
- *
- * Not for the built-in administrator either. That account arrives at the setup
- * wizard, which is its own introduction and covers the screens it actually uses;
- * a tour of booking time and reading an overtime balance would be a tour of
- * somebody else's job. The card under My account still starts it on request.
  */
 async function maybeWelcome() {
   if (!me.user || me.user.tourSeen) return;
   if (!$('#setup-wizard').hidden) return;
   if (me.user.mustChangePassword) return;
-  if (administersOnly()) return;
   if (greetedThisVisit()) return;
 
   await startTour();
@@ -11604,11 +15816,11 @@ async function maybeWelcome() {
 /**
  * Fills in the greeting screen for whoever is looking at it.
  *
- * Rendered on every arrival rather than once, because half of what it says is
- * about today - what is already booked, whether a stopwatch was left running -
- * and a screen somebody can come back to has to be right when they do.
+ * Rendered on every arrival rather than once, because what it offers follows
+ * what this account may do, and a screen somebody can come back to has to be
+ * right when they do.
  */
-async function renderWelcome() {
+function renderWelcome() {
   if (!me.user) return;
 
   // Somebody who has been walked through the application is not new to it, so
@@ -11631,33 +15843,16 @@ async function renderWelcome() {
     : greeting.plain;
 
   $('#welcome-text').textContent = t('welcome.text',
-    'This is where your working time is recorded. A short walk through it takes '
+    'This is where requests are taken in, worked on and answered. A short walk through it takes '
     + 'about a minute, and you can start it again at any time under My account.');
-
-  // What today already has on it. Only for somebody who has hours of their own:
-  // an account that only administers has no today to report.
-  const today = $('#welcome-today');
-  today.textContent = can('timesheets:read:own') ? await todayInOneSentence() : '';
-  today.hidden = !today.textContent;
 
   // What the application is for, in the order somebody meets it. Only the points
   // this person can actually act on: a list that promises something somebody cannot
   // do is worse than a shorter list.
-  //
-  // There was a fourth, about reviewing and approving what your people submit,
-  // asked of a permission the application had already stopped defining - so can()
-  // answered no for everybody, and yes for everybody with authentication switched
-  // off, where it greeted the first user with a job that does not exist.
   const points = [
-    can('timesheets:write:own')
-      && t('welcome.point.book', 'Book hours by hand, or run a stopwatch and let it book them.'),
-    can('timesheets:read:own')
-      && t('welcome.point.see', 'See your month in a calendar, and your own figures as charts.'),
-    // The daily target is the one part of "My account" that only somebody who works
-    // here has, so it is named separately. The greeting used to promise it to
-    // everybody, including the account that records no time at all.
-    can('settings:write:own')
-      && t('welcome.point.target', 'Set your own daily target and ceiling under My account.'),
+    can('portal:use')
+      && t('welcome.point.portal',
+        'Open a ticket and follow your tickets under My tickets.'),
     can('users:write')
       && t('welcome.point.administer',
         'Add the people who work here, and decide what each of them may do.'),
@@ -11668,228 +15863,10 @@ async function renderWelcome() {
   $('#welcome-points').replaceChildren(...points.map((text) => el('li', { text })));
 
   // Every step of the walk points at a control, and a step whose control this person
-  // cannot reach is dropped - so for an account that only administers there is nothing
-  // left to walk through. Offering it anyway would open an empty tour, which is a
-  // worse first impression than not offering one.
+  // cannot reach is dropped - so for an account that only administers there may be
+  // nothing left to walk through. Offering it anyway would open an empty tour, which
+  // is a worse first impression than not offering one.
   $('#welcome-tour').hidden = applicableTourSteps().length === 0;
-
-  // Not awaited with the rest: the greeting is readable without it, and holding
-  // the screen for a list of five lines would be holding it for a courtesy.
-  renderWeekAtAGlance();
-  renderRecentEntries();
-}
-
-/**
- * This week on the greeting: today's hours against today's target, the week's
- * against the week's, and a bar per day.
- *
- * Today counts the running clock in, measured to now, if it started today - that
- * is time being worked rather than time not yet booked, and leaving it out makes
- * the morning look idle to the person in the middle of it. A clock started on
- * another day belongs to that day, as its booking will.
- *
- * Only for somebody who records time, like the entries beside it.
- */
-async function renderWeekAtAGlance() {
-  const card = $('#welcome-week');
-  if (!card) return;
-
-  if (!can('timesheets:read:own')) {
-    card.hidden = true;
-
-    return;
-  }
-
-  let answer;
-  let clock = null;
-
-  try {
-    answer = await api('/me/days');
-
-    if (can('timesheets:write:own')) {
-      const timer = await api('/me/timer');
-      if (timer?.running) clock = timer;
-    }
-  } catch {
-    // A courtesy, like the rest of the greeting: the screens behind it report
-    // anything that is really wrong.
-    card.hidden = true;
-
-    return;
-  }
-
-  const today = todayISO();
-  const days = (answer?.days ?? []).map((daily) => ({ ...daily }));
-
-  if (clock && wallClock(clock.startedAt).date === today) {
-    const running = days.find((daily) => daily.date === today);
-    if (running) running.booked += clock.elapsedHours ?? 0;
-  }
-
-  card.hidden = false;
-  redrawable('welcomeWeek', () => drawWeekAtAGlance(days, today));
-}
-
-/** Draws the week, in the language now in force. */
-function drawWeekAtAGlance(days, today) {
-  const booked = days.reduce((sum, daily) => sum + daily.booked, 0);
-  const target = days.reduce((sum, daily) => sum + daily.target, 0);
-
-  $('#welcome-week-total').textContent = fillIn(t('welcome.weekTotal', '{0} of {1}'),
-    [fmtHours(booked), fmtHours(target)]);
-
-  const now = days.find((daily) => daily.date === today);
-  const line = $('#welcome-week-today');
-  const meter = $('#welcome-today-meter');
-
-  if (now) {
-    const left = now.target - now.booked;
-
-    line.textContent = fillIn(t('welcome.weekToday', 'Today {0} of {1}'),
-      [fmtHours(now.booked), fmtHours(now.target)])
-      + (left > 0.005 ? ` - ${fillIn(t('welcome.weekRemaining', '{0} still to go'), [fmtHours(left)])}` : '');
-
-    meter.hidden = !(now.target > 0);
-    meter.querySelector('.seg').style.width = `${Math.min(100, (now.booked / (now.target || 1)) * 100)}%`;
-  } else {
-    line.textContent = '';
-    meter.hidden = true;
-  }
-
-  // One scale for the seven, so a day's bar can be compared with the next one:
-  // the longest day there is, booked or asked, and never less than eight hours.
-  const tallest = Math.max(8, ...days.map((daily) => Math.max(daily.booked, daily.target)));
-  const names = weekdayNames();
-
-  const bars = days.map((daily, i) => {
-    const track = el('span', { class: 'week-track' });
-    const fill = el('span', { class: 'week-fill' });
-
-    track.style.height = `${(daily.target / tallest) * 100}%`;
-    fill.style.height = `${(Math.min(daily.booked, tallest) / tallest) * 100}%`;
-
-    const name = names[i] ?? '';
-
-    return el('li', {
-      class: daily.date === today ? 'week-day today' : 'week-day',
-      'aria-label': fillIn(t('welcome.weekDay', '{0}: {1} of {2}'),
-        [name, fmtHours(daily.booked), fmtHours(daily.target)]),
-    },
-    el('span', { class: 'week-column' }, track, fill),
-    el('span', { class: 'week-name', text: name, 'aria-hidden': 'true' }));
-  });
-
-  $('#welcome-week-bars').replaceChildren(...bars);
-}
-
-/** How many entries the greeting shows, and how far back it looks for them. */
-const WELCOME_RECENT_COUNT = 5;
-const WELCOME_RECENT_DAYS = 90;
-
-/**
- * The last few entries, on the greeting.
- *
- * A bounded window rather than the whole history: this endpoint answers with
- * everything when it is given no dates, and a greeting has no business
- * downloading three years of somebody's working life to show five lines of it.
- * Ninety days is long enough that somebody coming back from a month away still
- * sees their own work, and the empty case says how far it looked rather than
- * "nothing", which would be a different and wrong statement.
- *
- * Only for somebody who records time. The built-in administrator has no entries
- * at all, and a panel explaining that is worse than no panel.
- */
-async function renderRecentEntries() {
-  const panel = $('#welcome-recent');
-  if (!panel) return;
-
-  if (!can('timesheets:read:own')) {
-    panel.hidden = true;
-
-    return;
-  }
-
-  const to = todayISO();
-  const from = ISO_DAY(new Date(Date.parse(`${to}T00:00:00Z`) - WELCOME_RECENT_DAYS * 86400000));
-
-  let entries = [];
-
-  try {
-    const params = new URLSearchParams({ from, to });
-
-    entries = (await api(`/timesheets?${params}`))?.items ?? [];
-  } catch {
-    // A greeting is a courtesy. The entries screen reports anything that is
-    // actually wrong with reading them.
-    panel.hidden = true;
-
-    return;
-  }
-
-  panel.hidden = false;
-
-  // Newest first, and the newest of a day first within it: the answer is ordered
-  // for a table that reads forwards, and this reads backwards.
-  const newest = [...entries]
-    .sort((a, b) => (a.date === b.date ? b.id - a.id : b.date.localeCompare(a.date)))
-    .slice(0, WELCOME_RECENT_COUNT);
-
-  $('#welcome-recent-list').replaceChildren(...newest.map(recentEntryRow));
-  $('#welcome-recent-empty').hidden = newest.length > 0;
-}
-
-/** One entry, as a line of the greeting's list. */
-function recentEntryRow(entry) {
-  const project = entry.projectId
-    ? projectName(entry.projectId)
-    : t('ts.noProject', 'No project');
-
-  return el('li', { class: 'welcome-recent-row' },
-    el('span', { class: 'welcome-recent-when', text: fmtDate(entry.date) }),
-    el('span', { class: 'welcome-recent-what' },
-      el('span', { class: 'welcome-recent-project', text: project }),
-      // The note where there is one, which is what tells two entries on one
-      // project apart.
-      ...(entry.description
-        ? [el('span', { class: 'welcome-recent-note', text: entry.description })]
-        : [])),
-    el('span', { class: 'welcome-recent-hours', text: fmtHours(entry.durationHours) }),
-  );
-}
-
-/** What today looks like, in one sentence. */
-async function todayInOneSentence() {
-  const today = todayISO();
-
-  try {
-    const running = await api('/me/timer');
-
-    if (running?.running) {
-      return t('welcome.timerRunning',
-        'A stopwatch is still running. Stop it on the time entries screen to book the time.');
-    }
-  } catch {
-    // Not worth a word: the greeting is a courtesy, and the screen behind it
-    // reports anything that is actually wrong.
-  }
-
-  try {
-    const entries = await everyTimesheet({ from: today, to: today });
-    const hours = entries.reduce((sum, entry) => sum + entry.durationHours, 0);
-
-    if (hours > 0) {
-      // fmtHours rather than fmtNumber with an "h" in the sentence: the unit is
-      // a word, and a sentence that spells it out is a second place a translator
-      // has to remember it - which is how this one came to say "h" while the
-      // dictionary's own unit said "Std."
-      return t('welcome.todayHours', '{0} booked today so far.')
-        .replace('{0}', fmtHours(hours));
-    }
-
-    return t('welcome.todayNothing', 'Nothing booked today yet.');
-  } catch {
-    return '';
-  }
 }
 
 /**
@@ -11961,8 +15938,9 @@ const SETUP_STEPS = {
   timezone: {
     title: () => t('setup.timezone.title', 'Choose the timezone'),
     text: () => t('setup.timezone.text',
-      'This decides which calendar day a booking falls on. Left unset it is UTC, '
-      + 'which puts evening bookings on the wrong day for most of the world.'),
+      'This decides the day a ticket\'s number is taken from and the zone the service '
+      + 'hours are read in. Left unset it is UTC, which is the wrong hour for most of '
+      + 'the world.'),
     fields: () => {
       const select = el('select', { name: 'timezone' });
       fillTimezoneSelect(select, guessTimezone());
@@ -11979,8 +15957,8 @@ const SETUP_STEPS = {
   branding: {
     title: () => t('setup.branding.title', 'Add to the name'),
     text: () => t('setup.branding.text',
-      'Every installation is called TimePulse. What you write here follows it after a bar, '
-      + 'as in TimePulse | htp.net, in the header and the browser tab. Optional, but it is '
+      'Every installation is called QubitDesk. What you write here follows it after a bar, '
+      + 'as in QubitDesk | htp.net, in the header and the browser tab. Optional, but it is '
       + 'what tells a test instance apart from the real one at a glance.'),
     // One field per language, rather than one field.
     //
@@ -11991,7 +15969,7 @@ const SETUP_STEPS = {
     // texts on the appearance screen are not, which is why that one has a
     // switcher instead.
     fields: () => BRANDING_LANGUAGES.map((language) => el('label', {
-      text: `${t('setup.instanceName', 'After “TimePulse |”')} — ${languageName(language)}`,
+      text: `${t('setup.instanceName', 'After “QubitDesk |”')} — ${languageName(language)}`,
     }, el('input', { type: 'text', name: `title.${language}`, maxlength: '80' }))),
     submit: async (values) => {
       const written = {};
@@ -12059,7 +16037,7 @@ let setup = { state: null, index: 0 };
 
 /** Loads the wizard state and shows it if anything is outstanding. */
 async function loadSetup() {
-  if (!administersOnly()) {
+  if (!administers()) {
     $('#setup-wizard').hidden = true;
 
     return;
@@ -12317,7 +16295,7 @@ function wireSetup() {
 
 /** The fields of the operational form, in the order they appear. */
 const OPERATIONAL_FIELDS = [
-  'sessionLifetimeHours', 'sessionIdleMinutes', 'maxDailyHours', 'rateLimit',
+  'sessionLifetimeHours', 'sessionIdleMinutes', 'rateLimit',
   'rateLimitWindowSeconds', 'ldapSyncMaxDeleteRatio',
 ];
 
@@ -12342,13 +16320,12 @@ function fillOperationalForm(data) {
   // A zero that switches a limit off is said to be off. Written as a figure it
   // read as the strictest limit there is, and for the deletion limit that is the
   // opposite of the truth: "delete limit 0" was a synchronisation allowed to
-  // remove every account the directory no longer lists, with their hours.
+  // remove every account the directory no longer lists.
   const offOr = (value, shown) => (value === 0 ? t('ops.off', 'off') : shown);
 
   $('#operational-effective').textContent = `${t('ops.effective', 'Currently in force')}: `
     + `${t('ops.sessionShort', 'session')} ${fmtHours(effective.sessionLifetimeHours)}, `
     + `${t('ops.idleShort', 'idle')} ${offOr(effective.sessionIdleMinutes, `${effective.sessionIdleMinutes} min`)}, `
-    + `${t('ops.maxShort', 'max/day')} ${fmtHours(effective.maxDailyHours)}, `
     + `${t('ops.rateShort', 'rate')} ${effective.rateLimit}/${effective.rateLimitWindowSeconds} s, `
     + `${t('ops.ratioShort', 'delete limit')} ${offOr(effective.ldapSyncMaxDeleteRatio, fmtShare(effective.ldapSyncMaxDeleteRatio))}`;
 
@@ -12452,10 +16429,9 @@ async function loadUpdate() {
   const card = $('#update-card');
   if (!card) return;
 
-  // Everybody who can reach this screen. It used to be narrower - the account
-  // that administers and records no time - and that made one card on the screen
-  // appear for some of the people who got here and not others, which is a rule
-  // nobody can hold in their head while using it.
+  // Everybody who can reach this screen, and nobody narrower: a card that appears
+  // for some of the people who got here and not others is a rule nobody can hold
+  // in their head while using it.
   if (!can('settings:manage')) {
     card.hidden = true;
 
@@ -12520,7 +16496,7 @@ function renderUpdate(state) {
   if (state.imageOutcome === 'none') {
     image.textContent = t('update.imageNothingNewer',
       'The last image update found nothing newer than the image this runs, so '
-      + 'nothing was changed. Where TIMEPULSE_VERSION names a version, the image follows '
+      + 'nothing was changed. Where QUBITDESK_VERSION names a version, the image follows '
       + 'that setting rather than this card.');
   } else if (state.imageOutcome) {
     showRefusal(image, {
@@ -12748,7 +16724,7 @@ async function theVersionChanged() {
 }
 
 /** Where a message waits out a reload. */
-const AFTER_RELOAD_KEY = 'timepulse_after_reload';
+const AFTER_RELOAD_KEY = 'qubitdesk_after_reload';
 
 /**
  * Keeps one sentence for the document that comes next.
@@ -13595,696 +17571,7 @@ function wirePasswordReveal(root = document) {
   }
 }
 
-// ------------------------------------------------------------------ charts
-
-/**
- * Draws a bar chart, by hand.
- *
- * No chart library, and not for want of one: the Content-Security-Policy allows
- * no external origin at all and the assets are embedded, so anything fetched from
- * a CDN would simply be blocked. That leaves SVG built in the page - and
- * createElementNS rather than createElement, because an <svg> built in the HTML
- * namespace parses without complaint and renders nothing.
- *
- * Horizontal bars with the label beside each one, which is what survives a long
- * project name and a narrow phone. A vertical chart with rotated labels reads
- * badly at both ends.
- */
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-function svg(tag, attributes = {}) {
-  const node = document.createElementNS(SVG_NS, tag);
-
-  for (const [name, value] of Object.entries(attributes)) {
-    node.setAttribute(name, String(value));
-  }
-
-  return node;
-}
-
-/**
- * How many colours the charts have for naming things apart.
- *
- * Matched by .chart-colour-0 .. -7 in the stylesheet, where the actual hues
- * live so that each theme can hold its own.
- */
-const CHART_COLOURS = 8;
-
-/**
- * The colour a project keeps, wherever it is drawn.
- *
- * From the project's own identity rather than from its position in the list.
- * Position would mean the colours shuffle whenever a project is added, finishes,
- * or simply has no hours in the period being looked at - and a colour that means
- * something different on every visit is decoration rather than information. This
- * way a project is the same colour in the bars, in the columns, in the pie, and
- * again tomorrow.
- *
- * Eight hues for any number of projects, so two of them can collide. That is
- * worth it: the label is beside every bar and in the pie's key, so the colour
- * groups the eye rather than carrying the meaning on its own.
- */
-function chartColourFor(key) {
-  if (key === undefined || key === null || key === '') return '';
-
-  // The hours that belong to no project are not a project, and a colour of their
-  // own would put them among them. They keep the neutral one - and so do the hours
-  // that name no activity, for the same reason.
-  if (key === NO_PROJECT_KEY || key === NO_ACTIVITY_KEY) return 'chart-colour-none';
-
-  let hash = 0;
-
-  for (const character of String(key)) {
-    hash = (hash * 31 + character.codePointAt(0)) % 100000007;
-  }
-
-  return `chart-colour-${hash % CHART_COLOURS}`;
-}
-
-/** What the bucket for unassigned hours is called, in every chart. */
-const NO_PROJECT_KEY = 'no-project';
-
-/** What the bucket for hours that name no activity is called. */
-const NO_ACTIVITY_KEY = 'no-activity';
-
-/** One bar per activity, keyed by the tag so each keeps its colour, and the hours naming none last. */
-function activityBars(tags, untagged) {
-  return [
-    ...tags.map((tag) => ({ label: `#${tag.tag}`, value: tag.hours, key: `#${tag.tag}` })),
-    ...(untagged > 0
-      ? [{ label: t('stats.noActivity', 'No activity'), value: untagged, key: NO_ACTIVITY_KEY }]
-      : []),
-  ];
-}
-
-/** One bar per project, each carrying the identity its colour comes from. */
-function projectBars(projects) {
-  return projects.map((project) => ({
-    // A project with no name is one that has been deleted since; the hours it
-    // holds still count, so it is shown rather than dropped.
-    label: project.projectId
-      ? (project.name || t('stats.deletedProject', 'deleted project'))
-      : t('stats.noProject', 'No project'),
-    value: project.hours,
-    key: project.projectId || NO_PROJECT_KEY,
-  }));
-}
-
-/**
- * The words a chart is announced by.
- *
- * role="img" is the right choice for a drawing - a screen reader working through
- * forty <text> nodes one after another is not a chart, it is a list of numbers in
- * drawing order - but it makes the drawing one opaque node, so the labels and
- * figures inside it stop being readable. Without a name the one element on these
- * screens that is entirely picture was announced as "image" and nothing else.
- *
- * Taken from the markup rather than written here. Every chart already has its
- * words directly above it - a heading on the statistics screen, the caption under
- * an evaluation - and they are already translated, so a sentence of its own would
- * be a second thing to translate and a second thing to keep in step with the
- * first. A container with nothing above it gets no name, which is no worse than
- * what it had.
- */
-function nameTheChart(container, chart) {
-  const naming = (container.closest('.chart-wrap') ?? container).previousElementSibling;
-  const words = naming?.textContent.trim();
-
-  if (words) chart.setAttribute('aria-label', words);
-}
-
-/** The width a chart is drawn at where there is room for it. */
-const CHART_WIDEST = 640;
-
-/**
- * The width below which a chart is no longer squeezed but scrolls: the bars'
- * labels and figures take 180 of it, and what is left is the track.
- */
-const CHART_NARROWEST = 260;
-
-/** How to draw each chart box's chart again, and the width it was drawn at. */
-const fittedCharts = new WeakMap();
-
-/**
- * Draws a chart again when its box changes width.
- *
- * A frame later rather than inside the observer: the drawing changes the box's
- * height, and changing what is being observed from inside the observer is a loop
- * the browser reports as an error. And only while the box still holds a drawing -
- * one emptied since, by a sign-out or by an answer with nothing to chart, stays
- * empty rather than getting the old picture back.
- */
-const chartBoxes = typeof ResizeObserver === 'function'
-  ? new ResizeObserver((entries) => {
-    for (const { target } of entries) {
-      const fitted = fittedCharts.get(target);
-
-      if (fitted && target.clientWidth > 0 && chartWidth(target) !== fitted.width) {
-        requestAnimationFrame(() => {
-          if (target.lastElementChild instanceof SVGSVGElement) fittedCharts.get(target)?.again();
-        });
-      }
-    }
-  })
-  : null;
-
-/** The width to draw a chart at: its box's, within the two bounds above. */
-function chartWidth(container) {
-  const room = container.clientWidth;
-
-  // Nothing while its screen is hidden, which is when most charts are drawn - a
-  // reload fills every screen. Drawn at the widest then, and again on arrival.
-  if (room === 0) return CHART_WIDEST;
-
-  return Math.min(Math.max(room, CHART_NARROWEST), CHART_WIDEST);
-}
-
-/**
- * Gives a chart the width of the box it goes into, and remembers how to draw it
- * again when that changes.
- *
- * Drawn 640 wide whatever the box, a chart on a telephone either shrank as a
- * whole - its type at five pixels - or, kept at its size, put the bars' figures
- * and the whole of the pie's key past the right edge of a box that scrolls with
- * no bar on a touch screen to say so. At the box's own width the type stays what
- * the stylesheet says and every part is where it can be seen. The width changes
- * after the drawing - a hidden screen opened, a telephone turned, a window
- * narrowed - so the box is watched; see chartBoxes.
- */
-function fitChart(container, again) {
-  const width = chartWidth(container);
-
-  // A chart drawn blind is remembered as drawn for no width at all, so the first
-  // width its box has draws it again - which is also the first moment its names
-  // can be measured (fitChartTexts).
-  fittedCharts.set(container, { again, width: container.clientWidth > 0 ? width : 0 });
-  chartBoxes?.observe(container);
-
-  return width;
-}
-
-/**
- * Shortens each name in a chart to the room it was given, with a mark where it
- * was cut and the whole of it on hover.
- *
- * A name longer than its place was cut wherever the drawing happened to end: the
- * bars painted their track over the rest of it, a column's name ran off the
- * picture and across its neighbour's, and the pie's key lost the figure at the
- * end of its line past the right edge. Measured rather than counted in letters,
- * because the type is proportional - so only once the chart is on the page, and
- * not while its screen is hidden, where a text has no length. What follows the
- * name, the key's figure, stays whole and the name gives way to it.
- */
-function fitChartTexts(chart) {
-  for (const text of chart.querySelectorAll('text[data-room]')) {
-    const room = Number(text.dataset.room);
-
-    if (text.getComputedTextLength() <= room) continue;
-
-    const whole = text.textContent;
-    const after = text.dataset.after ?? '';
-    const name = whole.slice(0, whole.length - after.length);
-
-    // The longest start of the name that fits with the mark and what follows it.
-    let fits = 0;
-    let tooLong = name.length;
-
-    while (tooLong - fits > 1) {
-      const middle = Math.floor((fits + tooLong) / 2);
-
-      text.textContent = `${name.slice(0, middle).trimEnd()}…${after}`;
-
-      if (text.getComputedTextLength() <= room) fits = middle;
-      else tooLong = middle;
-    }
-
-    text.textContent = `${name.slice(0, fits).trimEnd()}…${after}`;
-
-    const title = svg('title');
-    title.textContent = whole;
-    text.append(title);
-  }
-}
-
-/**
- * The drawing a chart goes into: as wide as its container, and never narrower than
- * it is drawn.
- *
- * Narrower than that it used to shrink as a whole - the viewBox fits the picture
- * into its box, type included - so on a telephone a chart's labels came out at
- * about five pixels, between bands of empty space where the box kept the height
- * the rows needed. It is drawn for its box's width now (fitChart), and a box
- * narrower than the narrowest a chart is drawn at scrolls sideways rather than
- * shrinking it.
- */
-function chartDrawing(width, height) {
-  const chart = svg('svg', {
-    viewBox: `0 0 ${width} ${height}`,
-    width: '100%',
-    height,
-    role: 'img',
-  });
-
-  chart.style.minWidth = `${width}px`;
-
-  return chart;
-}
-
-/**
- * Renders bars into a container.
- *
- * bars is [{label, value, key, title}], where key is the identity the colour is
- * taken from and title overrides the hover text. The scale runs from zero to the
- * largest value,
- * because a bar chart that starts anywhere else exaggerates every difference on
- * it - and these are hours, where twice as long should look twice as long.
- */
-function drawBarChart(container, bars, formatValue) {
-  container.replaceChildren();
-
-  if (bars.length === 0) return;
-
-  const rowHeight = 22;
-  const gap = 4;
-  const labelWidth = 118;
-  const valueWidth = 62;
-  const width = fitChart(container, () => drawBarChart(container, bars, formatValue));
-  const height = bars.length * (rowHeight + gap);
-  const trackWidth = width - labelWidth - valueWidth;
-
-  const chart = chartDrawing(width, height);
-
-  nameTheChart(container, chart);
-
-  const largest = Math.max(...bars.map((bar) => bar.value), 0);
-
-  bars.forEach((bar, index) => {
-    const y = index * (rowHeight + gap);
-
-    // Both texts stand a few units in from the edges of the drawing rather than on
-    // them. Gecko measures an outer glyph a pixel past the point it is anchored at,
-    // and the drawing clips there - on a telephone, where the drawing is the box.
-    const label = svg('text', {
-      x: 3,
-      y: y + rowHeight * 0.72,
-      class: 'chart-label',
-      'data-room': labelWidth - 8,
-    });
-    label.textContent = bar.label;
-    chart.append(label);
-
-    // The track, so an empty day is still a row rather than nothing at all.
-    chart.append(svg('rect', {
-      x: labelWidth, y, width: trackWidth, height: rowHeight, rx: 4, class: 'chart-track',
-    }));
-
-    if (bar.value > 0 && largest > 0) {
-      // Zero-based, and at least a sliver wide so a very small value is visible
-      // rather than looking like nothing was recorded.
-      const barWidth = Math.max(2, (bar.value / largest) * trackWidth);
-
-      const rect = svg('rect', {
-        x: labelWidth,
-        y,
-        width: barWidth,
-        height: rowHeight,
-        rx: 4,
-        class: `chart-bar ${chartColourFor(bar.key)}`.trim(),
-      });
-
-      // The exact figure on hover, since the bar is a comparison and not a
-      // readout.
-      const title = svg('title');
-      title.textContent = bar.title ?? `${bar.label}: ${formatValue(bar.value)}`;
-      rect.append(title);
-
-      chart.append(rect);
-    }
-
-    const value = svg('text', {
-      x: width - 3,
-      y: y + rowHeight * 0.72,
-      class: 'chart-value',
-      'text-anchor': 'end',
-    });
-    value.textContent = formatValue(bar.value);
-    chart.append(value);
-  });
-
-  container.append(chart);
-  fitChartTexts(chart);
-}
-
-/**
- * The same figures as a column chart: one upright bar per entry.
- *
- * Its own function rather than a flag on drawBarChart, because turning that one
- * on its side is not a rotation - the label moves from beside the bar to under
- * it, which is the whole reason to choose one over the other. Columns compare a
- * handful of things well and run out of room for names at about a dozen.
- */
-function drawColumnChart(container, bars, formatValue) {
-  container.replaceChildren();
-
-  if (bars.length === 0) return;
-
-  const width = fitChart(container, () => drawColumnChart(container, bars, formatValue));
-  const height = 260;
-  const labelBand = 46;
-  const valueBand = 16;
-  const plot = height - labelBand - valueBand;
-  const slot = width / bars.length;
-  const barWidth = Math.min(56, slot * 0.6);
-
-  const chart = chartDrawing(width, height);
-
-  nameTheChart(container, chart);
-
-  const largest = Math.max(...bars.map((bar) => bar.value), 0);
-
-  // The floor, so a period with nothing on it is still a chart rather than an
-  // empty box.
-  chart.append(svg('line', {
-    x1: 0, y1: valueBand + plot, x2: width, y2: valueBand + plot, class: 'chart-axis',
-  }));
-
-  bars.forEach((bar, index) => {
-    const centre = index * slot + slot / 2;
-    const barHeight = largest > 0 && bar.value > 0
-      ? Math.max(2, (bar.value / largest) * plot)
-      : 0;
-    const top = valueBand + plot - barHeight;
-
-    if (barHeight > 0) {
-      const rect = svg('rect', {
-        x: centre - barWidth / 2,
-        y: top,
-        width: barWidth,
-        height: barHeight,
-        rx: 4,
-        class: `chart-bar ${chartColourFor(bar.key)}`.trim(),
-      });
-
-      const title = svg('title');
-      title.textContent = bar.title ?? `${bar.label}: ${formatValue(bar.value)}`;
-      rect.append(title);
-      chart.append(rect);
-
-      // Above the column rather than inside it: inside is unreadable on a short
-      // one, which is exactly the column somebody is squinting at.
-      const value = svg('text', {
-        x: centre, y: top - 4, class: 'chart-value', 'text-anchor': 'middle',
-      });
-      value.textContent = formatValue(bar.value);
-      chart.append(value);
-    }
-
-    const label = svg('text', {
-      x: centre,
-      y: valueBand + plot + 16,
-      class: 'chart-label',
-      'text-anchor': 'middle',
-      'data-room': slot - 6,
-    });
-    label.textContent = bar.label;
-    chart.append(label);
-  });
-
-  container.append(chart);
-  fitChartTexts(chart);
-}
-
-/**
- * The same figures as a pie: one slice per entry, sized by its share.
- *
- * Only for things that add up to something - hours per project add up to the
- * hours worked, so a share is a real quantity. Entries worth nothing are left
- * out rather than drawn as a slice of no width, which would put a label on the
- * rim pointing at a line.
- */
-function drawPieChart(container, slices, formatValue) {
-  container.replaceChildren();
-
-  const shown = slices.filter((slice) => slice.value > 0);
-  const total = shown.reduce((sum, slice) => sum + slice.value, 0);
-
-  if (total <= 0) return;
-
-  const size = 260;
-  const radius = size / 2 - 8;
-  const width = fitChart(container, () => drawPieChart(container, slices, formatValue));
-
-  // The key beside the pie where there is room for it, and under it where there
-  // is not: on a telephone a key beside a pie this size starts where the screen
-  // ends.
-  const stacked = width < size + 24 + 200;
-  const cx = stacked ? width / 2 : size / 2;
-  const cy = size / 2;
-  const keyLeft = stacked ? 0 : size + 24;
-
-  // One row of the key per slice. Beside the pie the picture is whichever of the
-  // two is taller: the pie is a fixed 260 and the key runs down beside it, so from
-  // the thirteenth project the key was simply outside the box - not clipped
-  // visibly, just absent, on a chart that otherwise looked finished. Under it, the
-  // picture is both. The key is what tells two projects sharing one of the eight
-  // hues apart, which is the reason chartColourFor gives for eight being enough.
-  const keyRow = 20;
-  const keyTop = stacked ? size + 24 : 14;
-  const height = stacked
-    ? keyTop + (shown.length - 1) * keyRow + 8
-    : Math.max(size, keyTop + shown.length * keyRow + 6);
-
-  const chart = chartDrawing(width, height);
-
-  nameTheChart(container, chart);
-
-  let angle = -Math.PI / 2;
-
-  shown.forEach((slice, index) => {
-    const share = slice.value / total;
-    const sweep = share * Math.PI * 2;
-    const end = angle + sweep;
-
-    // A full circle cannot be drawn as an arc - the start and end points would
-    // be the same and the path collapses - so the single-slice case is a circle.
-    const shape = shown.length === 1
-      ? svg('circle', { cx, cy, r: radius })
-      : svg('path', {
-        d: [
-          `M ${cx} ${cy}`,
-          `L ${cx + radius * Math.cos(angle)} ${cy + radius * Math.sin(angle)}`,
-          `A ${radius} ${radius} 0 ${sweep > Math.PI ? 1 : 0} 1`,
-          `${cx + radius * Math.cos(end)} ${cy + radius * Math.sin(end)}`,
-          'Z',
-        ].join(' '),
-      });
-
-    // The same colour the bars gave it, so switching shape does not repaint
-    // every project. Falls back to a step of the accent for a pie of something
-    // that is not projects, where there is no identity to be stable about.
-    shape.setAttribute('class',
-      `chart-slice ${chartColourFor(slice.key) || `chart-slice-${index % 6}`}`);
-
-    const title = svg('title');
-    title.textContent = slice.title
-      ?? `${slice.label}: ${formatValue(slice.value)} (${Math.round(share * 100)}%)`;
-    shape.append(title);
-    chart.append(shape);
-
-    // The key, beside the pie rather than on it: a label on a thin slice either
-    // overlaps its neighbour or points at nothing.
-    const y = keyTop + index * keyRow;
-
-    chart.append(svg('rect', {
-      x: keyLeft, y: y - 10, width: 12, height: 12, rx: 3,
-      class: `chart-slice ${chartColourFor(slice.key) || `chart-slice-${index % 6}`}`,
-    }));
-
-    const figure = ` — ${formatValue(slice.value)}`;
-
-    const label = svg('text', {
-      x: keyLeft + 20,
-      y,
-      class: 'chart-label',
-      'data-room': width - keyLeft - 24,
-      'data-after': figure,
-    });
-    label.textContent = `${slice.label}${figure}`;
-    chart.append(label);
-
-    angle = end;
-  });
-
-  container.append(chart);
-  fitChartTexts(chart);
-}
-
-/** The default range: the current month, in whatever zone applies to the user. */
-function defaultStatisticsRange() {
-  const today = todayISO();
-  const firstOfMonth = `${today.slice(0, 7)}-01`;
-
-  return { from: firstOfMonth, to: today };
-}
-
-/**
- * Puts a period into a pair of empty date fields, on arrival.
- *
- * Every screen that evaluates a period has a From and a To, and leaving them
- * empty meant something different on each: the statistics card filled them in
- * when Evaluate was pressed - so the answer arrived for a period nobody had
- * seen until the fields changed under it - while the report and the overtime
- * balance sent nothing at all and quietly evaluated the whole history.
- *
- * Filled when the screen is opened instead, which is the only one of the three
- * that can be checked before acting. Refusing to evaluate until somebody types
- * a date would be the worst of them: there is an obvious right answer here, and
- * demanding it be typed is make-work.
- *
- * Only when both are empty. A period somebody set is theirs, including one they
- * cleared on purpose - and this runs on every visit to the screen.
- */
-function fillDateRange(from, to) {
-  if (!from || !to || from.value || to.value) return;
-
-  const range = defaultStatisticsRange();
-
-  setDateField(from, range.from);
-  setDateField(to, range.to);
-}
-
-/**
- * The date pairs on the screens that evaluate a period.
- *
- * Two of them share the Overtime screen: the balance is asked for over a period,
- * and the hours card above it over another. They are separate questions with
- * separate answers, so they get separate fields - and both start filled in.
- */
-function fillRangesFor(view) {
-  const pairs = {
-    overtime: [
-      ['#statistics-from', '#statistics-to'],
-      ['#form-overtime input[name="from"]', '#form-overtime input[name="to"]'],
-    ],
-    report: [
-      ['#form-report input[name="from"]', '#form-report input[name="to"]'],
-      ['#form-statement input[name="from"]', '#form-statement input[name="to"]'],
-    ],
-  }[view] ?? [];
-
-  for (const [from, to] of pairs) {
-    fillDateRange($(from), $(to));
-  }
-
-  // The single dates, which are the same idea with one field.
-  //
-  // A project is made today, so its start is today until somebody says
-  // otherwise - the same courtesy the evaluation screens do with their period.
-  // Its end is left alone: empty there means "no end planned", which is most
-  // projects, and filling it would invent a deadline.
-  if (view === 'projects') fillToday($('#form-project input[name="startDate"]'));
-}
-
-/** Puts today into a date field that is empty, on arrival. */
-function fillToday(field) {
-  if (!field || field.value) return;
-
-  setDateField(field, todayISO());
-}
-
-async function loadStatistics() {
-  const card = $('#statistics-card');
-  if (!card || !can('timesheets:read:own')) return;
-
-  const range = defaultStatisticsRange();
-
-  if (!$('#statistics-from').value) setDateField($('#statistics-from'), range.from);
-  if (!$('#statistics-to').value) setDateField($('#statistics-to'), range.to);
-
-  const params = forSubject({
-    from: $('#statistics-from').value,
-    to: $('#statistics-to').value,
-  });
-
-  const stats = await api(`/me/statistics?${params}`);
-
-  evaluatedPeriod.statistics = { from: stats.from, to: stats.to };
-
-  $('#statistics-total').textContent =
-    `${t('stats.total', 'Total')}: ${fmtHours(stats.totalHours ?? 0)}`;
-
-  const days = stats.days ?? [];
-  const projects = stats.projects ?? [];
-
-  // Empty days are drawn as empty rows on purpose - a chart of only the days that
-  // have entries shows a full week where there were two working days.
-  // Through fmtDate like every other date on screen. These labels were the raw
-  // ISO string the endpoint sends, so the one chart on the Overtime screen wrote
-  // 2026-08-12 beside a table writing 12.08.2026 - the same day, twice, in two
-  // conventions, on one screen.
-  drawBarChart($('#chart-days'),
-    days.map((day) => ({ label: fmtDate(day.date), value: day.hours })),
-    fmtHours);
-
-  drawBarChart($('#chart-projects'), projectBars(projects), fmtHours);
-  drawBarChart($('#chart-activities'), activityBars(stats.tags ?? [], stats.untaggedHours ?? 0), fmtHours);
-
-  $('#statistics-empty').hidden = (stats.totalHours ?? 0) > 0;
-}
-
-// The spreadsheet card, from here to the end of this section: exporting what is on
-// screen, and importing a file.
-//
-// The import is deliberately two steps. A file assembled by hand is wrong more
-// often than it is right, and the first thing somebody needs is to be shown what
-// their file would do - which rows would be written, which would not, and why -
-// before anything is.
-
-/**
- * The filters the entry list is showing, as the parameters both the list and the
- * export send.
- *
- * One builder for both, so the file can never hold more than the screen it was
- * started from - two that agreed today would be two that could disagree tomorrow.
- */
-function timesheetFilterParams() {
-  const params = new URLSearchParams();
-
-  const projectId = $('#filter-ts-project')?.value;
-  const from = $('#filter-ts-from')?.value;
-  const to = $('#filter-ts-to')?.value;
-  const search = $('#filter-ts-q')?.value.trim();
-
-  if (projectId) params.set('projectId', projectId);
-  if (from) params.set('from', from);
-  if (to) params.set('to', to);
-  if (search) params.set('q', search);
-
-  // The list and the export alike, so the file is what the screen showed.
-  if (viewingFor) params.set('userId', String(viewingFor.id));
-
-  return params;
-}
-
-/** The same filters as a query string for the export, or nothing. */
-function timesheetFilterQuery() {
-  const params = timesheetFilterParams();
-
-  return params.toString() ? `?${params}` : '';
-}
-
-/**
- * Downloads the export.
- *
- * Through fetch and a blob rather than by pointing the browser at the URL: the
- * request needs the session cookie and a sensible filename, and the server cannot
- * set Content-Disposition - GoFr owns the response headers. Naming it here is
- * better anyway, because this is where the period being looked at is known.
- */
-async function exportWorkbook() {
-  await downloadSheet(`/timesheets/export${timesheetFilterQuery()}`,
-    t('wb.filename', 'time-entries'));
-}
+// ------------------------------------------- export and import, table by table
 
 /**
  * Fetches a file and hands it to the browser to save under a readable name.
@@ -14298,10 +17585,11 @@ async function downloadFile(url, name, extension, request = {}) {
 }
 
 /**
- * Fetches a file and saves it under exactly the name given - for a file that
- * carries its own, like a backup, whose name is when it was made.
+ * Fetches a file and saves it under exactly this name - a ticket's attachment
+ * keeps the name it came with. The server sends every attachment as plain
+ * bytes, and the name is what tells the reader's computer what it is.
  */
-async function saveDownload(url, fileName, request = {}) {
+async function saveDownload(url, filename, request = {}) {
   const res = await reach(url, { credentials: 'same-origin', ...request });
 
   // Everything api() reads off an answer that is not its body. Only the body is
@@ -14323,7 +17611,7 @@ async function saveDownload(url, fileName, request = {}) {
   const blob = await res.blob();
   const objectURL = URL.createObjectURL(blob);
 
-  const link = el('a', { href: objectURL, download: fileName });
+  const link = el('a', { href: objectURL, download: filename });
   document.body.append(link);
   link.click();
   link.remove();
@@ -14346,68 +17634,6 @@ async function downloadSheet(path, name) {
 
   await downloadFile(
     `${API}${path}${separator}lang=${encodeURIComponent(activeLanguage())}`, name, 'xlsx');
-}
-
-/**
- * Sends an evaluation to be laid out, and saves the document that comes back.
- *
- * One language parameter, unlike everything else here: every word of the body is
- * already in this request, read off the screen in the language the screen is in.
- * The footer is not - the installation's name and the moment are the server's to
- * say, and it has to be told which language is reading in order to say them.
- */
-async function downloadDocument(doc, name) {
-  // The language, which is the one thing in a document the server words itself.
-  // Everything else here was read off the screen and arrives already written;
-  // the footer is the server's line, and it used to be signed off in English
-  // under a German evaluation, with the date in an order no German page uses.
-  await downloadFile(`${API}/exports/document?lang=${encodeURIComponent(activeLanguage())}`,
-    name, 'pdf', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': readCookie('timepulse_csrf'),
-    },
-    body: JSON.stringify(doc),
-  });
-}
-
-/** Sends the chosen file, either to look or to write. */
-async function sendWorkbook(dryRun) {
-  const input = $('#wb-file');
-  const file = input?.files?.[0];
-
-  if (!file) {
-    throw new Error(t('wb.noFile', 'Choose a file first.'));
-  }
-
-  const body = new FormData();
-  body.append('file', file);
-  body.append('dryRun', dryRun ? 'true' : 'false');
-
-  // No Content-Type of our own: the browser has to set it, because only it knows
-  // the multipart boundary it generated.
-  const res = await reach(`${API}/timesheets/import`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'X-CSRF-Token': readCookie('timepulse_csrf') },
-    body,
-  });
-
-  noticePermissionChange(res.headers.get('X-Permissions-Revision'));
-
-  let payload = null;
-  try {
-    payload = await res.json();
-  } catch {
-    // Falls through to the status below.
-  }
-
-  if (!res.ok) {
-    throw refusalFrom(res, payload);
-  }
-
-  return payload?.data ?? null;
 }
 
 /**
@@ -14442,602 +17668,16 @@ function rowProblem(row) {
   return fillIn(sentence, refusalValues(row.problemCode, row.problemValues));
 }
 
-/** Shows what the file would do, row by row. */
-function renderWorkbookPreview(result) {
-  const rows = (result?.rows ?? []).map((row) => el('tr', { class: row.problem ? 'rejected' : '' },
-    el('td', { class: 'num', text: String(row.row) }),
-    el('td', { text: row.date ? fmtDate(row.date) : '–' }),
-    el('td', { class: 'text', text: row.user || '–' }),
-    el('td', { class: 'text', text: row.project || t('ts.noProject', 'No project') }),
-    el('td', { class: 'num', text: row.hours ? fmtNumber(row.hours) : '–' }),
-    el('td', { class: 'text', text: row.description || '–' }),
-    el('td', { class: row.problem ? 'minus' : 'muted', text: rowProblem(row) || '✓' }),
-  ));
-
-  fillTable($('#table-workbook tbody'), rows, 7, t('wb.empty', 'The file has no entries in it.'));
-  $('#wb-preview-wrap').hidden = false;
-
-  const writable = result?.writable ?? 0;
-  const rejected = result?.rejected ?? 0;
-
-  $('#wb-summary').textContent = rejected > 0
-    ? t('wb.someRejected', '{0} of {1} rows can be imported. Nothing is written while any row is refused.')
-      .replace('{0}', String(writable)).replace('{1}', String(writable + rejected))
-    : t('wb.allReady', 'All {0} rows can be imported.').replace('{0}', String(writable));
-
-  // The import button only where it would do something: offering it for a file
-  // that would be refused is offering a failure.
-  $('#wb-import').hidden = rejected > 0 || writable === 0;
-}
-
 /** The resets of the tables' import cards, which buildSheetCard builds. */
 const sheetCardResets = [];
 
 /** Puts every import card back to its resting state. */
 function forgetEveryImport() {
-  resetWorkbookCard();
-
   for (const reset of sheetCardResets) reset();
 }
 
-/** Puts the card back to its resting state. */
-function resetWorkbookCard() {
-  const input = $('#wb-file');
-  if (input) input.value = '';
-
-  // The preview it described is gone, so there is nothing to draw again.
-  stopRedrawing('workbookPreview');
-
-  $('#wb-preview').hidden = true;
-  $('#wb-import').hidden = true;
-  $('#wb-clear').hidden = true;
-  $('#wb-preview-wrap').hidden = true;
-  $('#wb-summary').textContent = '';
-  $('#table-workbook tbody').replaceChildren();
-}
-
-function wireWorkbook() {
-  const card = $('#workbook-card');
-  if (!card) return;
-
-  $('#wb-export').addEventListener('click', () => mutate(
-    exportWorkbook, t('wb.exported', 'Export saved'), null));
-
-  $('#wb-file').addEventListener('change', () => {
-    const chosen = Boolean($('#wb-file').files?.length);
-
-    // As resetWorkbookCard does, and says why: the preview it described is gone,
-    // so there is nothing to draw again. Choosing a different file makes that
-    // just as true as clearing the card does.
-    stopRedrawing('workbookPreview');
-
-    $('#wb-preview').hidden = !chosen;
-    $('#wb-clear').hidden = !chosen;
-    $('#wb-import').hidden = true;
-    $('#wb-preview-wrap').hidden = true;
-    $('#wb-summary').textContent = chosen
-      ? t('wb.chosen', 'Check the file to see what it would do.')
-      : '';
-  });
-
-  // Through redrawable, because the preview's columns and its refusals are
-  // translated and the file it describes is not going to be sent again on a
-  // language change.
-  $('#wb-preview').addEventListener('click', () => mutate(
-    () => sendWorkbook(true), null,
-    (result) => redrawable('workbookPreview', () => renderWorkbookPreview(result))));
-
-  $('#wb-import').addEventListener('click', () => mutate(
-    () => sendWorkbook(false),
-    t('wb.imported', 'The file was imported'),
-    async (result) => {
-      resetWorkbookCard();
-      await reloadTimeViews();
-
-      if (result?.imported) {
-        toast(t('wb.importedCount', '{0} entries created.')
-          .replace('{0}', String(result.imported)), 'ok');
-      }
-    }));
-
-  $('#wb-clear').addEventListener('click', resetWorkbookCard);
-}
-
-// --------------------------------------------- an evaluation as a document
-
 /**
- * What has to be written into a copy of a chart before it can leave the page.
- *
- * The drawings take everything from the stylesheet - eight hues named by class,
- * strokes, type - and a copy lifted out of the document has no stylesheet to
- * take it from. getComputedStyle is what resolves that: it gives back the
- * settled value, with every var() and color-mix() already worked out, which is
- * exactly the colour that is on the screen rather than the recipe for it.
- */
-const PAINTED = [
-  'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-linecap',
-  'opacity', 'font-family', 'font-size', 'font-weight', 'text-anchor',
-  'dominant-baseline', 'color',
-];
-
-/**
- * How much bigger than the screen the picture is drawn.
- *
- * The chart on screen is a few hundred pixels wide and goes onto paper at about
- * 170 millimetres. At one to one that is roughly 40 dots per inch, which looks
- * like a screenshot of a chart rather than a chart. Twice over is enough to
- * print cleanly and keeps the file small enough to post.
- */
-const CHART_SCALE = 2;
-
-/**
- * What the picture may not exceed, in pixels and along a side.
- *
- * The first is the server's own bound, document.MaxChartPixels, kept here as the
- * same number so this makes a picture the server will take rather than one it
- * turns away - and a refusal about pixels says nothing to somebody who asked for
- * a year of days. TestTheChartPictureBoundIsTheOneTheServerEnforces holds the two
- * together.
- *
- * The reasoning above that bound is about width, which is the card's, and the
- * height of a chart is its number of rows: drawBarChart gives each bar 26 pixels,
- * so a year of days is 9,490 pixels tall before scaling. Measured, that comes out
- * at 2528x18980 - 48 megapixels, three times what the server decodes - and the
- * period has no maximum on either date, so it is an ordinary request.
- *
- * The second is the browser's, not the server's: a canvas stops being drawn past
- * a certain side however small its area, and 16,384 is the figure that holds
- * everywhere rather than the largest one Chrome allows.
- */
-const MAX_PICTURE_PIXELS = 16 * 1024 * 1024;
-const MAX_PICTURE_SIDE = 16384;
-
-/**
- * The two shades a printed chart is fixed to, whatever the screen was set to.
- *
- * A chart goes onto white paper, and the theme somebody reads in is not a fact
- * about the page. The bars keep the colours they have - those say which series
- * is which, and are the whole point of the picture - but the words beside them
- * are written in ink and the empty part of a bar is unprinted paper.
- *
- * What made this worth fixing was the dark theme: labels are drawn in the muted
- * shade and the empty part of a bar in the page background, so an exported chart
- * arrived as a column of solid black bars with figures beside them in a grey
- * that disappeared.
- */
-const PAPER_INK = '#000000';
-const PAPER_GROUND = '#ffffff';
-
-/**
- * Takes a picture of a chart, exactly as it stands.
- *
- * The whole reason the document is built from the screen rather than from the
- * database: these charts are drawn here, by hand, and re-drawing them on the
- * server would be a second implementation of them in a second language.
- *
- * The ground is painted first, and it is white, because the picture is going onto
- * paper. This used to take the card's own background on the reasoning that the
- * document should show the chart that was on the screen - which is true of the
- * shape and the colours and is not true of the theme: a dark screen produced a
- * dark rectangle with pale type on it, printed onto a white page.
- */
-async function chartAsPicture(container) {
-  const source = container?.querySelector('svg');
-  if (!source) return '';
-
-  const box = source.getBoundingClientRect();
-  const width = Math.max(1, Math.round(box.width));
-  const height = Math.max(1, Math.round(box.height));
-
-  const copy = source.cloneNode(true);
-
-  const originals = [source, ...source.querySelectorAll('*')];
-  const copies = [copy, ...copy.querySelectorAll('*')];
-
-  // Set one property at a time rather than writing a style attribute.
-  //
-  // The two look interchangeable and are not: style-src is 'self' with no
-  // 'unsafe-inline', and writing the attribute is exactly what that governs, so
-  // the browser blocked every one of them and said so ninety-six times per
-  // exported chart. The picture still came out, because the attribute value is
-  // set even when applying it is refused and the serializer reads the value -
-  // which is why this went unnoticed: the export worked, and only the console
-  // knew what it cost.
-  //
-  // Assigning through the CSSOM is not an inline style and is not covered by the
-  // directive. It reflects into the attribute the serializer reads, so the copy
-  // carries its colours out exactly as before.
-  copies.forEach((node, i) => {
-    const settled = window.getComputedStyle(originals[i]);
-
-    PAINTED.forEach((property) => {
-      const value = settled.getPropertyValue(property);
-      if (value) node.style.setProperty(property, value);
-    });
-  });
-
-  // And then the two things that are about paper rather than about the screen.
-  //
-  // After the loop above rather than instead of it: everything else the chart
-  // says with colour is kept, because a bar's colour is which series it is. Only
-  // the ink and the unprinted part are overruled.
-  for (const words of copy.querySelectorAll('text')) {
-    words.style.setProperty('fill', PAPER_INK);
-  }
-
-  for (const empty of copy.querySelectorAll('.chart-track')) {
-    empty.style.setProperty('fill', PAPER_GROUND);
-  }
-
-  // Named explicitly: an <svg> handed to an <img> is a document of its own, and
-  // one without a namespace or a size does not render at all.
-  copy.setAttribute('xmlns', SVG_NS);
-  copy.setAttribute('width', String(width));
-  copy.setAttribute('height', String(height));
-
-  const drawing = new XMLSerializer().serializeToString(copy);
-
-  const picture = new Image();
-
-  await new Promise((resolve, reject) => {
-    picture.onload = resolve;
-    picture.onerror = () => reject(new Error(t('report.chartFailed',
-      'The chart could not be turned into a picture.')));
-
-    // A data URI rather than a blob: the Content-Security-Policy allows data:
-    // for images and nothing else, and this is the one place that matters.
-    picture.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(drawing)}`;
-  });
-
-  // Twice the size on screen, unless that would be more than can be drawn or more
-  // than the server will decode. Scaled down to fit rather than refused: the
-  // document places this at about 170mm whatever it was on screen, so what a long
-  // period costs is resolution nobody was going to see, and the alternative is a
-  // refusal the reader cannot act on.
-  //
-  // Floored rather than rounded, so the product cannot land a pixel above the
-  // bound it was computed from.
-  const scale = Math.min(
-    CHART_SCALE,
-    Math.sqrt(MAX_PICTURE_PIXELS / (width * height)),
-    MAX_PICTURE_SIDE / width,
-    MAX_PICTURE_SIDE / height,
-  );
-
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.floor(width * scale));
-  canvas.height = Math.max(1, Math.floor(height * scale));
-
-  const ink = canvas.getContext('2d');
-
-  // The page, not the card. This took the card's own background, which is what
-  // put a dark rectangle behind a chart exported from the dark theme.
-  ink.fillStyle = PAPER_GROUND;
-  ink.fillRect(0, 0, canvas.width, canvas.height);
-  ink.drawImage(picture, 0, 0, canvas.width, canvas.height);
-
-  return canvas.toDataURL('image/png');
-}
-
-/**
- * What one cell says, as the one line a document gives it.
- *
- * A cell made of parts set one under the other keeps them apart. The day past
- * two limits of the Working Hours Act shows a line for each, and its text taken
- * whole ran the two sentences together on paper: "…(§ 3)45 minutes of breaks…".
- */
-function cellAsFigure(cell) {
-  if (!cell) return '';
-
-  const parts = [...cell.children];
-  const stacked = parts.length > 1
-    && parts.every((part) => window.getComputedStyle(part).display === 'block');
-
-  if (!stacked) return cell.textContent.trim();
-
-  return parts.map((part) => part.textContent.trim()).filter(Boolean).join(' · ');
-}
-
-/**
- * What a figure says with its colour, as the word a document prints it by: a
- * balance in credit or in debt, something quieter than the rest, a notice.
- *
- * The word rather than the colour it is drawn in. A colour is the theme's, and
- * the dark theme's are drawn for a dark ground - a pale grey, a tint nearly
- * black - so the document prints each word in shades of its own, the light
- * theme's (document.Tone on the server). The classes are the ones the stylesheet
- * draws a figure apart by - a total set in a pill or as a quiet sentence is grey
- * - and everyColourIsCarried and theTotalsColourIsCarried in the browser suite
- * fail on a cell or a total drawn apart that this gives no word.
- */
-function toneOf(figure) {
-  if (!figure) return '';
-
-  if (figure.matches('.plus')) return 'plus';
-  if (figure.matches('.minus')) return 'minus';
-  if (figure.querySelector('.act-notice')) return 'notice';
-  if (figure.matches('.empty, .muted, .pill') || figure.closest('tr.unrecorded')) return 'muted';
-
-  return '';
-}
-
-/**
- * Reads a table off the screen as the figures it is showing, and what each of
- * them says with its colour.
- *
- * The rendered table rather than the answer it was drawn from: what goes in the
- * document is what somebody is looking at, already sorted, already formatted,
- * already in their number and date conventions. Reading the response again here
- * would mean formatting all of it a second time, and the second time would drift
- * from the first.
- *
- * Columns of buttons and of tick boxes are dropped. They are the two things on a
- * table that are not figures, and neither means anything on paper.
- */
-function tableAsFigures(table) {
-  if (!table) return null;
-
-  const headings = [...table.querySelectorAll('thead th')];
-
-  const wanted = headings
-    .map((heading, i) => (heading.classList.contains('actions')
-      || heading.classList.contains('pick') ? -1 : i))
-    .filter((i) => i >= 0);
-
-  if (wanted.length === 0) return null;
-
-  const rows = [...table.querySelectorAll('tbody tr')]
-    // The "nothing here" line is a message, not a row of figures. It is told
-    // apart by being the row's only cell, not by its class alone: a statement's
-    // "no rate yet" is marked empty as well, and its line was left out of the
-    // document with its hours.
-    .filter((row) => !(row.children.length === 1 && row.firstElementChild.matches('td.empty')));
-
-  return {
-    columns: wanted.map((i) => headings[i].textContent.trim()),
-    numeric: wanted.map((i) => headings[i].classList.contains('num')),
-    rows: rows.map((row) => wanted.map((i) => cellAsFigure(row.children[i]))),
-    tones: rows.map((row) => wanted.map((i) => toneOf(row.children[i]))),
-  };
-}
-
-/**
- * The colours this screen is drawn in, for the document to be drawn in too.
- *
- * Read from the page rather than written out here, so a theme, a re-themed
- * build or a token somebody changes are all followed without this knowing about
- * any of them. getComputedStyle gives the settled value - the var() and the
- * color-mix() already worked out - which is the same reason the charts are
- * copied that way.
- *
- * The names are the interface's own tokens, and only one of them is used: the
- * page keeps its own ink and takes the accent. That is decided on the server -
- * Palette.resolve, with TestThePageHasItsOwnInkWhateverTheScreenSent holding it -
- * and the reason is that a theme is a fact about a screen at a moment rather than
- * about a printed page. Replacing only the shades that could not be read gave two
- * different documents from one installation, depending on how whoever exported it
- * happened to be reading.
- *
- * So the other four travel and are not used. They stay in the payload because a
- * field a client already sends is part of the contract, and because the decision
- * about which of them a page takes belongs where the page is written.
- */
-function screenColours() {
-  const settled = window.getComputedStyle(document.documentElement);
-
-  const read = (token) => settled.getPropertyValue(token).trim();
-
-  return {
-    accent: read('--accent'),
-    text: read('--text'),
-    muted: read('--muted'),
-    border: read('--border'),
-    surface: read('--surface'),
-  };
-}
-
-/**
- * The period each evaluation on screen was worked out for, as its answer named it,
- * and for the report the projects it was asked about.
- *
- * Not the form's date boxes: they hold what the next evaluation will ask for. Read
- * off them, a document was headed with whatever somebody had typed since - April
- * over March's figures - and with nothing when the boxes were left empty and the
- * server chose the period itself. The report's select is the same kind of box.
- */
-const evaluatedPeriod = {
-  report: null, overtime: null, statistics: null, statement: null,
-};
-
-/** The period a document covers, as an answer named it. */
-function periodOf(period) {
-  if (!period?.from || !period?.to) return '';
-
-  return `${fmtDate(period.from)} – ${fmtDate(period.to)}`;
-}
-
-/**
- * Which projects a report covers, in the words its select offers them in.
- *
- * Kept as it was asked rather than as the answer names it, because the answer
- * says 0 both for every project and for none of them.
- */
-function coverageOf(evaluated) {
-  if (!evaluated) return '';
-
-  if (!evaluated.projectId) return t('filter.allProjects', 'All projects');
-
-  if (evaluated.projectId === 'none') return t('report.noProject', 'No project');
-
-  return projectName(Number(evaluated.projectId));
-}
-
-/**
- * Sends one evaluation off to be laid out, and saves what comes back.
- *
- * The whole card is disabled while it runs. Building the picture and posting it
- * takes a moment on a long table, and a second press would produce a second
- * identical document rather than a faster one.
- */
-async function exportEvaluation(button, name, build) {
-  if (!button) return;
-
-  // What the button is, kept so it can be given back. The key comes off the
-  // element and the English from the copy applyLanguage made of it, falling back
-  // to what is on screen for a page that has only ever been English - which is
-  // exactly when the two are the same thing.
-  const key = button.dataset.i18n;
-  const english = button.dataset.i18nSource ?? button.textContent;
-  const giveBack = holdFocus(button);
-
-  button.disabled = true;
-
-  // Declared while it says it, not written over the top of a key that says
-  // something else. applyLanguage copies an element's English source the first
-  // time it translates one, so a language change during an export copied
-  // "Preparing …" as the English of a button that exports - and put it back on an
-  // idle button every time the page was read in English for the rest of the
-  // session. Measured: it survived the export finishing and both switches.
-  swapTheLabel(button, 'report.exporting', 'Preparing …');
-
-  try {
-    await downloadDocument(await build(), name);
-  } catch (err) {
-    toastFailure(err);
-  } finally {
-    button.disabled = false;
-
-    if (key) swapTheLabel(button, key, english);
-    else button.textContent = english;
-
-    giveBack();
-  }
-}
-
-/** The report screen: the chart as chosen, the table, and the total. */
-async function reportDocument() {
-  const total = $('#report-total').textContent.trim();
-
-  return {
-    title: t('report.title', 'Report'),
-    colours: screenColours(),
-    subtitle: [coverageOf(evaluatedPeriod.report), periodOf(evaluatedPeriod.report)]
-      .filter(Boolean).join(' · '),
-    sections: [{
-      heading: t('report.result', 'Result'),
-      caption: $('#report-chart-caption').textContent.trim(),
-      chart: await chartAsPicture($('#report-chart')),
-      table: tableAsFigures($('#table-report')),
-    }],
-    summary: total
-      ? [{ label: t('stats.total', 'Total'), value: total, tone: toneOf($('#report-total')) }]
-      : [],
-  };
-}
-
-/** The statement last worked out, which the document and the workbook are made of. */
-let statementShown = null;
-
-/**
- * The statement of work: the table, and a total per currency as the figures
- * under it - the table's foot is not a row of figures a document reads.
- */
-async function statementDocument() {
-  return {
-    title: t('statement.title', 'Statement of work'),
-    colours: screenColours(),
-    subtitle: periodOf(evaluatedPeriod.statement),
-    sections: [{ table: tableAsFigures($('#table-statement')) }],
-    summary: (statementShown?.totals ?? []).map((total) => ({
-      label: fillIn(t('statement.total', 'Total in {0}'), [total.currency]),
-      value: fmtMoney(total.amount, total.currency),
-    })),
-  };
-}
-
-/** The statistics screen: both charts, in the order they are on it. */
-async function statisticsDocument() {
-  return {
-    title: t('stats.title', 'My hours'),
-    colours: screenColours(),
-    subtitle: periodOf(evaluatedPeriod.statistics),
-    sections: [
-      {
-        heading: t('stats.perDay', 'Hours per day'),
-        chart: await chartAsPicture($('#chart-days')),
-      },
-      {
-        heading: t('stats.perProject', 'Hours per project'),
-        chart: await chartAsPicture($('#chart-projects')),
-      },
-      {
-        heading: t('stats.perActivity', 'Hours per activity'),
-        chart: await chartAsPicture($('#chart-activities')),
-      },
-    ],
-    summary: [{
-      label: t('stats.total', 'Total'),
-      value: $('#statistics-total').textContent.replace(/^[^:]*:\s*/, '').trim(),
-      tone: toneOf($('#statistics-total')),
-    }],
-  };
-}
-
-/** The overtime screen: the day-by-day table and the balance. */
-async function overtimeDocument() {
-  return {
-    title: t('nav.overtime', 'Overtime'),
-    colours: screenColours(),
-    subtitle: periodOf(evaluatedPeriod.overtime),
-    sections: [{
-      heading: t('ot.balance', 'Balance'),
-      caption: $('#overtime-meta').textContent.trim(),
-      table: tableAsFigures($('#table-overtime')),
-    }],
-    summary: [{
-      label: t('ot.balance', 'Balance'),
-      value: $('#overtime-total').textContent.trim(),
-      tone: toneOf($('#overtime-total')),
-    }],
-  };
-}
-
-/**
- * Wires one button that turns a screen into a document.
- *
- * The name is a function rather than a string because it is read when the button
- * is pressed, not when it is wired: somebody who switches language after the
- * page loads should get a file named in the language they are now reading.
- */
-function wireDocumentExport(selector, name, build) {
-  const button = $(selector);
-  if (!button) return;
-
-  button.addEventListener('click', () => exportEvaluation(button, name(), build));
-}
-
-/**
- * Wires each of them.
- *
- * The keys are written out at each call rather than gathered into a table above
- * it. A table would read better and would put every one of them beyond the
- * reach of the test that checks each key is translated - it scans this file for
- * t('...') and cannot follow a key through a variable.
- */
-function wireDocumentExports() {
-  wireDocumentExport('#report-pdf', () => t('report.filename', 'report'), reportDocument);
-  wireDocumentExport('#statistics-pdf', () => t('stats.filename', 'statistics'),
-    statisticsDocument);
-  wireDocumentExport('#overtime-pdf', () => t('ot.filename', 'overtime'), overtimeDocument);
-  wireDocumentExport('#workday-pdf', () => t('work.filename', 'working-time'), workDayDocument);
-  wireDocumentExport('#statement-pdf', () => t('statement.filename', 'statement-of-work'),
-    statementDocument);
-}
-
-// ------------------------------------------- export and import, table by table
-
-/**
- * The tables that go in and out as a spreadsheet, beside the time entries.
+ * The tables that go in and out as a spreadsheet.
  *
  * Each one exports what its own tab shows and imports into its own table, which is
  * the whole point: a single pair of buttons somewhere general would have meant
@@ -15048,23 +17688,14 @@ function wireDocumentExports() {
  * export. A passkey is bound to the device holding it and means nothing anywhere
  * else. Neither is a table a spreadsheet can carry honestly.
  *
- * Roles were on that list, on the grounds that one cell holding
- * "projects:read,projects:write,..." is a list that has to be exactly right,
- * where a typo removes a right silently. That objection was to the format rather
- * than to the table: the sheet gives every permission a column of its own
- * holding yes or no, so a typo is a heading that does not match a right the
- * application enforces, and the import refuses the file by name. Reviewing what
- * four roles may do is a grid, and the role screen shows one role at a time.
+ * A role's rights are not one cell holding "tickets:read,tickets:write,...",
+ * which is a list that has to be exactly right and where a typo removes a right
+ * silently: the sheet gives every permission a column of its own holding yes or
+ * no, so a typo is a heading that does not match a right the application
+ * enforces, and the import refuses the file by name. Reviewing what several
+ * roles may do is a grid, and the role screen shows one role at a time.
  */
 const SHEET_CARDS = [
-  {
-    key: 'projects',
-    path: '/projects',
-    view: '#view-projects',
-    read: 'projects:read',
-    write: 'projects:write',
-    reload: () => refreshAll(),
-  },
   {
     key: 'users',
     path: '/users',
@@ -15086,14 +17717,14 @@ const SHEET_CARDS = [
 /**
  * Builds the export/import card for one table.
  *
- * Built here rather than written into index.html three times over. The markup is
+ * Built here rather than written into index.html once per table. The markup is
  * identical for every table - the only differences are the words and the endpoint -
- * and three copies of it in the page is three places to fix the next time one of
- * these buttons needs to change.
+ * and a copy of it per table is a place per table to fix the next time one of these
+ * buttons needs to change.
  *
  * The preview is driven by the answer: the server sends its column headings, already
- * translated, so this renders a file of projects and a file of people with the same
- * code and needs to know nothing about either.
+ * translated, so this renders a file of roles and a file of people with the same code
+ * and needs to know nothing about either.
  */
 function buildSheetCard(spec) {
   const summary = el('p', { class: 'muted' });
@@ -15149,7 +17780,7 @@ function buildSheetCard(spec) {
       + `?lang=${encodeURIComponent(activeLanguage())}`, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'X-CSRF-Token': readCookie('timepulse_csrf') },
+      headers: { 'X-CSRF-Token': readCookie('qubitdesk_csrf') },
       body: form,
     });
 
@@ -15232,9 +17863,8 @@ function buildSheetCard(spec) {
     summary.textContent = chosen ? t('wb.chosen', 'Check the file to see what it would do.') : '';
   });
 
-  // Keyed per card, so the three cards this builds keep three previews rather
-  // than overwriting each other's. The timesheet card in the markup was never
-  // part of that: it has a key of its own.
+  // Keyed per card, so the cards this builds keep a preview each rather than
+  // overwriting each other's.
   check.addEventListener('click', () => mutate(() => send(true), null,
     (result) => redrawable(`sheetPreview:${spec.key}`, () => preview(result))));
 
@@ -15274,20 +17904,16 @@ function buildSheetCard(spec) {
  * them.
  */
 const SHEET_TEXTS = {
-  projects: 'Exports your projects. An import matches rows '
-    + 'by name: a name that already exists is updated, a new one is created. '
-    + 'An empty cell leaves that '
-    + 'value alone, so nothing is lost by a column somebody deleted.',
   roles: 'Exports every role with a column per permission, holding yes or no - which '
-    + 'is the grid you want when the question is what four roles may do. An import '
+    + 'is the grid you want when the question is what several roles may do. An import '
     + 'matches rows by name, creates a role that is not there yet, and refuses a '
     + 'heading naming a right this application does not enforce. A system role can be '
     + 'described differently and nothing else.',
   users: 'Exports every account: name, email, role, and whether its password lives in '
     + 'the directory. An import changes the name and the role, matched on the email '
     + 'address, and does not create accounts - a new one needs a password, which does '
-    + 'not belong in a spreadsheet. Working times and time zones are not here: they '
-    + 'belong to whoever they are about, who sets them under My account.',
+    + 'not belong in a spreadsheet. Time zones are not here: they belong to whoever '
+    + 'they are about, who sets theirs under My account.',
 };
 
 function wireSheetCards() {
@@ -15299,783 +17925,29 @@ function wireSheetCards() {
   }
 }
 
-/**
- * What the evaluation is showing as a picture, and which shape it is drawn in.
- *
- * The shape is remembered for the session rather than reset on every
- * evaluation: somebody who prefers a pie prefers it for the next period too.
- */
-// The chart's state, kept as the answer rather than as the drawing.
-//
-// It held finished labels and a finished caption, both translated at the moment
-// the answer arrived - so a language change left "Hours per project" over bars
-// labelled "no project" on an otherwise German screen. The words are made at
-// drawing time now, which is also the only time they are needed.
-const reportChart = { kind: 'bars', scope: 'projects', projects: [], days: [] };
-
-/**
- * Takes down every evaluation this account ran, and the pictures of its hours.
- *
- * An evaluation is computed when somebody asks for one, and nothing on the next
- * sign-in asks again: the result cards stayed up with the last account's totals,
- * its name, target and booked hours, and the charts of where its time went. The
- * chart's shape is a preference rather than anybody's hours, and its buttons
- * show it, so only the figures go.
- */
-function forgetEveryEvaluation() {
-  for (const card of ['#report-result', '#overtime-result']) {
-    const node = $(card);
-    if (node) node.hidden = true;
-  }
-
-  for (const said of ['#report-total', '#report-chart-caption', '#overtime-total', '#overtime-meta',
-    '#overtime-rule', '#statistics-total', '#report-budget', '#workday-total']) {
-    const node = $(said);
-    if (node) node.textContent = '';
-  }
-
-  for (const picture of ['#report-chart', '#chart-days', '#chart-projects', '#chart-activities']) {
-    $(picture)?.replaceChildren();
-  }
-
-  reportChart.projects = [];
-  reportChart.days = [];
-}
-
-/**
- * Fetches the breakdown for the period just evaluated and draws it.
- *
- * What it breaks down depends on what was asked. Across all projects the
- * interesting division is between them, which is also the only one where a pie
- * means anything - the parts add up to the whole. With one project named, or
- * only the hours belonging to none, there is one part, so the days are the
- * division worth seeing.
- */
-async function loadReportChart(from, to, projectId) {
-  const container = $('#report-chart');
-  if (!container) return;
-
-  // Scoped the way the evaluation was. The endpoint answers for every project
-  // unless told otherwise, so an unscoped chart beside a table totalling one
-  // project is two different numbers on one screen, both offered as the answer.
-  const params = forSubject({ from, to });
-  if (projectId) params.set('projectId', projectId);
-
-  const stats = await api(`/me/statistics?${params}`);
-
-  const everyProject = !projectId;
-
-  // The field names are the ones the endpoint sends. This read project.project
-  // and day.booked, and neither exists: every label came out as "no project",
-  // and an undefined value threw inside the hours formatter, which mutate()
-  // turned into an error toast over an empty chart. The chart under Overtime
-  // reads the same answer correctly and is what this should have been copied
-  // from rather than written from memory.
-  reportChart.scope = everyProject ? 'projects' : 'days';
-  reportChart.projects = stats.projects ?? [];
-  reportChart.days = stats.days ?? [];
-
-  redrawable('reportChart', drawReportChart);
-}
-
-/** Draws the breakdown in whichever shape is selected. */
-function drawReportChart() {
-  const container = $('#report-chart');
-  if (!container) return;
-
-  for (const button of $$('#report-chart-switch button')) {
-    button.setAttribute('aria-pressed', String(button.dataset.chart === reportChart.kind));
-    button.classList.toggle('secondary', button.dataset.chart !== reportChart.kind);
-  }
-
-  // The words, made now rather than when the answer arrived, so a language change
-  // reaches them.
-  const byProject = reportChart.scope === 'projects';
-
-  const bars = byProject
-    ? projectBars(reportChart.projects)
-    : reportChart.days.map((day) => ({ label: fmtDate(day.date), value: day.hours }));
-
-  $('#report-chart-caption').textContent = byProject
-    ? t('report.byProject', 'Hours per project')
-    : t('report.byDay', 'Hours per day');
-
-  const draw = {
-    bars: drawBarChart,
-    columns: drawColumnChart,
-    pie: drawPieChart,
-  }[reportChart.kind] ?? drawBarChart;
-
-  draw(container, bars, fmtHours);
-}
-
-function wireReportChart() {
-  const holder = $('#report-chart-switch');
-  if (!holder) return;
-
-  holder.addEventListener('click', (e) => {
-    const button = e.target.closest('button[data-chart]');
-    if (!button) return;
-
-    reportChart.kind = button.dataset.chart;
-    drawReportChart();
-  });
-}
-
-function wireStatistics() {
-  const button = $('#statistics-load');
-  if (!button) return;
-
-  button.addEventListener('click', () => mutate(loadStatistics, null, null));
-}
-
-// ------------------------------------------------------------------ stopwatch
-
-/** The running clock, or null. Kept so the display can tick without asking. */
-let runningTimer = null;
-
-/** The interval that ticks the display, so it can be stopped when nothing runs. */
-let timerTick = null;
-
-/**
- * Whether the running clock is past what one entry can hold, as last drawn - or
- * null when that has not been worked out for the clock in hand yet. Kept so the
- * once-a-second paint acts on the moment it changes rather than on every tick.
- */
-let timerForgotten = null;
-
-/**
- * Whether the running clock is past the hours its owner chose to be told after,
- * as last drawn - null until worked out for the clock in hand, so the first look
- * at a clock already past them draws the banner without a notification: the
- * notification is for a clock crossing the line while somebody is elsewhere.
- */
-let timerLong = null;
-
-/**
- * The longest one entry may be, in hours.
- *
- * Read from the booking form's own limit rather than written down here again: that
- * limit is the one TestTheFormLimitsAreTheOnesTheServerEnforces holds to the
- * server's, so a clock past it is exactly one the server books only with an end.
- */
-function longestEntryHours() {
-  const max = Number($('#form-timesheet [name=durationHours]')?.max);
-
-  return Number.isFinite(max) && max > 0 ? max : 24;
-}
-
-/**
- * A moment as the day and the time on the reader's own wall clock - the values a
- * date field and a time field take.
- *
- * In the account's zone rather than the browser's, because a time sent without an
- * offset is read by the server in that zone, and the two differ for anybody whose
- * laptop is set to somewhere else.
- */
-function wallClock(iso) {
-  const at = new Date(iso);
-  const options = {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  };
-
-  let parts;
-
-  try {
-    parts = new Intl.DateTimeFormat('en-CA', {
-      ...options, timeZone: me.user?.effectiveTimezone || undefined,
-    }).formatToParts(at);
-  } catch {
-    // A zone the browser does not know falls back to its own, as todayISO does.
-    parts = new Intl.DateTimeFormat('en-CA', options).formatToParts(at);
-  }
-
-  const part = (type) => parts.find((p) => p.type === type)?.value ?? '';
-
-  return {
-    date: `${part('year')}-${part('month')}-${part('day')}`,
-    time: `${part('hour')}:${part('minute')}`,
-  };
-}
-
-/** The three corrections a running clock offers, one form each. */
-const TIMER_FORMS = ['start', 'end', 'switch'];
-
-/**
- * Opens one of the clock's corrections and closes the others, filled from the
- * clock it corrects.
- *
- * focus is off when the form opens by itself - the end form, for a clock found to
- * be forgotten - because moving somebody's cursor into a form they did not ask for
- * takes it out of whatever they were typing.
- */
-function openTimerForm(which, { focus = true } = {}) {
-  for (const name of TIMER_FORMS) {
-    const form = $(`#form-timer-${name}`);
-    if (form) form.hidden = name !== which;
-  }
-
-  const form = $(`#form-timer-${which}`);
-  if (!form || !runningTimer) return;
-
-  if (which === 'start') {
-    const { date, time } = wallClock(runningTimer.startedAt);
-
-    setDateField(form.elements.date, date);
-    form.elements.time.value = time;
-  }
-
-  if (which === 'end') {
-    // A forgotten clock most likely ended on the day it started; one stopped a
-    // little late ended today.
-    setDateField(form.elements.date,
-      timerForgotten ? wallClock(runningTimer.startedAt).date : todayISO());
-    form.elements.time.value = '';
-  }
-
-  if (which === 'switch') {
-    form.reset();
-  }
-
-  if (focus) {
-    (which === 'switch' ? form.elements.projectId : form.elements.time).focus();
-  }
-}
-
-function closeTimerForms() {
-  for (const name of TIMER_FORMS) {
-    const form = $(`#form-timer-${name}`);
-    if (form) form.hidden = true;
-  }
-}
-
-/**
- * The words the clock carries, drawn again whenever the language changes: when it
- * started, and - for one past what an entry can hold - the banner.
- */
-function drawTimerWords() {
-  const since = $('#timer-since-text');
-
-  if (since && runningTimer) {
-    since.textContent = fillIn(t('timer.since', 'Running since {0}'),
-      [fmtMoment(runningTimer.startedAt)]);
-  }
-
-  drawTimerBanner();
-}
-
-/**
- * The notice that a clock has been forgotten.
- *
- * A banner, because it is a state that stays true on every screen until the clock
- * is booked or discarded - and somebody looking at the calendar is the one who
- * most needs to hear it. It books nothing itself: the time entries named in the
- * sentence are where that happens, one place to read it and one place to act.
- */
-function drawTimerBanner() {
-  const banner = $('#timer-banner');
-  if (!banner) return;
-
-  const forgotten = runningTimer !== null && timerForgotten === true;
-  const long = runningTimer !== null && timerLong === true;
-  banner.hidden = !forgotten && !long;
-
-  if (banner.hidden) return;
-
-  const text = $('#timer-banner-text');
-  text.textContent = '';
-
-  // Split on the placeholder, so where the link falls is the translator's
-  // business - as with the restart banner. The forgotten clock's sentence wins:
-  // it says what the other one says and what to do about it.
-  const since = fmtMoment(runningTimer.startedAt);
-  const sentence = forgotten
-    ? t('timer.banner',
-      'A stopwatch has been running since {0}, longer than one entry can hold. '
-      + 'Under {1} it can be booked up to the time the work really ended.')
-    : fillIn(t('timer.longBanner',
-      'The stopwatch has been running since {0}, longer than the {2} you chose to be told after. '
-      + 'Under {1} it can be stopped.'),
-    [null, null, alertHoursText()]);
-  const [before, after] = sentence.split('{1}');
-
-  text.append(fillIn(before ?? '', [since]));
-
-  const link = el('button', {
-    type: 'button',
-    class: 'link-button',
-    id: 'timer-banner-open',
-    text: t('nav.timesheets', 'Time entries'),
-  });
-
-  link.addEventListener('click', openTheStopwatch);
-  text.append(link);
-
-  text.append(fillIn(after ?? '', [since]));
-}
-
-// ------------------------------------------------------------ own notices
-
-/** What about this person's own time deserves a banner, as the server read it. */
-let personalNotices = null;
-
-/**
- * Asks what about this person's own time deserves a banner. Worked out on the
- * server, because the balance read against the bounds is the overtime rule's,
- * and that rule lives in one place.
- */
-async function loadNotices() {
-  if (!can('reports:read:own')) return;
-
-  personalNotices = await api('/me/notices');
-
-  drawBalanceBanner();
-  fillBalanceBounds();
-  drawUnbookedBanner();
-}
-
-/**
- * The last working day with nothing booked on it. The sentence leads to the
- * booking form with that day already in it, which is the whole of what there is
- * to do about it.
- */
-function drawUnbookedBanner() {
-  const banner = $('#unbooked-banner');
-  if (!banner) return;
-
-  const day = personalNotices?.unbookedDay;
-
-  banner.hidden = !day;
-  if (!day) return;
-
-  // The calendar's own short name for the weekday, so the banner cannot call a
-  // day something the week grid does not.
-  const weekday = weekdayNames()[(new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7];
-  const values = [`${weekday} ${fmtDate(day)}`];
-  const [before, after] = t('remind.unbooked', 'Nothing is booked on {0}, a working day by your plan. '
-    + 'It can be added under {1}.').split('{1}');
-
-  const link = el('button', {
-    type: 'button', class: 'link-button', id: 'unbooked-banner-open', text: t('nav.timesheets', 'Time entries'),
-  });
-  link.addEventListener('click', () => openTheBookingFormOn(day));
-
-  $('#unbooked-banner-text').replaceChildren(fillIn(before ?? '', values), link, fillIn(after ?? '', values));
-}
-
-/** Takes whoever pressed the link to the booking form, with the day in it. */
-function openTheBookingFormOn(day) {
-  switchView('timesheets');
-
-  const form = $('#form-timesheet');
-  if (!form) return;
-
-  openTheTabOf(form);
-  setDateField(form.elements.date, day);
-  form.scrollIntoView({ block: 'center' });
-  form.elements.durationHours?.focus();
-}
-
-/**
- * Tells somebody looking at another window that the stopwatch has passed the
- * hours they chose, where the browser allows it. Through the service worker
- * where one is registered, because a browser that shows notifications only from
- * one - Chrome on Android - refuses the page's own constructor, and a phone's
- * browser was left with the banner alone. The constructor is for a page with no
- * worker, and where neither works the banner is all there is.
- */
-async function notifyTheLongStopwatch() {
-  if (!('Notification' in window) || Notification.permission !== 'granted' || !runningTimer) return;
-
-  const title = t('timer.longTitle', 'The stopwatch is still running');
-  const options = {
-    body: fillIn(t('timer.longBody', 'Since {1}, longer than the {0} you chose.'),
-      [alertHoursText(), fmtMoment(runningTimer.startedAt)]),
-    tag: 'timepulse-stopwatch',
-  };
-
-  try {
-    // getRegistration rather than ready, which waits for ever where nothing was
-    // ever registered.
-    const registration = await navigator.serviceWorker?.getRegistration();
-    if (registration) {
-      await registration.showNotification(title, options);
-
-      return;
-    }
-
-    new Notification(title, options);
-  } catch {
-    // The banner says it.
-  }
-}
-
-/**
- * The hours the stopwatch is mentioned after, with the unit the screen writes
- * hours in. A whole number, so not fmtHours: "10 h" rather than "10.00 h".
- */
-function alertHoursText() {
-  return `${me.reminders?.timerAlertHours ?? 0} ${t('unit.hours', 'h')}`;
-}
-
-/** The reminder choices as they are stored, unless somebody is changing them. */
-function fillReminders() {
-  const form = $('#form-reminders');
-  if (!form || !me.reminders || beingEdited(form)) return;
-
-  form.elements.unbookedDay.checked = me.reminders.unbookedDay;
-  form.elements.timerAlertHours.value = String(me.reminders.timerAlertHours);
-}
-
-/**
- * The Android app's notifications, where the page is shown in it. The app's
- * WebView has no Notification of its own, so the app registers
- * TimePulseNotifications instead: state() answers in the words of the
- * browser's Notification.permission - granted, default or denied - and request()
- * asks the phone, which answers by dispatching timepulse-notifications on the window
- * once its owner has chosen. The reminders themselves the app shows as
- * notifications of its own, open or closed, asking the installation itself.
- */
-function appNotifications() {
-  return window.TimePulseNotifications ?? null;
-}
+// ------------------------------------------------------------ notifications
 
 /**
  * Whether this browser will show a notification, and the button that asks it
  * where it has not been asked yet. A refusal can only be taken back in the
- * browser's own settings, so it is said rather than asked again. In the Android
- * app the same is asked of the phone, in the app's words rather than a browser's.
+ * browser's own settings, so it is said rather than asked again. The Android
+ * app's WebView has no Notification, so inside the app this says it cannot show
+ * one - which is true of the app as well, while it shows none of its own.
  */
 function drawNotifyState() {
   const button = $('#notify-allow');
   const state = $('#notify-state');
   if (!button || !state) return;
 
-  const app = appNotifications();
-  if (app) {
-    const permission = app.state();
-
-    button.hidden = permission !== 'default';
-    swapTheLabel(button, 'remind.allowAppNotifications', 'Allow notifications from this app');
-    state.textContent = {
-      granted: () => t('remind.appNotifyGranted',
-        'This app shows the reminders as notifications, whether it is open or not.'),
-      denied: () => t('remind.appNotifyDenied',
-        'The phone blocks this app\'s notifications; that can only be changed in its settings.'),
-    }[permission]?.() ?? '';
-
-    return;
-  }
-
   const permission = 'Notification' in window ? Notification.permission : 'unsupported';
 
   button.hidden = permission !== 'default';
   state.textContent = {
-    granted: () => t('remind.notifyGranted', 'This browser shows notifications from here.'),
-    denied: () => t('remind.notifyDenied',
+    granted: () => t('notify.granted', 'This browser shows notifications from here.'),
+    denied: () => t('notify.denied',
       'This browser blocks notifications from here; that can only be changed in its own settings.'),
-    unsupported: () => t('remind.notifyUnsupported', 'This browser cannot show notifications.'),
+    unsupported: () => t('notify.unsupported', 'This browser cannot show notifications.'),
   }[permission]?.() ?? '';
-}
-
-/**
- * The running balance past a bound its owner set. The sentence carries the way
- * to the bounds inside it, split on the placeholder so where the link falls is
- * the translator's business - as with the stopwatch's banner.
- */
-function drawBalanceBanner() {
-  const banner = $('#balance-banner');
-  if (!banner) return;
-
-  const balance = personalNotices?.balance;
-  const outside = balance?.outside;
-
-  banner.hidden = !outside;
-  if (!outside) return;
-
-  const above = outside === 'above';
-  const sentence = above
-    ? t('bounds.above', 'Your running balance is {0}, above the upper bound of {1} you set under {2}.')
-    : t('bounds.below', 'Your running balance is {0}, below the lower bound of {1} you set under {2}.');
-  const values = [fmtSignedHours(balance.hours), fmtSignedHours(above ? balance.upperBound : balance.lowerBound)];
-  const [before, after] = sentence.split('{2}');
-
-  const link = el('button', {
-    type: 'button', class: 'link-button', id: 'balance-banner-open', text: t('nav.settings', 'My account'),
-  });
-  link.addEventListener('click', openTheBalanceBounds);
-
-  $('#balance-banner-text').replaceChildren(fillIn(before ?? '', values), link, fillIn(after ?? '', values));
-}
-
-/** The bounds as they are stored, and the balance they are chosen against. */
-function fillBalanceBounds() {
-  const form = $('#form-balance-bounds');
-  const balance = personalNotices?.balance;
-  if (!form || !balance) return;
-
-  if (!beingEdited(form)) {
-    form.elements.upperBound.value = balance.upperBound ?? '';
-    form.elements.lowerBound.value = balance.lowerBound ?? '';
-  }
-
-  $('#balance-now').textContent = balance.since
-    ? fillIn(t('bounds.now', 'Your running balance is {0}, counted from {1}.'),
-      [fmtSignedHours(balance.hours), fmtDate(balance.since)])
-    : t('bounds.nothingYet', 'Nothing counts towards your balance yet.');
-}
-
-/** Takes whoever pressed the balance banner's link to the bounds it is about. */
-function openTheBalanceBounds() {
-  switchView('settings');
-
-  const form = $('#form-balance-bounds');
-  openTheTabOf(form);
-  if (form) form.scrollIntoView({ block: 'center' });
-}
-
-/** Takes whoever pressed the banner's link to the clock it is about. */
-function openTheStopwatch() {
-  switchView('timesheets');
-
-  const card = $('#timer-card');
-  openTheTabOf(card);
-  if (card) card.scrollIntoView({ block: 'center' });
-}
-
-/**
- * Acts on the clock having crossed into, or out of, being longer than an entry.
- *
- * Past it, stopping now and switching are taken away - the server would refuse
- * both - and the end form opens by itself, saying why. It is only opened when it
- * is not already open, so a reload while somebody is typing an end time leaves
- * what they typed alone.
- */
-function applyTimerForgotten() {
-  const running = runningTimer !== null;
-  const forgotten = running && timerForgotten === true;
-
-  $('#timer-stop').hidden = !running || forgotten;
-  $('#timer-switch-open').hidden = !running || forgotten;
-  $('#timer-end-forgotten').hidden = !forgotten;
-
-  if (forgotten && $('#form-timer-end').hidden) openTimerForm('end', { focus: false });
-
-  drawTimerBanner();
-}
-
-/**
- * Renders the clock's state.
- *
- * The elapsed time is counted here rather than polled, because a request per
- * second to be told the same thing is a request per second - and counted on the
- * server's clock, which is the one the booking is measured on. The device's own
- * can be minutes out: two minutes slow, its difference from the recorded start
- * came out negative and the stopwatch read 00:00:00 for two minutes after Start.
- * So the offset between the two is measured once, when the server's answer
- * arrives - the start plus what it says it has measured is its own now - and
- * the wall clock does the rest, which keeps counting through a laptop's sleep
- * where a monotonic clock may not.
- */
-function renderTimer() {
-  const card = $('#timer-card');
-  if (!card) return;
-
-  const running = runningTimer !== null;
-
-  $('#timer-start').hidden = running;
-  $('#timer-stop').hidden = !running;
-  $('#timer-switch-open').hidden = !running;
-  $('#timer-discard').hidden = !running;
-  $('#timer-end-open').hidden = !running;
-  $('#timer-since').hidden = !running;
-  $('#timer-project').disabled = running;
-  $('#timer-description').disabled = running;
-
-  if (!running) {
-    $('#timer-elapsed').textContent = '';
-
-    if (timerTick) {
-      clearInterval(timerTick);
-      timerTick = null;
-    }
-
-    timerForgotten = null;
-    timerLong = null;
-    closeTimerForms();
-    stopRedrawing('timerWords');
-    applyTimerForgotten();
-
-    return;
-  }
-
-  redrawable('timerWords', drawTimerWords);
-
-  const started = new Date(runningTimer.startedAt).getTime();
-  const offset = runningTimer.clockOffset ?? 0;
-  const longest = longestEntryHours() * 3600;
-
-  const paint = () => {
-    const seconds = Math.max(0, Math.floor((Date.now() + offset - started) / 1000));
-    const hh = String(Math.floor(seconds / 3600)).padStart(2, '0');
-    const mm = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
-    const ss = String(seconds % 60).padStart(2, '0');
-
-    $('#timer-elapsed').textContent = `${hh}:${mm}:${ss}`;
-
-    // Acted on when it changes, which is once: on the first paint of a clock,
-    // and again if one runs on past the limit while the page is open.
-    const forgotten = seconds > longest;
-
-    if (forgotten !== timerForgotten) {
-      timerForgotten = forgotten;
-      applyTimerForgotten();
-    }
-
-    // The hours its owner chose to be told after, read on every tick so a choice
-    // saved under My account applies without the clock being loaded again. Not
-    // once the clock is past what an entry holds: that banner says more.
-    const alert = (me.reminders?.timerAlertHours ?? 0) * 3600;
-    const long = alert > 0 && seconds >= alert && !forgotten;
-
-    if (long !== timerLong) {
-      const crossed = long && timerLong === false;
-
-      timerLong = long;
-      drawTimerBanner();
-
-      if (crossed) notifyTheLongStopwatch();
-    }
-  };
-
-  paint();
-
-  if (!timerTick) timerTick = setInterval(paint, 1000);
-}
-
-async function loadTimer() {
-  if (!can('timesheets:write:own')) return;
-
-  const state = await api('/me/timer');
-
-  runningTimer = state.running
-    ? {
-      ...state,
-      // How far the server's clock is ahead of this device's: see renderTimer.
-      clockOffset: new Date(state.startedAt).getTime() + (state.elapsedHours ?? 0) * 3600000
-        - Date.now(),
-    }
-    : null;
-
-  // Worked out again for the clock just read: a correction or a switch can have
-  // moved it to either side of the limit.
-  timerForgotten = null;
-  timerLong = null;
-
-  // What it was started with, so stopping books what was chosen - the fields
-  // are disabled while it runs, and this is what they show. Written whether or
-  // not there is a project, because a switch can leave a clock running on none
-  // after one that had one.
-  if (runningTimer) {
-    $('#timer-project').value = runningTimer.projectId ? String(runningTimer.projectId) : '';
-    $('#timer-description').value = runningTimer.description ?? '';
-  }
-
-  renderTimer();
-}
-
-function wireTimer() {
-  const start = $('#timer-start');
-  if (!start) return;
-
-  start.addEventListener('click', () => {
-    const projectId = $('#timer-project').value;
-    const description = $('#timer-description').value.trim();
-
-    const body = {};
-    if (projectId) body.projectId = Number(projectId);
-    if (description) body.description = description;
-
-    mutate(
-      () => api('/me/timer', { method: 'POST', body: JSON.stringify(body) }),
-      t('timer.started', 'The clock is running'),
-      loadTimer);
-  });
-
-  $('#timer-stop').addEventListener('click', () => {
-    mutate(
-      () => api('/me/timer/stop', { method: 'POST' }),
-      t('msg.booked', 'Time booked'),
-      // Both time views as well: a booking has just appeared in each of them.
-      async () => { await loadTimer(); await reloadTimeViews(); });
-  });
-
-  $('#timer-discard').addEventListener('click', async () => {
-    const proceed = await confirmDialog({
-      title: t('timer.discardTitle', 'Discard the measured time?'),
-      text: t('timer.discardText',
-        'The clock is stopped and nothing is recorded. This cannot be undone.'),
-      confirmLabel: t('timer.discard', 'Discard'),
-    });
-
-    if (!proceed) return;
-
-    mutate(
-      () => api('/me/timer', { method: 'DELETE' }),
-      t('timer.discarded', 'The clock was discarded'),
-      loadTimer);
-  });
-
-  $('#timer-adjust-open').addEventListener('click', () => openTimerForm('start'));
-  $('#timer-end-open').addEventListener('click', () => openTimerForm('end'));
-  $('#timer-switch-open').addEventListener('click', () => openTimerForm('switch'));
-
-  for (const name of TIMER_FORMS) {
-    $(`#timer-${name}-cancel`).addEventListener('click', closeTimerForms);
-  }
-
-  // A time without an offset, read by the server in this account's zone - the one
-  // the fields were filled in.
-  const moment = (form) => `${form.elements.date.value}T${form.elements.time.value}`;
-
-  $('#form-timer-start').addEventListener('submit', (event) => {
-    event.preventDefault();
-
-    const startedAt = moment(event.currentTarget);
-
-    mutate(
-      () => api('/me/timer', { method: 'PUT', body: JSON.stringify({ startedAt }) }),
-      t('timer.adjusted', 'Start corrected'),
-      async () => { closeTimerForms(); await loadTimer(); });
-  });
-
-  $('#form-timer-end').addEventListener('submit', (event) => {
-    event.preventDefault();
-
-    const endedAt = moment(event.currentTarget);
-
-    mutate(
-      () => api('/me/timer/stop', { method: 'POST', body: JSON.stringify({ endedAt }) }),
-      t('msg.booked', 'Time booked'),
-      async () => { closeTimerForms(); await loadTimer(); await reloadTimeViews(); });
-  });
-
-  $('#form-timer-switch').addEventListener('submit', (event) => {
-    event.preventDefault();
-
-    const form = event.currentTarget;
-    const body = {};
-    const description = form.elements.description.value.trim();
-
-    if (form.elements.projectId.value) body.projectId = Number(form.elements.projectId.value);
-    if (description) body.description = description;
-
-    mutate(
-      () => api('/me/timer/switch', { method: 'POST', body: JSON.stringify(body) }),
-      t('timer.switched', 'Booked - the clock carries on'),
-      async () => { closeTimerForms(); await loadTimer(); await reloadTimeViews(); });
-  });
 }
 
 // ------------------------------------------------------------- installing
@@ -16084,7 +17956,7 @@ function wireInstall() {
   // Inside the Android app there is nothing left to offer: it is the app the card
   // is about. The app is known by the bridge it registers for saving files, which
   // its WebView puts on the window before any script of the page runs.
-  if ('TimePulseFiles' in window) {
+  if ('QubitDeskFiles' in window) {
     const card = $('#install-card');
     if (card) card.hidden = true;
   }
@@ -16590,8 +18462,8 @@ async function signInWithPasskey() {
  * The built-in administrator keeps its password on purpose, so it is never
  * offered a passkey it might then come to rely on.
  *
- * isSystem here rather than administersOnly, which is the one place the two
- * deliberately differ. Everything else reserved for the built-in account was
+ * isSystem here rather than whether the account administers, which is the one
+ * place the two deliberately differ. Everything else reserved for the built-in account was
  * reserved for what it *does*, and an account holding the admin role does the
  * same things - but this is reserved for what it *is*: the guaranteed way back
  * in, which a way back in tied to one particular phone would stop being.
@@ -16619,7 +18491,7 @@ function passkeysWithheldBecause() {
       + 'in through the directory: the one place that can end its sign-in.');
   }
 
-  if ('TimePulseFiles' in window) {
+  if ('QubitDeskFiles' in window) {
     return t('passkey.elsewhereApp', 'The app signs in with the token it was connected with, and '
       + 'needs no passkey. Passkeys are set up and used in a browser.');
   }
@@ -17283,7 +19155,16 @@ function wireMaintenance() {
       enabled
         ? t('maint.onSaved', 'The installation is now out of service.')
         : t('maint.offSaved', 'The installation is back in service.'),
-      loadMaintenance);
+      () => {
+        // What was just saved is what the server says now. Remembered here
+        // rather than left to the reload, which leaves the form alone once
+        // somebody types in it: an administrator starting the notice as it ran
+        // left the form remembering "in service", and the next save asked
+        // again whether to put the installation out of it.
+        form.elements.enabled.defaultChecked = enabled;
+
+        return loadMaintenance();
+      });
   });
 }
 
@@ -17455,7 +19336,7 @@ const THEME_RECHECK_MS = 60_000;
  * cleared on the way out, so the next person starts from the clock.
  */
 function setThemePreference(preference) {
-  const theme = window.timePulseTheme;
+  const theme = window.qubitDeskTheme;
 
   document.documentElement.dataset.themePreference = preference;
   document.documentElement.dataset.theme = theme.resolve(preference);
@@ -17509,7 +19390,7 @@ function applyAccountTheme() {
 /** Wires the appearance picker and keeps "automatic" honest as the day passes. */
 function wireTheme() {
   const picker = $('#theme-picker');
-  const theme = window.timePulseTheme;
+  const theme = window.qubitDeskTheme;
 
   picker.value = theme.stored();
   picker.addEventListener('change', (e) => setThemeForAccount(e.target.value));
@@ -17608,7 +19489,7 @@ function navigationMenuIsOpen() {
 /**
  * Sorts the two long screens, My account and Settings, into their tabs.
  *
- * Each had grown to sixteen cards in one column - Settings to well over six
+ * Each had grown into one long column of cards - Settings to well over six
  * thousand pixels - which is a page somebody scrolls through rather than reads.
  * A card says which tab it is on with data-tab and keeps its place in the
  * markup; this moves it into its tab's panel once, in the order the markup has
@@ -17668,7 +19549,7 @@ function showScreenTab(view, key, { focus = false } = {}) {
   }
 
   try {
-    sessionStorage.setItem(`timepulse.tab.${view.id}`, key);
+    sessionStorage.setItem(`qubitdesk.tab.${view.id}`, key);
   } catch {
     // Private browsing refuses storage; the screen then opens on its first tab.
   }
@@ -17679,9 +19560,9 @@ function showScreenTab(view, key, { focus = false } = {}) {
  *
  * What the tabs left behind showed is let go as it is when the screen itself is
  * left: on a tab that is not chosen it is just as unseen. A password read in the
- * clear goes back behind its dots; a token's value, a calendar's secret address
- * and a second factor's key - each a credential shown once - come off their
- * cards; and the log stops being read.
+ * clear goes back behind its dots; a token's value and a second factor's key -
+ * each a credential shown once - come off their cards; and the log stops being
+ * read.
  */
 function chooseScreenTab(view, key, options) {
   showScreenTab(view, key, options);
@@ -17689,7 +19570,6 @@ function chooseScreenTab(view, key, options) {
   hideEveryRevealedPassword();
 
   if (onAHiddenTab($('#token-card'))) forgetTheTokenValue();
-  if (onAHiddenTab($('#feed-card'))) forgetTheFeedAddress();
   if (onAHiddenTab($('#totp-card')) && $('#totp-setup') && !$('#totp-setup').hidden) renderTOTPState();
 
   if (logViewerActive()) schedulePoll({ immediate: true });
@@ -17701,7 +19581,7 @@ function rememberedScreenTab(view) {
   let key = null;
 
   try {
-    key = sessionStorage.getItem(`timepulse.tab.${view.id}`);
+    key = sessionStorage.getItem(`qubitdesk.tab.${view.id}`);
   } catch {
     return null;
   }
@@ -17817,27 +19697,14 @@ function switchView(name) {
 
   rememberView(name);
 
-  // The period this screen evaluates, visible before anything is evaluated.
-  fillRangesFor(name);
-
-  // Filled on arrival rather than once, because what it says about today goes
-  // stale. Not awaited: switching screens is not something to hold up for two
-  // requests, and the screen reads correctly while they are in flight.
+  // Filled on arrival rather than once, because who it greets and what it
+  // offers them may have changed since it was last drawn.
   if (name === 'welcome') renderWelcome();
 
-  // The week, likewise: what it shows is the server's, and may have moved since.
-  if (name === 'week') mutate(loadWeekGrid, null, null);
 
-  // And the year beside the evaluations, which is two requests and loaded only
-  // where it is looked at.
-  if (name === 'overtime') mutate(loadYearMap, null, null);
-
-  // The stopwatch's start as the day's, for a clock started since the calendar
-  // was last drawn - which costs no request, the clock being in hand already.
-  if (name === 'calendar') {
-    const workday = $('#form-workday');
-    if (workday && !beingEdited(workday)) proposeTheClocksStart(workday);
-  }
+  // And what the reader was told, which other people's changes add to while
+  // nothing on this page moves.
+  if (name === 'tickets') loadTold().catch((err) => toastFailure(err));
 
   // The log viewer polls, so it follows the screen it lives on rather than
   // running for as long as the tab is open.
@@ -17859,7 +19726,6 @@ function switchView(name) {
     if ($('#totp-setup') && !$('#totp-setup').hidden) renderTOTPState();
 
     forgetTheTokenValue();
-    forgetTheFeedAddress();
   }
 }
 
@@ -17882,7 +19748,7 @@ function rememberedView() {
   if (!me.user) return '';
 
   try {
-    return localStorage.getItem(`timepulse_view_${me.user.id}`) ?? '';
+    return localStorage.getItem(`qubitdesk_view_${me.user.id}`) ?? '';
   } catch {
     return '';
   }
@@ -17899,7 +19765,7 @@ function rememberView(name) {
   if (name === 'welcome') return;
 
   try {
-    localStorage.setItem(`timepulse_view_${me.user.id}`, name);
+    localStorage.setItem(`qubitdesk_view_${me.user.id}`, name);
   } catch {
     // Nothing to do about a storage that will not take it.
   }
@@ -18011,13 +19877,9 @@ async function refreshAll() {
   // Whether a newer version exists, for whoever may do something about it.
   startReleaseWatch();
 
-  // Before the booking date is worked out, because that depends on the zone -
-  // and on a first sign-in the zone is the thing being adopted.
+  // On a first sign-in the zone and the language are the browser's, adopted
+  // here; what the account says afterwards is read again.
   if (await adoptBrowserDefaults()) await loadMe();
-
-  // Only now is the applicable zone known, so the booking date is set here
-  // rather than at start-up, where it would still be the browser's guess.
-  resetBookingDate();
 
   // Before every other loader, because the server blocks the rest of the API
   // while the initial password stands - and that is exactly when the wizard is
@@ -18048,35 +19910,28 @@ async function refreshAll() {
     return;
   }
 
-  // Whose time the screens show, before any of them is filled.
-  await loadTeam();
-
   // Roles first: the user table renders a role picker from them.
   await loadRoles();
-  await Promise.all([loadUsers(), loadProjects()]);
-  await loadTimesheets();
-  // After users and projects, so the calendar can resolve names.
-  await loadCalendar();
-  await loadTimer();
-  await loadStatistics();
+  await loadSysConfig();
+  await loadTicketSetup();
+  await loadCommunication();
+  await loadCustomers();
+  await loadGeneralCatalog();
+  await loadClassDefinitions();
+  await loadConfigItems();
+  await loadItsmChanges();
+  await loadPortal();
+  await loadFAQ();
+  await loadTickets();
+  await loadOverview();
+  await loadReport();
+  await loadUsers();
+  await loadAutomation();
   await loadAdmin();
   await loadTokens();
-  await loadCalendarFeed();
   await loadAndroidCode();
   await loadPasskeys();
   await loadOpenIDLink();
-  await loadSchedules();
-  await loadTemplates();
-  await loadAbsences();
-  await loadVacation();
-  await loadMyHolidays();
-  await loadNotices();
-  await loadMyManagers();
-
-  // What was booked without a connection, now that there is one - and the banner
-  // for whoever is signed in now.
-  drawOutbox();
-  await sendOutbox();
   fillSettingsForm();
 
   document.documentElement.dataset.loaded = 'yes';
@@ -18107,10 +19962,6 @@ function wireForms() {
       return;
     }
 
-    // No working times here. A new account starts on the instance default under
-    // Settings and its owner changes it under My account - a daily target is a time
-    // figure, and administering an installation is not the same job as recording time
-    // in it.
     const body = formData(form);
 
     mutate(() => api('/users', { method: 'POST', body: JSON.stringify(body) }),
@@ -18139,12 +19990,43 @@ function wireForms() {
       async () => { resetRoleForm(); await refreshAll(); });
   });
 
-  $('#welcome-recent-all')?.addEventListener('click', () => {
-    switchView('timesheets');
-    openTheTabOf($('#entries-card'));
+  $('#role-reset').addEventListener('click', resetRoleForm);
+
+  wireTickets();
+  wireCustomers();
+  wirePortal();
+  wirePublishedFAQ();
+  wireGeneralCatalog();
+  wireClassDefinitions();
+  wireConfigItems();
+  wireItsmChanges();
+  wireSysConfig();
+  wireCalendars();
+  wireSla();
+  wireUnlockTypes();
+  wireAutomation();
+  wireNotifications();
+  wireTold();
+  wireTemplates();
+  wireFAQ();
+
+  $('#form-queue').addEventListener('submit', (e) => {
+    e.preventDefault();
+    saveQueue(e.target);
   });
 
-  $('#role-reset').addEventListener('click', resetRoleForm);
+  $('#queue-cancel').addEventListener('click', resetQueueForm);
+
+  for (const kind of Object.keys(CATALOGS)) {
+    $(`#form-${kind}`).addEventListener('submit', (e) => {
+      e.preventDefault();
+      saveCatalogEntry(kind, e.target);
+    });
+
+    $(`#${kind}-cancel`).addEventListener('click', () => resetCatalogForm(kind));
+  }
+
+  $('#form-state').elements.type.addEventListener('change', (e) => showNextState(e.target.form));
 
   // The same thing, offered where a shipped role is being read rather than at
   // the end of a form that is a screen further down.
@@ -18154,370 +20036,15 @@ function wireForms() {
     $('#form-role').elements.name.focus();
   });
 
-  $('#form-project').addEventListener('submit', (e) => {
-    e.preventDefault();
-
-    const form = e.target;
-    const id = form.elements.id.value;
-
-    if (id) {
-      // Through correctionFrom rather than written out here. This was the object
-      // that knew an emptied optional field has to travel as empty, and it was
-      // the only one - the booking form beside it did not, so an emptied
-      // description there saved as no change. One reader for both now.
-      //
-      // The start date is not among the emptiable ones: it is the one date a
-      // project must have, so an empty one is somebody clearing a box rather than
-      // removing a fact, and sending it would be refused. Left out, it stays what
-      // it was.
-      const changes = correctionFrom(form, ['description', 'endDate']);
-
-      // A number, and an emptied box as 0, which is how the server is told to take
-      // the budget off - a budget of nothing is no budget.
-      const budget = form.elements.budgetHours.value;
-      changes.budgetHours = budget === '' ? 0 : Number(budget);
-
-      // The same for the rate: an emptied box takes it off. The switch says what
-      // it says either way, and an emptied currency is euros again.
-      const rate = form.elements.hourlyRate.value;
-      changes.hourlyRate = rate === '' ? 0 : Number(rate);
-      changes.billable = form.elements.billable.checked;
-      changes.currency = form.elements.currency.value.trim();
-
-      mutate(() => api(`/projects/${id}`,
-        { method: 'PUT', body: JSON.stringify(changes) }),
-      t('msg.projectSaved', 'Project saved'),
-      async () => { resetProjectForm(); await refreshAll(); });
-
-      return;
-    }
-
-    const body = formData(form);
-
-    if (body.budgetHours !== undefined) body.budgetHours = Number(body.budgetHours);
-    if (body.hourlyRate !== undefined) body.hourlyRate = Number(body.hourlyRate);
-    body.billable = form.elements.billable.checked;
-
-    // A project made while looking after somebody is theirs.
-    if (viewingFor) body.ownerId = viewingFor.id;
-
-    mutate(() => api('/projects', { method: 'POST', body: JSON.stringify(body) }),
-      t('msg.projectCreated', 'Project created'),
-      async () => { resetProjectForm(); await refreshAll(); });
-  });
-
-  $('#project-cancel').addEventListener('click', resetProjectForm);
-
-  $('#form-timesheet').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const id = form.elements.id.value;
-
-    // The same form books and corrects; the id decides which - and it decides
-    // how the form is read, too. Booking drops an empty box, correcting sends
-    // it: see correctionFrom. Number('') is 0, which is how the service is told
-    // to take a project off again; Number(undefined) is NaN, which reaches it as
-    // null and means "leave it alone".
-    const editing = Boolean(id);
-
-    const raw = editing
-      ? correctionFrom(form, ['description', 'projectId'])
-      : formData(form);
-
-    const body = {
-      ...raw,
-      projectId: Number(raw.projectId),
-      durationHours: Number(raw.durationHours),
-    };
-
-    // Booked for the account on screen. A correction needs no name: the entry
-    // already says whose it is.
-    if (!editing && viewingFor) body.userId = viewingFor.id;
-
-    const path = editing ? `/timesheets/${id}` : '/timesheets';
-    const method = editing ? 'PUT' : 'POST';
-
-    // Whether the booking waits on this device rather than having been booked,
-    // which decides what is said once it is put away.
-    let kept = false;
-
-    mutate(async () => {
-      try {
-        await api(path, { method, body: JSON.stringify(body) });
-      } catch (err) {
-        if (editing || !err.unreachable) throw err;
-
-        // A new booking waits on this device rather than being lost with the
-        // connection, and goes once it is back.
-        keepForLater(body);
-        kept = true;
-      }
-    }, editing ? t('msg.entrySaved', 'Entry saved') : null,
-    async () => {
-      // Keeps the project and the date, so booking several entries in a row stays
-      // quick.
-      resetTimesheetForm();
-
-      // Kept, nothing changed on the server to show, and nothing could be asked
-      // of it anyway: reloading would only add a second notice to the first.
-      if (kept) {
-        toast(t('outbox.kept', 'No connection: kept on this device, and sent once it is back.'), 'ok');
-
-        return;
-      }
-
-      if (!editing) toast(t('msg.booked', 'Time booked'), 'ok');
-
-      await reloadTimeViews();
-    });
-  });
-
-  $('#timesheet-cancel').addEventListener('click', resetTimesheetForm);
-
-  // Back to the placeholder once it has filled the form: left showing the
-  // template, it would go on claiming the form says what the template says after
-  // somebody had changed the hours.
-  $('#ts-template').addEventListener('change', (event) => {
-    const template = entryTemplates.find((kept) => String(kept.id) === event.target.value);
-
-    event.target.value = '';
-
-    if (template) fillFromTemplate(template);
-  });
-
-  $('#ts-template-save').addEventListener('click', saveAsTemplate);
-
-  // One row, because the total covers the reader's own hours and nobody else's.
-  // The column used to name the person, which is now always the same person.
-  function renderReport(report, projectId) {
-    evaluatedPeriod.report = { from: report.from, to: report.to, projectId };
-
-    const rows = (report.entries ?? []).map((entry) => el('tr', {},
-      el('td', { text: `${fmtDate(report.from)} – ${fmtDate(report.to)}` }),
-      el('td', { class: 'num', text: fmtNumber(entry.hours) }),
-    ));
-
-    fillTable($('#table-report tbody'), rows, 2, t('ot.empty', 'No bookings in this period.'));
-    $('#report-total').textContent = t('report.total', '{0} in total')
-      .replace('{0}', fmtHours(report.totalHours));
-
-    // One project with a budget: how much of it everything booked so far uses -
-    // every hour there is, not only the period's, because that is what a budget
-    // is spent by.
-    const project = projectId && projectId !== 'none'
-      ? cache.projects.find((p) => String(p.id) === String(projectId))
-      : null;
-
-    $('#report-budget').textContent = project?.budgetHours
-      ? fillIn(t('report.budget', 'All its hours together: {0} of its budget of {1} ({2} %).'),
-        [fmtHours(project.bookedHours), fmtHours(project.budgetHours),
-          Math.round((project.bookedHours / project.budgetHours) * 100)])
-      : '';
-
-    $('#report-result').hidden = false;
-  }
-
-  $('#form-report').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const { projectId, from, to } = formData(e.target);
-    const params = forSubject();
-    if (projectId) params.set('projectId', projectId);
-    if (from) params.set('from', from);
-    if (to) params.set('to', to);
-    const suffix = params.toString() ? `?${params}` : '';
-
-    mutate(async () => {
-      // /reports rather than /projects/{id}/report, because the selection is not
-      // always a project: an empty projectId means every one of them and "none"
-      // means the hours that never got one, and neither fits in a path.
-      const report = await api(`/reports${suffix}`);
-
-      // Drawn through redrawable, so a language change draws it again from this
-      // same answer rather than leaving an English total under a German heading.
-      redrawable('report', () => renderReport(report, projectId));
-
-      // The same period as a picture. The figures come from the statistics
-      // endpoint rather than the report, because a total is one number and a
-      // chart of one number says nothing - that endpoint already breaks the
-      // same range down, scoped to this person by the same right.
-      await loadReportChart(report.from, report.to, projectId);
-    }, null, null);
-  });
-
-  function renderOvertime(balance) {
-    evaluatedPeriod.overtime = { from: balance.from, to: balance.to };
-
-    const rows = (balance.days ?? []).map((d) => el('tr', {},
-      el('td', { text: [fmtDate(d.date), d.holiday ? holidayOf(d) : null,
-        d.absence ? absenceName(d.absence) : null].filter(Boolean).join(' · ') }),
-      el('td', { class: 'num', text: fmtHours(d.booked) }),
-      el('td', { class: 'num', text: fmtHours(d.target) }),
-      balanceCell(d.balance),
-    ));
-
-    fillTable($('#table-overtime tbody'), rows, 4,
-      t('ot.nothingCounts', 'Nothing in this period counts towards the balance.'));
-
-    $('#overtime-rule').textContent = balance.everyDayCountsFrom
-      ? fillIn(t('ot.ruleEveryDay', 'Every working day counts from {0}.'), [fmtDate(balance.everyDayCountsFrom)])
-      : t('ot.ruleBooked', 'Only the days you booked on count. Choose a day under "My account" to count every working day.');
-
-    const total = balance.totalBalance;
-    const pill = $('#overtime-total');
-    pill.textContent = `${total > 0 ? '+' : ''}${fmtHours(total)}`;
-    pill.className = `pill ${total > 0 ? 'plus' : total < 0 ? 'minus' : ''}`;
-    $('#overtime-meta').textContent = t('ot.meta', '{0} · target {1}/day · booked {2} of {3}')
-      .replace('{0}', balance.userName)
-      .replace('{1}', fmtHours(balance.dailyTarget))
-      .replace('{2}', fmtHours(balance.totalBooked))
-      .replace('{3}', fmtHours(balance.totalTarget));
-    $('#overtime-result').hidden = false;
-  }
-
-  /**
-   * A statement of work, line by line and a total per currency. Drawn through
-   * redrawable, so a change of language writes the same figures in the other
-   * language's words and number format.
-   */
-  function renderStatement(statement) {
-    $('#statement-period').textContent = periodOf(evaluatedPeriod.statement);
-
-    const rows = statement.lines.map((line) => el('tr', {},
-      el('td', { class: 'text', text: line.name }),
-      el('td', { class: 'num', text: fmtHours(line.hours) }),
-      el('td', {
-        class: line.hourlyRate === null ? 'num empty' : 'num',
-        text: line.hourlyRate === null
-          ? t('statement.noRate', 'no rate yet')
-          : fmtMoney(line.hourlyRate, line.currency),
-      }),
-      el('td', { class: 'num', text: line.amount === null ? '–' : fmtMoney(line.amount, line.currency) }),
-    ));
-
-    fillTable($('#table-statement tbody'), rows, 4,
-      t('statement.empty', 'No billable hours in this period.'));
-
-    $('#table-statement tfoot').replaceChildren(...statement.totals.map((total) => el('tr', {},
-      el('th', { scope: 'row', class: 'text', text: fillIn(t('statement.total', 'Total in {0}'), [total.currency]) }),
-      el('td', { class: 'num', text: fmtHours(total.hours) }),
-      el('td', {}),
-      el('td', { class: 'num', text: fmtMoney(total.amount, total.currency) }),
-    )));
-
-    $('#statement-result').hidden = false;
-  }
-
-  $('#form-statement').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const { from, to } = formData(e.target);
-
-    mutate(async () => {
-      const statement = await api(`/reports/statement?${forSubject({ from, to })}`);
-
-      statementShown = statement;
-      evaluatedPeriod.statement = { from: statement.from, to: statement.to };
-
-      redrawable('statement', () => renderStatement(statement));
-    }, null, null);
-  });
-
-  // The same statement as a workbook - the one shown, not what the boxes say now.
-  $('#statement-xlsx').addEventListener('click', () => mutate(() => downloadSheet(
-    `/reports/statement/export?${forSubject(evaluatedPeriod.statement ?? {})}`,
-    t('statement.filename', 'statement-of-work')), null, null));
-
-  $('#form-overtime').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const { from, to } = formData(e.target);
-    const params = new URLSearchParams();
-    if (from) params.set('from', from);
-    if (to) params.set('to', to);
-    const suffix = params.toString() ? `?${params}` : '';
-
-    mutate(async () => {
-      // The balance of the account on screen: your own, or one you look after as a
-      // manager. Any other id is refused rather than answered.
-      const balance = await api(`/users/${subjectID()}/overtime${suffix}`);
-
-      redrawable('overtime', () => renderOvertime(balance));
-    }, null, null);
-  });
-
-  $('#form-working-times').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const form = e.target;
-    // Empty means "use the instance default", which the API expresses as 0.
-    const body = {
-      dailyTargetHours: Number(form.elements.dailyTargetHours.value || 0),
-      maxDailyHours: Number(form.elements.maxDailyHours.value || 0),
-      // An empty field is the request to take the day off again, which is how the
-      // server reads an empty string.
-      everyDayCountsFrom: form.elements.everyDayCountsFrom.value,
-    };
-    saveForm(form, () => api(`/users/${me.user.id}/working-times`,
-      { method: 'PUT', body: JSON.stringify(body) }),
-      t('msg.workingTimesSaved', 'Working hours saved'),
-      refreshAll);
-  });
-
-  $('#form-reminders').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const body = {
-      unbookedDay: form.elements.unbookedDay.checked,
-      timerAlertHours: Number(form.elements.timerAlertHours.value || 0),
-    };
-
-    saveForm(form, () => api('/me/reminders', { method: 'PUT', body: JSON.stringify(body) }),
-      t('remind.saved', 'Reminders saved'),
-      async () => { await loadMe(); fillReminders(); await loadNotices(); });
-  });
-
   $('#notify-allow').addEventListener('click', async () => {
-    const app = appNotifications();
-
-    // The phone answers in its own time, with timepulse-notifications below.
-    if (app) {
-      app.request();
-
-      return;
-    }
-
     if ('Notification' in window) await Notification.requestPermission();
 
     drawNotifyState();
   });
 
-  window.addEventListener('timepulse-notifications', drawNotifyState);
-
   $('#export-me').addEventListener('click', () => mutate(
     () => downloadFile(`${API}/me/export`, t('export.filename', 'everything-about-me'), 'zip'),
     t('wb.exported', 'Export saved'), null));
-
-  $('#form-balance-bounds').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const form = e.target;
-
-    // Both at once, as the endpoint takes them: an empty field is no bound.
-    const bound = (input) => (input.value === '' ? null : Number(input.value));
-    const body = { upperBound: bound(form.elements.upperBound), lowerBound: bound(form.elements.lowerBound) };
-
-    saveForm(form, () => api('/me/balance-limits', { method: 'PUT', body: JSON.stringify(body) }),
-      t('bounds.saved', 'Bounds saved'),
-      loadNotices);
-  });
-
-  $('#form-schedule').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const body = { validFrom: form.elements.validFrom.value, hours: scheduleHours(form) };
-
-    saveForm(form, () => api('/me/schedules', { method: 'POST', body: JSON.stringify(body) }),
-      t('schedule.saved', 'Plan saved'),
-      // Everything, because the balance and everything measured against it has
-      // just changed.
-      refreshAll);
-  });
 
   $('#form-password').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -18542,51 +20069,13 @@ function wireForms() {
       });
   });
 
-  $('#filter-ts-project').addEventListener('change',
-    () => mutate(loadTimesheets, null, null));
-
-  // Into the entries still waiting for a project, which is the project filter's
-  // own "No project" - this only makes it findable.
-  $('#ts-unassigned').addEventListener('click', () => {
-    $('#filter-ts-project').value = 'none';
-    mutate(loadTimesheets, null, null);
-  });
-
-  // A day is taken once it is complete - picked, or typed and left - and the
-  // search once the typing pauses: asked on every keystroke it would be a request
-  // per letter, each overtaking the one before.
-  const filters = $('#form-ts-filters');
-
-  filters.addEventListener('change', (event) => {
-    if (event.target.id !== 'filter-ts-q') mutate(loadTimesheets, null, null);
-  });
-
-  let searchPause = null;
-
-  $('#filter-ts-q').addEventListener('input', () => {
-    clearTimeout(searchPause);
-    searchPause = setTimeout(() => mutate(loadTimesheets, null, null), 300);
-  });
-
-  // Enter asks at once rather than waiting out the pause.
-  filters.addEventListener('submit', (event) => {
-    event.preventDefault();
-    clearTimeout(searchPause);
-    mutate(loadTimesheets, null, null);
-  });
-
-  // Through mutate like every other loader, so a half-filled booking form is left
-  // alone while the table grows underneath it.
-  $('#ts-more').addEventListener('click',
-    () => mutate(() => loadTimesheets(true), null, null));
-
   $('#tabs').addEventListener('click', (e) => {
     const tab = e.target.closest('.tab');
     if (tab) switchView(tab.dataset.view);
   });
 
-  // Following a link to #calendar, or editing the address bar, moves the screen
-  // rather than leaving the address disagreeing with what is shown.
+  // Following a link to another screen, or editing the address bar, moves the
+  // screen rather than leaving the address disagreeing with what is shown.
   window.addEventListener('hashchange', () => {
     // Only once there is a session; before that the sign-in screen is the whole
     // interface and switching underneath it would change what appears after it.
@@ -18601,7 +20090,7 @@ async function init() {
   // the user must still be able to sign in rather than face a form whose
   // submit handler was never attached, which would silently reload the page.
   $('#form-login').addEventListener('submit', submitLogin);
-  wireTicketSignIn();
+  wireKerberosSignIn();
 
   // Before anything can fail for want of a connection, so a page that cannot
   // reach the installation says so rather than only failing.
@@ -18633,15 +20122,6 @@ async function init() {
   // into a card the moment it appears is already protected from the loaders
   // filling the cards after it. Forms nothing refills are unaffected by it.
   $$('form').forEach(watchForEditing);
-
-  // And the few controls that hold typed work without belonging to one. Bound to
-  // the document rather than to each control, because some of them are drawn
-  // later than this runs.
-  for (const event of ['input', 'change']) {
-    document.addEventListener(event, (e) => {
-      if (e.target?.dataset?.keep !== undefined) rememberLooseDraft();
-    });
-  }
 
   // Appearance is a device setting and needs no session, so the picker works on
   // the sign-in screen too.
@@ -18677,21 +20157,16 @@ async function init() {
   // rather than popping in afterwards. The ticket's button likewise, and the
   // answer decides whether a ticket is tried at all below.
   await loadPasskeySupport();
-  await loadTicketSupport();
+  await loadKerberosSupport();
   await loadOpenIDOffer();
   await loadMaintenance();
 
   try {
     wireForms();
     wireTOTP();
-    wireCalendar();
-    wireAbsences();
-    wireVacation();
-    wireYearMap();
     wireHolidays();
     wireAdmin();
     wireTokens();
-    wireCalendarFeed();
     wireDirectorySync();
     wireTimezones();
     wireOperational();
@@ -18713,31 +20188,21 @@ async function init() {
     trackHeight('.topbar', '--topbar-height');
     trackHeight('#site-footer', '--footer-height');
     placeFooter();
-    wireTimer();
-    wireWeekGrid();
     wireInstall();
-    wireStatistics();
-    wireDocumentExports();
-    wireReportChart();
-    wireWorkbook();
     wireSheetCards();
     wireSetup();
     wireTour();
     wireWelcome();
     wirePasskeys();
     wireOpenID();
-    wireWorkDays();
     wireLogViewer();
     wireMaintenance();
-    wireManagers();
     wirePush();
     $('#logout').addEventListener('click', doLogout);
     $('#language-picker').addEventListener('change', (e) => mutate(
       () => api('/me/language', { method: 'PUT', body: JSON.stringify({ language: e.target.value }) }),
       null,
       refreshAll));
-
-    resetBookingDate();
   } catch (err) {
     toastFailure(err, t('msg.initFailed', 'Initialisation failed'));
   }
@@ -18783,9 +20248,9 @@ async function init() {
     // been told otherwise - after the form is up, so a browser without a ticket
     // is simply left looking at it. Only where the failure put the form up: a
     // load that failed behind a session that was accepted keeps its screen.
-    if (!$('#login-screen').hidden && ticketsOffered && !handedToASession
-      && mayTryTheTicketUnasked()) {
-      await signInWithTicket({ quietly: true });
+    if (!$('#login-screen').hidden && kerberosOffered && !handedToASession
+      && mayTryKerberosUnasked()) {
+      await signInWithKerberos({ quietly: true });
     }
   }
 }

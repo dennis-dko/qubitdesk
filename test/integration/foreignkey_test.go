@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // Only PostgreSQL refuses an entry that points at an account that is not there.
@@ -22,9 +22,8 @@ import (
 // something this suite's own connection can answer, so that leg is skipped.
 //
 // What rests on this is prose. Several comments, and CLAUDE.md, reason about
-// what happens when a table is left out of the account purge or a project is
-// removed from under a running clock, and each of them names the engines that
-// refuse. They were written saying PostgreSQL and MySQL; they say PostgreSQL
+// what happens when a table is left out of the account purge, and each of them
+// names the engines that refuse. They were written saying PostgreSQL and MySQL; they say PostgreSQL
 // now, and this case is what they are written against. It fails the moment an
 // engine starts or stops refusing, which is the moment they stop being true.
 func TestOnlyPostgreSQLRefusesAnEntryPointingAtNobody(t *testing.T) {
@@ -45,8 +44,12 @@ func TestOnlyPostgreSQLRefusesAnEntryPointingAtNobody(t *testing.T) {
 
 	postgres := strings.Contains(dsn, "postgres")
 
-	insert := "INSERT INTO timesheets (user_id, date, duration_hours) " +
-		"VALUES (?, '2026-07-03 00:00:00', 1)"
+	// The queue is the shipped one, so the only key the row can break is the
+	// account's - and a refusal is held to being that key's, because a table
+	// that is not there is refused too: this case once wrote to the time
+	// recording's timesheets after they had gone, and PostgreSQL's refusal of a
+	// missing table read as the refusal it was checking for.
+	insert := "INSERT INTO user_queues (user_id, queue_id) SELECT ?, id FROM queues WHERE name = 'Service Desk'"
 	if postgres {
 		insert = strings.Replace(insert, "?", "$1", 1)
 	}
@@ -57,6 +60,9 @@ func TestOnlyPostgreSQLRefusesAnEntryPointingAtNobody(t *testing.T) {
 	case postgres && err == nil:
 		t.Error("PostgreSQL stored an entry for an account that does not exist; " +
 			"the comments saying it refuses one are wrong now")
+	case postgres && !strings.Contains(err.Error(), "foreign key"):
+		t.Errorf("PostgreSQL refused the entry for another reason than its key (%v); this case is "+
+			"measuring nothing", err)
 	case !postgres && err != nil:
 		t.Errorf("this engine refused an entry for an account that does not exist (%v); "+
 			"the comments saying only PostgreSQL does are wrong now", err)

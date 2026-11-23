@@ -7,12 +7,12 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/qrcode"
+	"github.com/dennis-dko/qubitdesk/internal/support/qrcode"
 )
 
 // A new token comes with what an app needs to use it, once: the address this
 // installation was reached at and the token itself, as a
-// timepulse://connect address and as a QR code of exactly that address.
+// qubitdesk://connect address and as a QR code of exactly that address.
 // The address opens the API as the token's owner, and the list of tokens never
 // shows any of it again.
 func TestANewTokenComesWithACodeAnAppCanScan(t *testing.T) {
@@ -30,8 +30,8 @@ func TestANewTokenComesWithACodeAnAppCanScan(t *testing.T) {
 		http.StatusCreated, http.StatusOK).Data(t, &created)
 
 	connect, err := url.Parse(created.ConnectURI)
-	if err != nil || connect.Scheme != "timepulse" || connect.Host != "connect" {
-		t.Fatalf("the new token came with %q, want a timepulse://connect address", created.ConnectURI)
+	if err != nil || connect.Scheme != "qubitdesk" || connect.Host != "connect" {
+		t.Fatalf("the new token came with %q, want a qubitdesk://connect address", created.ConnectURI)
 	}
 
 	address, token := connect.Query().Get("url"), connect.Query().Get("token")

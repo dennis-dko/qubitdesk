@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // SessionRepository stores sessions in the database rather than in memory, so

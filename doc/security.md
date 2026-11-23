@@ -11,7 +11,7 @@ Implemented, and verified against a running instance:
   of its own steps.
 - **CSRF protection** on every request that changes something. Two independent
   checks have to pass: the `Origin` (or, failing that, the `Referer`) must name
-  this host, and the `X-CSRF-Token` header must equal the `timepulse_csrf` cookie.
+  this host, and the `X-CSRF-Token` header must equal the `qubitdesk_csrf` cookie.
   That cookie is deliberately readable by JavaScript — the point is that our own
   script can read it and another site's cannot. The token is replaced on
   sign-in, so one handed to an anonymous visitor never carries into a session.
@@ -78,8 +78,8 @@ Implemented, and verified against a running instance:
 - **Secrets are never returned.** Database and LDAP passwords, and API tokens,
   are write-only over the API; clients get a `hasPassword` flag instead.
 - **Enumeration is avoided**: a wrong password and an unknown account fail
-  identically, and somebody else's project answers `404` rather than `403`, which
-  would confirm the id exists.
+  identically, and something the caller may not see answers `404` rather than
+  `403`, which would confirm the id exists.
 - **Passwords** are bcrypt hashes; session and API tokens are 256 bits of
   randomness stored only as SHA-256.
 
@@ -136,7 +136,7 @@ or the choice to leave those four behind; the installer asks for both. The
 
 The built-in administrator cannot register a passkey and is never handed to a
 directory, so it is always a password away. Should that password be lost, or
-its second factor with a phone, `timepulse-web recover` on the server prints a
+its second factor with a phone, `qubitdesk-web recover` on the server prints a
 one-time password for it, removes its second factor, ends its sessions and
 writes the administration log - whoever can run a command there already holds
 the installation. Anybody else who lost a second factor has it removed by an

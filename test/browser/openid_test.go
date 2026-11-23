@@ -8,7 +8,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/oidctest"
+	"github.com/dennis-dko/qubitdesk/test/oidctest"
 )
 
 // configureTheProvider has the signed-in administrator point the installation at

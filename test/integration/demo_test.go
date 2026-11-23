@@ -4,12 +4,14 @@ package integration
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
-// Ticking the demo box on the installer fills the new database: signed in, the
-// built-in administrator finds its own projects and weeks of bookings, written
-// in the language the installer was read in.
+// Choosing the demo on the installer fills the new database: signed in, the
+// built-in administrator finds the demo's tickets, written in the language the
+// installer was read in, and somebody signed in to nothing finds the knowledge
+// base's public article.
 //
 // Asked of the binary as somebody meets it - the installer answered over HTTP,
 // the application starting in the same process, the database migrated - because
@@ -27,33 +29,88 @@ func TestTheInstallerCanFillTheNewDatabaseWithDemoData(t *testing.T) {
 
 	waitForTheApplication(t, c)
 
-	admin := (&app{App: c.app, t: t}).signInAsAdmin("a-much-better-password")
+	a := &app{App: c.app, t: t}
+	admin := a.signInAsAdmin("a-much-better-password")
 
-	var projects listOf[projectResponse]
+	var tickets listOf[ticketResponse]
 
-	admin.must(admin.api(http.MethodGet, "/projects", nil), http.StatusOK).Data(t, &projects)
+	admin.must(admin.api(http.MethodGet, "/tickets", nil), http.StatusOK).Data(t, &tickets)
 
-	names := map[string]bool{}
-	for _, p := range projects.Items {
-		names[p.Name] = true
+	titles := map[string]bool{}
+
+	var certificate uint
+
+	for _, ticket := range tickets.Items {
+		titles[ticket.Title] = true
+
+		if ticket.Title == "Das Kundenportal warnt vor einem abgelaufenen Zertifikat" {
+			certificate = ticket.ID
+		}
 	}
 
-	if len(projects.Items) != 4 || !names["Website-Relaunch"] {
-		t.Fatalf("the administrator finds the projects %v, want the demo's four in German\n%s",
-			names, c.app.Log())
+	if tickets.TotalCount != 8 || !titles["Der Drucker im zweiten Stock druckt leere Seiten"] {
+		t.Fatalf("the administrator finds the tickets %v, want the demo's eight in German\n%s",
+			titles, c.app.Log())
 	}
 
-	var entries listOf[timesheetResponse]
+	var items listOf[configItem]
 
-	admin.must(admin.api(http.MethodGet, "/timesheets", nil), http.StatusOK).Data(t, &entries)
+	admin.must(admin.api(http.MethodGet, "/cmdb/items", nil), http.StatusOK).Data(t, &items)
 
-	if entries.TotalCount < 100 {
-		t.Errorf("the administrator finds %d entries, where eight weeks of demo hold well over a hundred",
-			entries.TotalCount)
+	named := map[string]bool{}
+	for _, item := range items.Items {
+		named[item.Name] = true
+	}
+
+	if items.TotalCount != 3 || !named["Laptop von Anna Becker"] {
+		t.Errorf("the administrator finds the items %v, want the demo's three in German\n%s", named, c.app.Log())
+	}
+
+	var linked listOf[linkedRecord]
+
+	admin.must(admin.api(http.MethodGet, "/links?object=ticket&record="+path(certificate), nil),
+		http.StatusOK).Data(t, &linked)
+
+	ends := map[string]string{}
+	for _, link := range linked.Items {
+		ends[link.Object] = link.Label
+	}
+
+	if len(linked.Items) != 2 || ends["configitem"] != "00000003 Webserver von Harbourline" ||
+		!strings.HasSuffix(ends["change"], " Das Zertifikat des Webservers von Harbourline erneuern") {
+		t.Errorf("the certificate's ticket is linked to %+v, want Harbourline's web server and its change",
+			linked.Items)
+	}
+
+	var changes listOf[changeResponse]
+
+	admin.must(admin.api(http.MethodGet, "/changes", nil), http.StatusOK).Data(t, &changes)
+
+	var renewal changeResponse
+
+	for _, change := range changes.Items {
+		if change.Title == "Das Zertifikat des Webservers von Harbourline erneuern" {
+			renewal = change
+		}
+	}
+
+	if changes.TotalCount != 2 || renewal.WorkOrders != 3 || renewal.PlannedStartAt != nil ||
+		renewal.StateID != catalogValue(t, admin, "ITSM::ChangeManagement::Change::State", "in-progress") {
+		t.Errorf("the administrator finds the changes %+v, want the demo's two in German, the renewal in progress "+
+			"with three work orders, one of them unplanned", changes.Items)
+	}
+
+	var published listOf[faqArticleResponse]
+
+	nobody := a.newClient()
+	nobody.must(nobody.api(http.MethodGet, "/portal/faq/articles", nil), http.StatusOK).Data(t, &published)
+
+	if len(published.Items) != 1 || published.Items[0].Title != "Wie setze ich mein Passwort zurück?" {
+		t.Errorf("somebody signed in to nothing reads %+v, want the demo's one public article", published.Items)
 	}
 }
 
-// Without the box ticked the new database is as empty as it ever was.
+// Without the demo chosen the new database is as empty as it ever was.
 func TestTheInstallerFillsNothingUnasked(t *testing.T) {
 	t.Parallel()
 
@@ -67,16 +124,11 @@ func TestTheInstallerFillsNothingUnasked(t *testing.T) {
 
 	admin := (&app{App: c.app, t: t}).signInAsAdmin("a-much-better-password")
 
-	var projects listOf[projectResponse]
+	var tickets listOf[ticketResponse]
 
-	// The built-in administrator cannot list projects at all as shipped, which
-	// is itself the answer: nothing was put in its name, and nothing changed
-	// what it may do.
-	if got := admin.api(http.MethodGet, "/projects", nil); got.Status == http.StatusOK {
-		got.Data(t, &projects)
+	admin.must(admin.api(http.MethodGet, "/tickets", nil), http.StatusOK).Data(t, &tickets)
 
-		if len(projects.Items) != 0 {
-			t.Errorf("an installation that asked for nothing holds %d projects", len(projects.Items))
-		}
+	if tickets.TotalCount != 0 {
+		t.Errorf("an installation that asked for nothing holds %d tickets", tickets.TotalCount)
 	}
 }

@@ -14,4 +14,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "timepulse-mobile"
+rootProject.name = "qubitdesk-mobile"

@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // The installer is the one part of this application that runs without a
@@ -537,7 +537,7 @@ func TestTheHandOverStopsOnceAPasswordHasBeenChosen(t *testing.T) {
 	}
 }
 
-// The installer's tab carries TimePulse's icon, as the application's tab does.
+// The installer's tab carries QubitDesk's icon, as the application's tab does.
 // The page linked none, and the installer answers every path but its own with
 // the page, so a browser asking for an icon was handed the page back and showed
 // none - the one screen of a new installation without the mark.

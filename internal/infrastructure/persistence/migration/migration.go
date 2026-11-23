@@ -3,12 +3,12 @@ package migration
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
+	"time"
 
 	"gofr.dev/pkg/gofr/migration"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
 )
 
 // All returns the migration set for the given dialect, keyed by version.
@@ -16,1538 +16,1973 @@ import (
 // The dialect is passed in rather than detected because GoFr's
 // migration.Datasource exposes only query methods, not the dialect, and the
 // DDL for auto-increment keys and timestamps genuinely differs per engine.
+//
+// Every entry is one call, and what it calls runs one schema statement or
+// changes rows, never both: MySQL commits each schema statement by itself, so a
+// migration holding two of them, or one and a change to the data, is not rolled
+// back as a unit there. That is why an index is a migration of its own rather
+// than a second statement beside its table.
 func All(dialect string) map[int64]migration.Migrate {
 	return map[int64]migration.Migrate{
-		20260730120000: {UP: func(d migration.Datasource) error {
-			return execAll(d, createUsers(dialect), createProjects(dialect), createTimesheets(dialect))
+		// Who may sign in, and what each may do.
+		20261112010000: {UP: func(d migration.Datasource) error { return createRoles(d, dialect) }},
+		20261112010100: {UP: func(d migration.Datasource) error { return createRolePermissions(d, dialect) }},
+		20261112010200: {UP: func(d migration.Datasource) error { return seedRoles(d, dialect) }},
+		20261112010300: {UP: func(d migration.Datasource) error { return createUsers(d, dialect) }},
+		20261112010400: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_users_external_id", "users", "external_id")
 		}},
-		20260730120100: {UP: func(d migration.Datasource) error {
-			return execAll(d,
-				"CREATE INDEX idx_timesheets_user_date ON timesheets (user_id, date)",
-				"CREATE INDEX idx_timesheets_project ON timesheets (project_id)",
-			)
+		20261112010500: {UP: func(d migration.Datasource) error { return createSessions(d, dialect) }},
+		20261112010600: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_sessions_user", "sessions", "user_id")
 		}},
-		20260731010000: {UP: func(d migration.Datasource) error {
-			return addRoleBasedAccess(d, dialect)
+		20261112010700: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_sessions_expiry", "sessions", "expires_at")
 		}},
-		20260731020000: {UP: func(d migration.Datasource) error {
-			return addSessionsAndPreferences(d, dialect)
+		20261112010800: {UP: func(d migration.Datasource) error { return createAPITokens(d, dialect) }},
+		20261112010900: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_api_tokens_user", "api_tokens", "user_id")
 		}},
-		20260801010000: {UP: func(d migration.Datasource) error {
-			return makeProjectOptional(d, dialect)
+		20261112011000: {UP: func(d migration.Datasource) error { return createPasskeys(d, dialect) }},
+		20261112011100: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_passkeys_user", "passkeys", "user_id")
 		}},
-		20260801010100: {UP: func(d migration.Datasource) error {
-			return createSettings(d, dialect)
+		20261112011200: {UP: func(d migration.Datasource) error { return createOpenIDIdentities(d, dialect) }},
+		20261112011300: {UP: func(d migration.Datasource) error { return createPushSubscriptions(d, dialect) }},
+
+		// How the installation is run.
+		20261112011400: {UP: func(d migration.Datasource) error { return createSettings(d, dialect) }},
+		20261112011500: {UP: func(d migration.Datasource) error { return createAdminEvents(d, dialect) }},
+		20261112011600: {UP: func(d migration.Datasource) error { return createDirectoryRuns(d, dialect) }},
+
+		// What a ticket can be: the states, priorities and types an installation
+		// sorts its tickets by, each shipped with the values a service desk starts
+		// from.
+		20261112011700: {UP: func(d migration.Datasource) error { return createTicketStates(d, dialect) }},
+		20261112011800: {UP: func(d migration.Datasource) error { return seedTicketStates(d, dialect) }},
+		20261112011900: {UP: func(d migration.Datasource) error { return createTicketPriorities(d, dialect) }},
+		20261112012000: {UP: func(d migration.Datasource) error { return seedTicketPriorities(d, dialect) }},
+		20261112012100: {UP: func(d migration.Datasource) error { return createTicketTypes(d, dialect) }},
+		20261112012200: {UP: func(d migration.Datasource) error { return seedTicketTypes(d, dialect) }},
+
+		// Where tickets go and how fast they are owed an answer.
+		20261112012300: {UP: func(d migration.Datasource) error { return createServiceLevels(d, dialect) }},
+		20261112012400: {UP: func(d migration.Datasource) error { return createQueues(d, dialect) }},
+		20261112012500: {UP: func(d migration.Datasource) error { return createQueueRoles(d, dialect) }},
+		20261112012600: {UP: func(d migration.Datasource) error { return seedTheFirstQueue(d, dialect) }},
+		20261112012700: {UP: func(d migration.Datasource) error { return createUserQueues(d, dialect) }},
+
+		// Who tickets come from.
+		20261112012800: {UP: func(d migration.Datasource) error { return createOrganisations(d, dialect) }},
+		20261112012900: {UP: func(d migration.Datasource) error { return createContacts(d, dialect) }},
+		20261112013000: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_contacts_organisation", "contacts", "organisation_id")
 		}},
-		20260801020000: {UP: func(d migration.Datasource) error {
-			return addPrivateProjects(d, dialect)
+
+		// The tickets, and everything written in them.
+		20261112013100: {UP: func(d migration.Datasource) error { return createTickets(d, dialect) }},
+		20261112013200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_tickets_queue_state", "tickets", "queue_id, state_id")
 		}},
-		20260801030000: {UP: func(d migration.Datasource) error {
-			return createAPITokens(d, dialect)
+		20261112013300: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_tickets_owner", "tickets", "owner_id")
 		}},
-		20260801040000: {UP: func(d migration.Datasource) error {
-			return addExternalIdentity(d, dialect)
+		20261112013400: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_tickets_contact", "tickets", "contact_id")
 		}},
-		20260801050000: {UP: func(d migration.Datasource) error {
-			return addUserTimezone(d, dialect)
+		20261112013500: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_tickets_organisation", "tickets", "organisation_id")
 		}},
-		20260802010000: {UP: func(d migration.Datasource) error {
-			return addUserTourSeen(d, dialect)
+		20261112013600: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_tickets_updated", "tickets", "updated_at")
 		}},
-		20260803010000: {UP: func(d migration.Datasource) error {
-			return createPasskeys(d, dialect)
+		20261112013700: {UP: func(d migration.Datasource) error { return createArticles(d, dialect) }},
+		20261112013800: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_articles_ticket", "articles", "ticket_id")
 		}},
-		20260805010000: {UP: func(d migration.Datasource) error {
-			return createRunningTimers(d, dialect)
+		20261112013900: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_articles_message", "articles", "message_id")
 		}},
-		20260805020000: {UP: func(d migration.Datasource) error {
-			return separateSystemAdministration(d, dialect)
+		20261112014000: {UP: func(d migration.Datasource) error { return createAttachments(d, dialect) }},
+		20261112014100: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_attachments_article", "attachments", "article_id")
 		}},
-		20260810010000: {UP: func(d migration.Datasource) error {
-			return retireTheReviewPath(d, dialect)
+		20261112014200: {UP: func(d migration.Datasource) error { return createTimeAccounting(d, dialect) }},
+		20261112014300: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_time_accounting_ticket", "time_accounting", "ticket_id")
 		}},
-		20260810020000: {UP: func(d migration.Datasource) error {
-			return repairAccountsWithoutARole(d, dialect)
+		20261112014400: {UP: func(d migration.Datasource) error { return createTicketHistory(d, dialect) }},
+		20261112014500: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_ticket_history_ticket", "ticket_history", "ticket_id")
 		}},
-		20260810030000: {UP: func(d migration.Datasource) error {
-			return retireTheSeparateReportRight(d, dialect)
+		20261112014600: {UP: func(d migration.Datasource) error { return createLinks(d, dialect) }},
+		20261112014700: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_links_target", "links", "target_object, target_id")
 		}},
-		20260810040000: {UP: func(d migration.Datasource) error {
-			return handWorkingTimesToTheirOwners(d, dialect)
+		20261112014800: {UP: func(d migration.Datasource) error { return createTicketWatchers(d, dialect) }},
+		20261112014900: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_ticket_watchers_user", "ticket_watchers", "user_id")
 		}},
-		20260810050000: {UP: func(d migration.Datasource) error {
-			return giveEveryProjectAnOwner(d, dialect)
+		20261112015000: {UP: func(d migration.Datasource) error { return createNotifications(d, dialect) }},
+		20261112015100: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_notifications_user", "notifications", "user_id, read_at")
 		}},
-		20260810060000: {UP: func(d migration.Datasource) error {
-			return separateAdministeringFromWorking(d, dialect)
+
+		// What an answer is written from, and how it leaves and arrives.
+		20261112015200: {UP: func(d migration.Datasource) error { return createResponseTemplates(d, dialect) }},
+		20261112015300: {UP: func(d migration.Datasource) error { return createMailAccounts(d, dialect) }},
+
+		// The knowledge base.
+		20261112015400: {UP: func(d migration.Datasource) error { return createFAQCategories(d, dialect) }},
+		20261112015500: {UP: func(d migration.Datasource) error { return createFAQArticles(d, dialect) }},
+		20261112015600: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_faq_articles_category", "faq_articles", "category_id")
 		}},
-		20260811010000: {UP: func(d migration.Datasource) error {
-			return retireReadingEverybodysTime(d, dialect)
+
+		// When a service is given, which a service level's minutes are counted in.
+		20261116010000: {UP: func(d migration.Datasource) error { return createCalendars(d, dialect) }},
+		20261116010100: {UP: func(d migration.Datasource) error { return createCalendarHours(d, dialect) }},
+		20261116010200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_calendar_hours_calendar", "calendar_hours", "calendar_id")
 		}},
-		20260812010000: {UP: func(d migration.Datasource) error {
-			return callTheEverydayRoleUser(d, dialect)
+		20261116010300: {UP: func(d migration.Datasource) error { return createCalendarFreeDays(d, dialect) }},
+		20261116010400: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_calendar_free_days_calendar", "calendar_free_days", "calendar_id")
 		}},
-		20260813010000: {UP: func(d migration.Datasource) error {
-			return letAdministratorsReachTheSettings(d, dialect)
+
+		// Which calendar a service level's minutes are counted in, and whether it
+		// is still offered.
+		20261116010500: {UP: func(d migration.Datasource) error { return addServiceLevelCalendar(d, dialect) }},
+		20261116010600: {UP: func(d migration.Datasource) error { return addServiceLevelValidity(d, dialect) }},
+
+		// What the automation does to a ticket: macros and their steps.
+		20261116020000: {UP: func(d migration.Datasource) error { return createMacros(d, dialect) }},
+		20261116020100: {UP: func(d migration.Datasource) error { return createMacroActions(d, dialect) }},
+		20261116020200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_macro_actions_macro", "macro_actions", "macro_id")
 		}},
-		20260814010000: {UP: func(d migration.Datasource) error {
-			return clearTheAdministratorsWorkingDay(d, dialect)
+
+		// When the automation runs: execution plans.
+		20261116020300: {UP: func(d migration.Datasource) error { return createExecPlans(d, dialect) }},
+
+		// The state types a lock runs out in, new and open as shipped.
+		20261117010000: {UP: func(d migration.Datasource) error { return createUnlockStateTypes(d, dialect) }},
+		20261117010100: {UP: func(d migration.Datasource) error { return seedUnlockStateTypes(d, dialect) }},
+
+		// The state a waiting state moves a ticket on to, closed for the one that
+		// ships.
+		20261117010200: {UP: func(d migration.Datasource) error { return addStateNextState(d, dialect) }},
+		20261117010300: {UP: func(d migration.Datasource) error { return seedPendingCloseNextState(d, dialect) }},
+
+		// What the automation runs: jobs, the macros each runs in order, and the
+		// plans that say when.
+		20261117020000: {UP: func(d migration.Datasource) error { return createJobs(d, dialect) }},
+		20261117020100: {UP: func(d migration.Datasource) error { return createJobMacros(d, dialect) }},
+		20261117020200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_job_macros_job", "job_macros", "job_id")
 		}},
-		20260818010000: {UP: func(d migration.Datasource) error {
-			return moveTheAppearanceOntoTheAccount(d, dialect)
+		20261117020300: {UP: func(d migration.Datasource) error { return createJobPlans(d, dialect) }},
+
+		// What each run of a job did.
+		20261117030000: {UP: func(d migration.Datasource) error { return createJobRuns(d, dialect) }},
+		20261117030100: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_job_runs_job", "job_runs", "job_id")
 		}},
-		20260819010000: {UP: func(d migration.Datasource) error {
-			return widenTOTPSecret(d, dialect)
+		20261117030200: {UP: func(d migration.Datasource) error { return createJobRunLines(d, dialect) }},
+		20261117030300: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_job_run_lines_run", "job_run_lines", "run_id")
 		}},
-		20260824010000: {UP: func(d migration.Datasource) error {
-			return rememberWhenASessionWasLastUsed(d, dialect)
+
+		// What the installation tells the agents around a ticket, and in which
+		// words.
+		20261117040000: {UP: func(d migration.Datasource) error { return createNotificationDefinitions(d, dialect) }},
+		20261117040100: {UP: func(d migration.Datasource) error { return createNotificationMessages(d, dialect) }},
+		20261117040200: {UP: func(d migration.Datasource) error { return createNotificationOptOuts(d, dialect) }},
+
+		// The general catalog, the lists the configuration items and the changes
+		// pick from, as KIX18 ships them.
+		20261118010000: {UP: func(d migration.Datasource) error { return createGeneralCatalog(d, dialect) }},
+		20261118010100: {UP: func(d migration.Datasource) error { return seedGeneralCatalog(d, dialect) }},
+
+		// What a configuration item of each class holds, versioned, as KIX18
+		// ships the definitions of its classes.
+		20261121010000: {UP: func(d migration.Datasource) error { return createClassDefinitions(d, dialect) }},
+		20261121010100: {UP: func(d migration.Datasource) error { return seedClassDefinitions(d, dialect) }},
+
+		// The configuration items, each in versions written under its class's
+		// definition.
+		20261121020000: {UP: func(d migration.Datasource) error { return createConfigItems(d, dialect) }},
+		20261121020100: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_config_items_class", "config_items", "class_id")
 		}},
-		20260831010000: {UP: func(d migration.Datasource) error {
-			return rememberWhenAnEntryWasBookedAndCorrected(d, dialect)
+		20261121020200: {UP: func(d migration.Datasource) error { return createConfigItemVersions(d, dialect) }},
+		20261121020300: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_config_item_versions_item", "config_item_versions", "item_id")
 		}},
-		20261009010000: {UP: func(d migration.Datasource) error {
-			return recordWhatEachDirectoryRunChanged(d, dialect)
+
+		// The lists a change and its work orders pick from, as OTRS::ITSM ships
+		// its change management.
+		20261121030000: {UP: func(d migration.Datasource) error { return seedChangeCatalog(d, dialect) }},
+
+		// The changes, OTRS's state machine for them, and its matrix of category
+		// and impact.
+		20261121030100: {UP: func(d migration.Datasource) error { return createChanges(d, dialect) }},
+		20261121030200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_changes_state", "changes", "state_id")
 		}},
-		20261019010000: {UP: func(d migration.Datasource) error {
-			return planTheWorkingWeek(d, dialect)
+		20261121030300: {UP: func(d migration.Datasource) error { return createChangeTransitions(d, dialect) }},
+		20261121030400: {UP: func(d migration.Datasource) error { return seedChangeTransitions(d, dialect) }},
+		20261121030500: {UP: func(d migration.Datasource) error { return createChangeCIP(d, dialect) }},
+		20261121030600: {UP: func(d migration.Datasource) error { return seedChangeCIP(d, dialect) }},
+
+		// The work orders a change is carried out in, and OTRS's state machine
+		// for them.
+		20261121040100: {UP: func(d migration.Datasource) error { return createWorkOrders(d, dialect) }},
+		20261121040200: {UP: func(d migration.Datasource) error {
+			return createIndex(d, "idx_work_orders_change", "work_orders", "change_id")
 		}},
-		20261019020000: {UP: func(d migration.Datasource) error {
-			return keepEntryTemplates(d, dialect)
-		}},
-		20261019030000: {UP: func(d migration.Datasource) error {
-			return recordAbsences(d, dialect)
-		}},
-		20261019040000: {UP: func(d migration.Datasource) error {
-			return letEachPersonKeepTheirStatesHolidays(d, dialect)
-		}},
-		20261019050000: {UP: func(d migration.Datasource) error {
-			return letEachPersonCountEveryWorkingDay(d, dialect)
-		}},
-		20261019060000: {UP: func(d migration.Datasource) error {
-			return keepTheYearlyLeave(d, dialect)
-		}},
-		20261020010000: {UP: func(d migration.Datasource) error {
-			return giveProjectsAnHourBudget(d, dialect)
-		}},
-		20261020020000: {UP: func(d migration.Datasource) error {
-			return keepCalendarFeeds(d, dialect)
-		}},
-		20261020030000: {UP: func(d migration.Datasource) error {
-			return linkOpenIDIdentities(d, dialect)
-		}},
-		20261020040000: {UP: func(d migration.Datasource) error {
-			return recordWorkingTimes(d, dialect)
-		}},
-		20261020050000: {UP: func(d migration.Datasource) error {
-			return keepWhatEntriesSaidBefore(d, dialect)
-		}},
-		20261020060000: {UP: func(d migration.Datasource) error {
-			return findAnEntrysHistoryByTheEntry(d)
-		}},
-		20261021010000: {UP: func(d migration.Datasource) error {
-			return letABalanceHaveAnUpperBound(d, dialect)
-		}},
-		20261021020000: {UP: func(d migration.Datasource) error {
-			return letABalanceHaveALowerBound(d, dialect)
-		}},
-		20261021030000: {UP: func(d migration.Datasource) error {
-			return letSomebodySkipTheUnbookedDayReminder(d)
-		}},
-		20261021040000: {UP: func(d migration.Datasource) error {
-			return letSomebodyChooseWhenTheStopwatchIsMentioned(d)
-		}},
-		20261022010000: {UP: func(d migration.Datasource) error {
-			return keepALogOfAdministration(d, dialect)
-		}},
-		20261022020000: {UP: func(d migration.Datasource) error {
-			return keepWhomEachManagerLooksAfter(d, dialect)
-		}},
-		20261022030000: {UP: func(d migration.Datasource) error {
-			return rememberWhoBookedAnEntry(d, dialect)
-		}},
-		20261022040000: {UP: func(d migration.Datasource) error {
-			return rememberWhoLastChangedAnEntry(d, dialect)
-		}},
-		20261022050000: {UP: func(d migration.Datasource) error {
-			return rememberWhoReplacedAVersion(d, dialect)
-		}},
-		20261022060000: {UP: func(d migration.Datasource) error {
-			return shipTheManagerRole(d, dialect)
-		}},
-		20261022070000: {UP: func(d migration.Datasource) error {
-			return letAProjectBeBillable(d, dialect)
-		}},
-		20261022080000: {UP: func(d migration.Datasource) error {
-			return giveAProjectAnHourlyRate(d)
-		}},
-		20261022090000: {UP: func(d migration.Datasource) error {
-			return giveAProjectACurrency(d)
-		}},
-		20261103010000: {UP: func(d migration.Datasource) error {
-			return placeEveryHolidayStateInGermany(d, dialect)
-		}},
-		20261103020000: {UP: func(d migration.Datasource) error {
-			return rememberWhichTokenOpenedASession(d, dialect)
-		}},
-		20261110010000: {UP: func(d migration.Datasource) error {
-			return keepPushSubscriptions(d, dialect)
-		}},
-		20261117010000: {UP: func(d migration.Datasource) error {
-			return sealUnderTheNewMarker(d)
-		}},
+		20261121040300: {UP: func(d migration.Datasource) error { return createWorkOrderTransitions(d, dialect) }},
+		20261121040400: {UP: func(d migration.Datasource) error { return seedWorkOrderTransitions(d, dialect) }},
+		20261123010000: {UP: func(d migration.Datasource) error { return createTicketSearches(d, dialect) }},
 	}
 }
 
-// recordWhatEachDirectoryRunChanged keeps a row for every directory run that
-// changed something: when, whether somebody confirmed it against a preview, and
-// how many accounts and time entries it removed or added.
+// createTicketSearches keeps the searches of the ticket list an agent saved
+// under names of their own, as OTRS keeps search profiles and current help desks
+// keep views. A name is the agent's alone, so it is unique per account and not
+// across them.
+func createTicketSearches(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_searches (
+		%[1]s,
+		user_id %[2]s NOT NULL REFERENCES users(id),
+		name VARCHAR(120) NOT NULL,
+		query VARCHAR(2000) NOT NULL,
+		created_at %[3]s NOT NULL,
+		UNIQUE (user_id, name)
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
+}
+
+// seedChangeCatalog adds the lists change management picks from to the general
+// catalog, as OTRS::ITSM's ITSMChangeManagement.sopm ships them, in its order:
+// a change's category, impact and priority on one scale, its states and its
+// work orders' states and types. Under identifiers the interface translates,
+// as every shipped value; the scale keeps OTRS's number in front, which is what
+// keeps it in order wherever values are sorted by name. Which state may follow
+// which is behaviour, kept beside the changes rather than here.
+func seedChangeCatalog(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect, "INSERT INTO general_catalog (catalog_class, name, functionality) VALUES (?, ?, '')")
+
+	for _, item := range []struct{ class, name string }{
+		{"ITSM::ChangeManagement::Category", "1-very-low"},
+		{"ITSM::ChangeManagement::Category", "2-low"},
+		{"ITSM::ChangeManagement::Category", "3-normal"},
+		{"ITSM::ChangeManagement::Category", "4-high"},
+		{"ITSM::ChangeManagement::Category", "5-very-high"},
+		{"ITSM::ChangeManagement::Impact", "1-very-low"},
+		{"ITSM::ChangeManagement::Impact", "2-low"},
+		{"ITSM::ChangeManagement::Impact", "3-normal"},
+		{"ITSM::ChangeManagement::Impact", "4-high"},
+		{"ITSM::ChangeManagement::Impact", "5-very-high"},
+		{"ITSM::ChangeManagement::Priority", "1-very-low"},
+		{"ITSM::ChangeManagement::Priority", "2-low"},
+		{"ITSM::ChangeManagement::Priority", "3-normal"},
+		{"ITSM::ChangeManagement::Priority", "4-high"},
+		{"ITSM::ChangeManagement::Priority", "5-very-high"},
+		{"ITSM::ChangeManagement::Change::State", "requested"},
+		{"ITSM::ChangeManagement::Change::State", "pending-approval"},
+		{"ITSM::ChangeManagement::Change::State", "rejected"},
+		{"ITSM::ChangeManagement::Change::State", "approved"},
+		{"ITSM::ChangeManagement::Change::State", "in-progress"},
+		{"ITSM::ChangeManagement::Change::State", "pending-pir"},
+		{"ITSM::ChangeManagement::Change::State", "successful"},
+		{"ITSM::ChangeManagement::Change::State", "failed"},
+		{"ITSM::ChangeManagement::Change::State", "canceled"},
+		{"ITSM::ChangeManagement::Change::State", "retracted"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "created"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "accepted"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "ready"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "in-progress"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "closed"},
+		{"ITSM::ChangeManagement::WorkOrder::State", "canceled"},
+		{"ITSM::ChangeManagement::WorkOrder::Type", "approval"},
+		{"ITSM::ChangeManagement::WorkOrder::Type", "workorder"},
+		{"ITSM::ChangeManagement::WorkOrder::Type", "backout"},
+		{"ITSM::ChangeManagement::WorkOrder::Type", "decision"},
+		{"ITSM::ChangeManagement::WorkOrder::Type", "pir"},
+	} {
+		if _, err := d.SQL.Exec(insert, item.class, item.name); err != nil {
+			return fmt.Errorf("seeding the change catalog's %s %s: %w", item.class, item.name, err)
+		}
+	}
+
+	return nil
+}
+
+// createChanges keeps the changes, as OTRS::ITSM's change management keeps
+// them. The number is written in the transaction that makes the row, as a
+// ticket's is, and is nullable for that moment. The manager and the builder are
+// accounts and lose them when they are erased; created_by and changed_by are ids
+// without a key, read as names when shown.
+func createChanges(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE changes (
+		%[1]s,
+		number VARCHAR(40) UNIQUE,
+		title VARCHAR(250) NOT NULL,
+		description %[4]s NOT NULL,
+		justification %[4]s NOT NULL,
+		manager_id %[2]s REFERENCES users(id),
+		builder_id %[2]s REFERENCES users(id),
+		category_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		impact_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		priority_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		requested_at %[3]s,
+		created_at %[3]s NOT NULL,
+		changed_at %[3]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0,
+		changed_by INT NOT NULL DEFAULT 0
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), longText(dialect)))
+}
+
+// createChangeTransitions keeps OTRS's change state machine: which state may
+// follow which, a state a change starts in having no state before it, and a
+// state nothing leads out of ending a change. Data rather than code, as OTRS
+// keeps it, because the states are the installation's.
+func createChangeTransitions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE change_transitions (
+		from_state_id %[1]s REFERENCES general_catalog(id),
+		to_state_id %[1]s NOT NULL REFERENCES general_catalog(id),
+		UNIQUE (from_state_id, to_state_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// seedChangeTransitions writes OTRS's default change state machine, from
+// _StateMachineDefaultSet in ITSMChangeManagement's package setup: a change is
+// requested, may wait for approval, is approved, is in progress, may wait for
+// its review, and ends rejected, retracted, failed, successful or canceled.
+func seedChangeTransitions(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect, "INSERT INTO change_transitions (from_state_id, to_state_id) VALUES (?, ?)")
+
+	for _, step := range []struct{ from, to string }{
+		{"", "requested"},
+		{"requested", "rejected"}, {"requested", "retracted"}, {"requested", "pending-approval"},
+		{"requested", "in-progress"},
+		{"pending-approval", "rejected"}, {"pending-approval", "retracted"}, {"pending-approval", "approved"},
+		{"approved", "retracted"}, {"approved", "in-progress"},
+		{"in-progress", "pending-pir"}, {"in-progress", "retracted"}, {"in-progress", "failed"},
+		{"in-progress", "successful"}, {"in-progress", "canceled"},
+		{"pending-pir", "failed"}, {"pending-pir", "successful"},
+	} {
+		var from any
+
+		if step.from != "" {
+			id, err := catalogID(d, dialect, "ITSM::ChangeManagement::Change::State", step.from)
+			if err != nil {
+				return err
+			}
+
+			from = id
+		}
+
+		to, err := catalogID(d, dialect, "ITSM::ChangeManagement::Change::State", step.to)
+		if err != nil {
+			return err
+		}
+
+		if _, err := d.SQL.Exec(insert, from, to); err != nil {
+			return fmt.Errorf("seeding the change state machine's %s -> %s: %w", step.from, step.to, err)
+		}
+	}
+
+	return nil
+}
+
+// createWorkOrders keeps the work orders a change is carried out in, as
+// OTRS::ITSM keeps them. Their number is not kept: it is a work order's place in
+// its change's plan, worked out whenever they are read. The agent is an account
+// and loses them when erased; created_by and changed_by are ids without a key,
+// read as names when shown. A moment nobody has given is NULL, where OTRS writes
+// 9999-01-01.
+func createWorkOrders(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE work_orders (
+		%[1]s,
+		change_id %[2]s NOT NULL REFERENCES changes(id),
+		title VARCHAR(250) NOT NULL,
+		instruction %[4]s NOT NULL,
+		report %[4]s NOT NULL,
+		state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		type_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		agent_id %[2]s REFERENCES users(id),
+		planned_start_at %[3]s,
+		planned_end_at %[3]s,
+		actual_start_at %[3]s,
+		actual_end_at %[3]s,
+		planned_minutes INT NOT NULL DEFAULT 0,
+		accounted_minutes INT NOT NULL DEFAULT 0,
+		created_at %[3]s NOT NULL,
+		changed_at %[3]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0,
+		changed_by INT NOT NULL DEFAULT 0
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), longText(dialect)))
+}
+
+// createWorkOrderTransitions keeps OTRS's work order state machine, shaped as
+// the change's is and kept apart from it, so that each machine has one state to
+// start in.
+func createWorkOrderTransitions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE work_order_transitions (
+		from_state_id %[1]s REFERENCES general_catalog(id),
+		to_state_id %[1]s NOT NULL REFERENCES general_catalog(id),
+		UNIQUE (from_state_id, to_state_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// seedWorkOrderTransitions writes OTRS's default work order state machine, from
+// _StateMachineDefaultSet in ITSMChangeManagement's package setup: a work order
+// is created, accepted, ready and in progress, and ends closed - or canceled
+// from any of those.
+func seedWorkOrderTransitions(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect, "INSERT INTO work_order_transitions (from_state_id, to_state_id) VALUES (?, ?)")
+
+	for _, step := range []struct{ from, to string }{
+		{"", "created"},
+		{"created", "accepted"}, {"created", "canceled"},
+		{"accepted", "ready"}, {"accepted", "canceled"},
+		{"ready", "in-progress"}, {"ready", "canceled"},
+		{"in-progress", "closed"}, {"in-progress", "canceled"},
+	} {
+		var from any
+
+		if step.from != "" {
+			id, err := catalogID(d, dialect, "ITSM::ChangeManagement::WorkOrder::State", step.from)
+			if err != nil {
+				return err
+			}
+
+			from = id
+		}
+
+		to, err := catalogID(d, dialect, "ITSM::ChangeManagement::WorkOrder::State", step.to)
+		if err != nil {
+			return err
+		}
+
+		if _, err := d.SQL.Exec(insert, from, to); err != nil {
+			return fmt.Errorf("seeding the work order state machine's %s -> %s: %w", step.from, step.to, err)
+		}
+	}
+
+	return nil
+}
+
+// createChangeCIP keeps OTRS's matrix of category and impact: the priority a
+// change of each is given unless it is given another.
+func createChangeCIP(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE change_cip (
+		category_id %[1]s NOT NULL REFERENCES general_catalog(id),
+		impact_id %[1]s NOT NULL REFERENCES general_catalog(id),
+		priority_id %[1]s NOT NULL REFERENCES general_catalog(id),
+		PRIMARY KEY (category_id, impact_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// seedChangeCIP writes OTRS's default matrix, from _CIPDefaultMatrixSet: a row
+// an impact, a column a category, each cell the priority on the same scale.
+func seedChangeCIP(d migration.Datasource, dialect string) error {
+	scale := []string{"1-very-low", "2-low", "3-normal", "4-high", "5-very-high"}
+	matrix := [5][5]int{
+		{0, 0, 1, 1, 2},
+		{0, 1, 1, 2, 3},
+		{1, 1, 2, 3, 3},
+		{1, 2, 3, 3, 4},
+		{2, 3, 3, 4, 4},
+	}
+	insert := sqldb.Rebind(dialect, "INSERT INTO change_cip (category_id, impact_id, priority_id) VALUES (?, ?, ?)")
+
+	for impact, row := range matrix {
+		for category, priority := range row {
+			ids := make([]any, 3)
+
+			for i, lookup := range []struct{ class, name string }{
+				{"ITSM::ChangeManagement::Category", scale[category]},
+				{"ITSM::ChangeManagement::Impact", scale[impact]},
+				{"ITSM::ChangeManagement::Priority", scale[priority]},
+			} {
+				id, err := catalogID(d, dialect, lookup.class, lookup.name)
+				if err != nil {
+					return err
+				}
+
+				ids[i] = id
+			}
+
+			if _, err := d.SQL.Exec(insert, ids...); err != nil {
+				return fmt.Errorf("seeding the change matrix: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// catalogID is the id of a value the general catalog ships.
+func catalogID(d migration.Datasource, dialect, class, name string) (int64, error) {
+	var id int64
+
+	if err := d.SQL.QueryRow(sqldb.Rebind(dialect,
+		"SELECT id FROM general_catalog WHERE catalog_class = ? AND name = ?"), class, name).Scan(&id); err != nil {
+		return 0, fmt.Errorf("finding the catalog's %s %s: %w", class, name, err)
+	}
+
+	return id, nil
+}
+
+// createGeneralCatalog keeps the general catalog, KIX18's general_catalog with
+// its one preference, the functionality, as a column: a class's name, a value's
+// name in it, what the value means to the code where its class means something,
+// and whether it is still offered. A class holds a name once. Nothing is
+// deleted from it, as KIX18 deletes nothing from it.
+func createGeneralCatalog(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE general_catalog (
+		%[1]s,
+		catalog_class VARCHAR(100) NOT NULL,
+		name VARCHAR(255) NOT NULL,
+		functionality VARCHAR(32) NOT NULL DEFAULT '',
+		comment VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		UNIQUE (catalog_class, name)
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect)))
+}
+
+// seedGeneralCatalog gives a new installation KIX18's general catalog: the
+// classes a configuration item can be of, the deployment and incident states
+// with the functionality KIX18 gives each - an expired item counts as
+// productive there, and so it does here - and the lists the classes' attributes
+// pick from. Under identifiers the interface translates, as the ticket states
+// are.
 //
-// Nothing about whom, and that is the point rather than an omission. The people
-// a run removed are the people the purge exists to erase, so a table naming them
-// would keep exactly what the deletion was for; the log names them, for as long
-// as the log lasts. What could not be found out before was that a run had removed
-// anybody at all, once a log level above WARN or the console's rotation had taken
-// the lines.
-//
-// No key to users: the rows outlive the accounts they counted.
-func recordWhatEachDirectoryRunChanged(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE directory_runs (
+// The names are written out rather than taken from the model: a finished
+// migration says what it did, and must not change with a constant that is
+// allowed to.
+func seedGeneralCatalog(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect,
+		"INSERT INTO general_catalog (catalog_class, name, functionality) VALUES (?, ?, ?)")
+
+	for _, item := range []struct{ class, name, functionality string }{
+		{"ITSM::Core::IncidentState", "operational", "operational"},
+		{"ITSM::Core::IncidentState", "warning", "warning"},
+		{"ITSM::Core::IncidentState", "incident", "incident"},
+		{"ITSM::ConfigItem::Class", "computer", ""},
+		{"ITSM::ConfigItem::Class", "hardware", ""},
+		{"ITSM::ConfigItem::Class", "location", ""},
+		{"ITSM::ConfigItem::Class", "building", ""},
+		{"ITSM::ConfigItem::Class", "room", ""},
+		{"ITSM::ConfigItem::Class", "network", ""},
+		{"ITSM::ConfigItem::Class", "software", ""},
+		{"ITSM::ConfigItem::DeploymentState", "expired", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "inactive", "postproductive"},
+		{"ITSM::ConfigItem::DeploymentState", "maintenance", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "pilot", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "planned", "preproductive"},
+		{"ITSM::ConfigItem::DeploymentState", "production", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "repair", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "retired", "postproductive"},
+		{"ITSM::ConfigItem::DeploymentState", "review", "productive"},
+		{"ITSM::ConfigItem::DeploymentState", "test-qa", "preproductive"},
+		{"ITSM::ConfigItem::YesNo", "yes", ""},
+		{"ITSM::ConfigItem::YesNo", "no", ""},
+		{"ITSM::ConfigItem::Computer::Type", "desktop", ""},
+		{"ITSM::ConfigItem::Computer::Type", "phone", ""},
+		{"ITSM::ConfigItem::Computer::Type", "server", ""},
+		{"ITSM::ConfigItem::Computer::Type", "other", ""},
+		{"ITSM::ConfigItem::Computer::Type", "laptop", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "monitor", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "printer", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "switch", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "router", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "wlan-access-point", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "security-device", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "backup-device", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "mouse", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "keyboard", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "camera", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "beamer", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "modem", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "usb-device", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "docking-station", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "scanner", ""},
+		{"ITSM::ConfigItem::Hardware::Type", "other", ""},
+		{"ITSM::ConfigItem::Location::Type", "building", ""},
+		{"ITSM::ConfigItem::Location::Type", "office", ""},
+		{"ITSM::ConfigItem::Location::Type", "floor", ""},
+		{"ITSM::ConfigItem::Location::Type", "room", ""},
+		{"ITSM::ConfigItem::Location::Type", "rack", ""},
+		{"ITSM::ConfigItem::Location::Type", "workplace", ""},
+		{"ITSM::ConfigItem::Location::Type", "outlet", ""},
+		{"ITSM::ConfigItem::Location::Type", "it-facility", ""},
+		{"ITSM::ConfigItem::Location::Type", "other", ""},
+		{"ITSM::ConfigItem::Network::Type", "lan", ""},
+		{"ITSM::ConfigItem::Network::Type", "wlan", ""},
+		{"ITSM::ConfigItem::Network::Type", "telco", ""},
+		{"ITSM::ConfigItem::Network::Type", "gsm", ""},
+		{"ITSM::ConfigItem::Network::Type", "other", ""},
+		{"ITSM::ConfigItem::Software::Type", "client-application", ""},
+		{"ITSM::ConfigItem::Software::Type", "middleware", ""},
+		{"ITSM::ConfigItem::Software::Type", "server-application", ""},
+		{"ITSM::ConfigItem::Software::Type", "client-os", ""},
+		{"ITSM::ConfigItem::Software::Type", "server-os", ""},
+		{"ITSM::ConfigItem::Software::Type", "admin-tool", ""},
+		{"ITSM::ConfigItem::Software::Type", "user-tool", ""},
+		{"ITSM::ConfigItem::Software::Type", "embedded", ""},
+		{"ITSM::ConfigItem::Software::Type", "other", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "single-licence", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "per-user", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "concurrent-users", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "per-processor", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "per-server", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "per-node", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "volume-licence", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "enterprise-licence", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "developer-licence", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "demo", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "time-restricted", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "freeware", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "unlimited", ""},
+		{"ITSM::ConfigItem::Software::LicenceType", "open-source", ""},
+	} {
+		if _, err := d.SQL.Exec(insert, item.class, item.name, item.functionality); err != nil {
+			return fmt.Errorf("seeding %s %s: %w", item.class, item.name, err)
+		}
+	}
+
+	return nil
+}
+
+// createNotificationOptOuts keeps the notifications each agent switched off for
+// themselves, where a notification lets them. Both ends are keys, so the table
+// is on the erasure's list and in the account's export.
+func createNotificationOptOuts(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE notification_opt_outs (
+		user_id %[1]s NOT NULL REFERENCES users(id),
+		definition_id %[1]s NOT NULL REFERENCES notification_definitions(id),
+		PRIMARY KEY (user_id, definition_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// createNotificationDefinitions keeps the notifications the installation sends,
+// as KIX18 keeps its ticket notifications: the events, the tickets and the
+// recipients in data, a JSON object, beside the name.
+func createNotificationDefinitions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE notification_definitions (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		data %[4]s NOT NULL
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), longText(dialect)))
+}
+
+// createNotificationMessages keeps what each notification says, a subject and
+// a text for each language it speaks. The key on both columns is what finds a
+// notification's messages, so it needs no index of its own.
+func createNotificationMessages(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE notification_messages (
+		%[1]s,
+		definition_id %[2]s NOT NULL REFERENCES notification_definitions(id),
+		language VARCHAR(16) NOT NULL,
+		subject VARCHAR(255) NOT NULL,
+		body %[3]s NOT NULL,
+		UNIQUE (definition_id, language)
+	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect)))
+}
+
+// createJobRuns keeps what each run of a job did, as KIX18 keeps its job runs.
+func createJobRuns(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE job_runs (
+		%[1]s,
+		job_id %[2]s NOT NULL REFERENCES jobs(id),
+		run_trigger VARCHAR(16) NOT NULL,
+		started_at %[3]s NOT NULL,
+		finished_at %[3]s NOT NULL,
+		tickets INT NOT NULL,
+		changed INT NOT NULL,
+		failed INT NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
+}
+
+// createJobRunLines keeps what a run said about a ticket and a step, as KIX18's
+// automation log does. The ticket and the macro are ids without a key: the
+// ticket may be one the run itself deleted.
+func createJobRunLines(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE job_run_lines (
+		%[1]s,
+		run_id %[2]s NOT NULL REFERENCES job_runs(id),
+		ticket_id INT,
+		macro_id INT,
+		step INT NOT NULL,
+		code VARCHAR(64) NOT NULL DEFAULT '',
+		refusal_values VARCHAR(1000) NOT NULL DEFAULT '[]',
+		message VARCHAR(1000) NOT NULL DEFAULT '',
+		at %[3]s NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
+}
+
+// createJobs keeps what the automation does by itself, as KIX18 keeps its jobs:
+// the criteria a ticket has to meet, as a JSON object, and when the job last
+// ran, which a time-based plan counts from.
+func createJobs(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE jobs (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		criteria %[4]s NOT NULL,
+		last_run_at %[5]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), longText(dialect), timestamp(dialect)))
+}
+
+// createJobMacros keeps the macros a job runs, in the order it runs them; one
+// may come twice.
+func createJobMacros(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE job_macros (
+		%[1]s,
+		job_id %[2]s NOT NULL REFERENCES jobs(id),
+		macro_id %[2]s NOT NULL REFERENCES macros(id),
+		position INT NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect)))
+}
+
+// createJobPlans keeps the plans that say when a job runs, each once.
+func createJobPlans(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE job_plans (
+		job_id %[1]s NOT NULL REFERENCES jobs(id),
+		plan_id %[1]s NOT NULL REFERENCES exec_plans(id),
+		PRIMARY KEY (job_id, plan_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// addStateNextState names, for a state that waits to move a ticket on by
+// itself, the state it moves it on to - by id, so that renaming either leaves
+// it standing, where KIX18's Ticket::StateAfterPending names both by name and a
+// rename leaves the ticket waiting for ever.
+func addStateNextState(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`ALTER TABLE ticket_states ADD COLUMN next_state_id %s REFERENCES ticket_states(id)`,
+		foreignKeyID(dialect)))
+}
+
+// seedPendingCloseNextState moves the shipped waiting state on to closed, as
+// KIX18 ships it. Read first and written second, because MySQL refuses an
+// UPDATE that reads the table it writes.
+func seedPendingCloseNextState(d migration.Datasource, dialect string) error {
+	var closed uint
+	if err := d.SQL.QueryRow(sqldb.Rebind(dialect, "SELECT id FROM ticket_states WHERE name = ?"), "closed").
+		Scan(&closed); err != nil {
+		return fmt.Errorf("reading the closed state: %w", err)
+	}
+
+	if _, err := d.SQL.Exec(sqldb.Rebind(dialect, "UPDATE ticket_states SET next_state_id = ? WHERE name = ?"),
+		closed, "pending-auto-close"); err != nil {
+		return fmt.Errorf("moving the shipped waiting state on to closed: %w", err)
+	}
+
+	return nil
+}
+
+// createUnlockStateTypes keeps the state types a queue's unlock time frees a
+// lock in, as KIX18's Ticket::UnlockStateType lists them - in the database
+// rather than in the code, so that an installation can add to them.
+func createUnlockStateTypes(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE unlock_state_types (
+		state_type VARCHAR(32) NOT NULL PRIMARY KEY,
+		is_system %[1]s NOT NULL DEFAULT %[2]s
+	)`, boolean(dialect), falseLiteral(dialect)))
+}
+
+// seedUnlockStateTypes ships new and open, as KIX18 does, marked as the
+// installation's own: a lock that could never run out on a ticket somebody is
+// working on would make a queue's unlock time mean nothing. Written out rather
+// than taken from the model, as every seed is.
+func seedUnlockStateTypes(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect, "INSERT INTO unlock_state_types (state_type, is_system) VALUES (?, ?)")
+
+	for _, kind := range []string{"new", "open"} {
+		if _, err := d.SQL.Exec(insert, kind, true); err != nil {
+			return fmt.Errorf("seeding the unlock state type %q: %w", kind, err)
+		}
+	}
+
+	return nil
+}
+
+// createExecPlans keeps when the jobs that name a plan run, as KIX18 keeps its
+// execution plans: the weekdays, times or events in parameters, a JSON object,
+// so that the two kinds of plan share one table.
+func createExecPlans(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE exec_plans (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		type VARCHAR(32) NOT NULL,
+		parameters %[4]s NOT NULL
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), longText(dialect)))
+}
+
+// createMacros keeps the named runs of steps the automation takes on a ticket,
+// as KIX18 keeps its macros.
+func createMacros(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE macros (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect)))
+}
+
+// createMacroActions keeps a macro's steps in the order they are taken, each
+// with its parameters as a JSON object of the names its type defines.
+func createMacroActions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE macro_actions (
+		%[1]s,
+		macro_id %[2]s NOT NULL REFERENCES macros(id),
+		position INT NOT NULL,
+		type VARCHAR(64) NOT NULL,
+		parameters %[3]s NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect)))
+}
+
+// createCalendars keeps when a service is given, as KIX18 keeps it. An empty
+// zone or place for public holidays follows the installation's own.
+func createCalendars(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE calendars (
+		%[1]s,
+		name VARCHAR(255) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		zone VARCHAR(64) NOT NULL DEFAULT '',
+		holiday_place VARCHAR(16) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect)))
+}
+
+// createCalendarHours keeps the stretches of a weekday a calendar's service is
+// given in, in minutes after midnight in its zone - two for a day with a break.
+func createCalendarHours(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE calendar_hours (
+		%[1]s,
+		calendar_id %[2]s NOT NULL REFERENCES calendars(id),
+		weekday INT NOT NULL,
+		from_minute INT NOT NULL,
+		to_minute INT NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect)))
+}
+
+// createCalendarFreeDays keeps the days a calendar's service is not given
+// beyond the public holidays, once or every year on that date; a day is
+// midnight UTC of the calendar day, as every stored date is.
+func createCalendarFreeDays(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE calendar_free_days (
+		%[1]s,
+		calendar_id %[2]s NOT NULL REFERENCES calendars(id),
+		day %[3]s NOT NULL,
+		recurring %[4]s NOT NULL DEFAULT %[5]s,
+		name VARCHAR(255) NOT NULL DEFAULT ''
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), boolean(dialect), falseLiteral(dialect)))
+}
+
+// addServiceLevelCalendar names the calendar a service level's minutes are
+// counted in. Added rather than written into the table, because the calendars
+// arrived after it and a key must point at a table that exists; a service
+// level without one counts around the clock.
+func addServiceLevelCalendar(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`ALTER TABLE service_levels ADD COLUMN calendar_id %s REFERENCES calendars(id)`,
+		foreignKeyID(dialect)))
+}
+
+// addServiceLevelValidity says whether a service level is still offered: one
+// tickets carry is retired rather than deleted, as every value they carry is.
+func addServiceLevelValidity(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`ALTER TABLE service_levels ADD COLUMN valid %s NOT NULL DEFAULT %s`,
+		boolean(dialect), trueLiteral(dialect)))
+}
+
+// createRoles keeps the named sets of rights. A role is a row because an
+// installation makes its own; what a right means is code, which is why the
+// rights themselves are not.
+func createRoles(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE roles (
 		%s,
-		ran_at %s NOT NULL,
-		confirmed %s NOT NULL,
-		deleted INT NOT NULL,
-		entries_deleted INT NOT NULL,
-		created INT NOT NULL
-	)`, primaryKey(dialect), timestamp(dialect), boolean(dialect)))
+		name VARCHAR(64) NOT NULL UNIQUE,
+		description VARCHAR(255) NOT NULL DEFAULT '',
+		is_system %s NOT NULL DEFAULT %s
+	)`, primaryKey(dialect), boolean(dialect), falseLiteral(dialect)))
 }
 
-// rememberWhenAnEntryWasBookedAndCorrected gives a time entry the two moments a
-// disputed figure is argued over.
-//
-// The only date the row carried is the day the work was done, and that is
-// precisely the field an edit leaves alone: a figure corrected the day after it
-// was booked looked identical to one that had stood untouched for a month. These
-// are the hours somebody is paid for, so the record of when the number appeared
-// and when it last moved is part of the number.
-//
-// Both are nullable and nothing is backfilled. An entry that predates the columns
-// has no known booking moment, and the two candidates for inventing one are both
-// lies: the day of the work is not when it was typed in, and the moment of the
-// migration says every historical entry was recorded the day this version was
-// installed. A null reads as "before this was recorded", which is the truth.
-//
-// There is no actor column. This application has no timesheets:write:all - nobody
-// can book or change time in another person's name - so a "changed by" would hold
-// the owner's own id in every row, and a column whose value is derivable from
-// another column is a column that will eventually disagree with it.
-func rememberWhenAnEntryWasBookedAndCorrected(d migration.Datasource, dialect string) error {
-	return execAll(d,
-		fmt.Sprintf("ALTER TABLE timesheets ADD COLUMN created_at %s NULL", timestamp(dialect)),
-		fmt.Sprintf("ALTER TABLE timesheets ADD COLUMN updated_at %s NULL", timestamp(dialect)),
-	)
+// createRolePermissions keeps which rights each role holds, the pair being the
+// key and the one index the table needs.
+func createRolePermissions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE role_permissions (
+		role_id %s NOT NULL REFERENCES roles(id),
+		permission VARCHAR(64) NOT NULL,
+		PRIMARY KEY (role_id, permission)
+	)`, foreignKeyID(dialect)))
 }
 
-// rememberWhenASessionWasLastUsed adds what an idle timeout measures against.
+// seedRoles inserts the roles an installation starts with, and their rights.
 //
-// The lifetime a session already had answers "how long is one sign-in worth",
-// which is not the same question as "is anybody still there". Existing sessions
-// get the moment the column arrives rather than a zero time: they are in use,
-// and dating them to 1970 would sign out everybody who is signed in the second
-// an installation updates and switches the timeout on.
-func rememberWhenASessionWasLastUsed(d migration.Datasource, dialect string) error {
-	if err := execAll(d, fmt.Sprintf(
-		"ALTER TABLE sessions ADD COLUMN last_seen_at %s NULL", timestamp(dialect))); err != nil {
-		return err
-	}
+// From the model rather than written out: the roles shipped and the roles
+// seeded are one list, and the migration that seeds them is the only one there
+// has ever been, so there is no applied history for a later change to the model
+// to contradict. A role added to the model after a release is a migration of
+// its own, written out, at the end of this chain.
+func seedRoles(d migration.Datasource, dialect string) error {
+	insertRole := sqldb.Rebind(dialect,
+		"INSERT INTO roles (name, description, is_system) VALUES (?, ?, ?)")
 
-	return execAll(d, "UPDATE sessions SET last_seen_at = created_at WHERE last_seen_at IS NULL")
-}
-
-// clearTheAdministratorsWorkingDay takes the daily target off the built-in
-// administrator.
-//
-// It was seeded with the default eight, from when that account recorded time
-// like anybody else. It does not: it cannot book an hour, read a figure or open
-// the working-times card, which is hidden for it. So the figure was read by
-// nothing - and shown in exactly one place, the account table, where every other
-// row said "default" and this one said 8.0 for no reason a reader could work
-// out.
-//
-// Zero is not "no target" but "follow the instance default", which is what every
-// account starts on. For this one it is the honest answer: it has no working day
-// to have a target for, and if it ever gained one the instance default is what a
-// new account would get anyway.
-func clearTheAdministratorsWorkingDay(d migration.Datasource, dialect string) error {
-	if _, err := d.SQL.Exec(sqldb.Rebind(dialect,
-		"UPDATE users SET daily_target_hours = 0 WHERE is_system = ?"), true); err != nil {
-		return fmt.Errorf("clearing the built-in administrator's daily target: %w", err)
-	}
-
-	return nil
-}
-
-// letAdministratorsReachTheSettings grants settings:manage to every role that
-// already administers the accounts.
-//
-// Until now the Settings screen answered to one account: the built-in one, checked
-// by name rather than by right. So the combined role - somebody who works here and
-// also administers - held the accounts and the roles and could not open the
-// database, directory or maintenance screens at all. The way round it was to sign
-// in as the built-in account, which is the one account whose actions cannot be
-// attributed to a person.
-//
-// Keyed on users:write rather than on a role name, because a role's name is a
-// thing installations change and this has to find the ones that exist rather than
-// the ones this application shipped. Whoever already decides who may sign in is
-// not gaining reach they did not have.
-//
-// What this costs is written down where it is enforced, in
-// Authorizer.RequireInstallationAdmin: a right that can be granted is a right that
-// can be granted to yourself, if you hold roles:write.
-func letAdministratorsReachTheSettings(d migration.Datasource, dialect string) error {
-	return grantToAllRolesHolding(d, dialect, model.PermUserWrite, model.PermSettingsManage)
-}
-
-// callTheEverydayRoleUser renames employee to user, and employee-admin to user-admin.
-//
-// The word said more than this application knows. It holds accounts, and whether the
-// person behind one is employed here, contracted, a volunteer or the only person in the
-// company is not something it records, checks or needs - what it knows is that they use
-// it. The role is also what a fresh installation puts everybody in, including whoever
-// installed it, and calling that person an employee of themselves reads as a mistake.
-//
-// A rename rather than a new role beside the old one. Every account points at a role by
-// id, so nobody is moved and nobody loses anything; what changes is the name the
-// application looks the role up by, which is why this has to happen in the database
-// rather than only in the model.
-//
-// Three things carry the name and all three are handled here: the roles table, the
-// description that goes with each shipped role - which the migration that retired the
-// review path could not update on an installation still using the old names - and the
-// directory configuration, where the name of the role given to accounts provisioned
-// from LDAP is stored inside a JSON blob.
-func callTheEverydayRoleUser(d migration.Datasource, dialect string) error {
-	for _, renaming := range []struct{ from, to string }{
-		{"employee", model.RoleUser},
-		{"employee-admin", model.RoleUserAdmin},
-	} {
-		if err := renameRole(d, dialect, renaming.from, renaming.to); err != nil {
-			return err
-		}
-	}
-
-	// The descriptions of the roles that ship, now that they can be found by the names
-	// the model uses. This is also the repair for an installation that upgraded through
-	// the review-path migration while still calling the role employee: that one matched
-	// on today's names and updated nothing.
-	describe := sqldb.Rebind(dialect, "UPDATE roles SET description = ? WHERE name = ?")
+	grant := sqldb.Rebind(dialect,
+		"INSERT INTO role_permissions (role_id, permission) SELECT id, ? FROM roles WHERE name = ?")
 
 	for _, role := range model.DefaultRoles() {
-		if _, err := d.SQL.Exec(describe, role.Description, role.Name); err != nil {
-			return fmt.Errorf("describing %q: %w", role.Name, err)
-		}
-	}
-
-	return pointTheDirectoryAtTheRenamedRole(d, dialect)
-}
-
-// renameRole renames one role, and does nothing if there is nothing to rename.
-//
-// The interesting case is a collision: an installation that built its own role called
-// user, which is a perfectly reasonable thing to have done while the shipped one was
-// called employee. The shipped name has to win, because the application looks this role
-// up by it - the LDAP default, the account that arrives without a role, the fallback in
-// the migration that first moved roles into the database. So the one standing in the way
-// is moved aside with a suffix and keeps everything else: its rights, its description,
-// and every account on it.
-//
-// Renamed rather than merged. Merging would move people between roles, which is a
-// decision about who may do what, and no migration should make that quietly. Two roles
-// with similar names is a tidying job an administrator can see and do; an account that
-// silently gained or lost rights is not visible at all.
-func renameRole(d migration.Datasource, dialect string, from, to string) error {
-	taken, err := firstRoleThatExists(d, dialect, from)
-	if err != nil {
-		return err
-	}
-
-	if taken == "" {
-		// Nothing to rename: a fresh installation was seeded with the new name from
-		// the start, because the seeding migration builds the roles from the model.
-		return nil
-	}
-
-	inTheWay, err := firstRoleThatExists(d, dialect, to)
-	if err != nil {
-		return err
-	}
-
-	if inTheWay != "" {
-		free, err := aFreeRoleName(d, dialect, to)
-		if err != nil {
-			return err
+		if _, err := d.SQL.Exec(insertRole, role.Name, role.Description, role.IsSystem); err != nil {
+			return fmt.Errorf("seeding role %q: %w", role.Name, err)
 		}
 
-		if err := setRoleName(d, dialect, to, free); err != nil {
-			return fmt.Errorf("moving the existing %q role aside: %w", to, err)
-		}
-	}
-
-	return setRoleName(d, dialect, from, to)
-}
-
-// aFreeRoleName finds a name nothing is using, by counting up from name-2.
-//
-// Starting at 2 rather than 1 because the one already there is the first of them, and
-// bounded so a database that answers strangely cannot spin here for ever.
-func aFreeRoleName(d migration.Datasource, dialect, name string) (string, error) {
-	for suffix := 2; suffix < 100; suffix++ {
-		candidate := fmt.Sprintf("%s-%d", name, suffix)
-
-		taken, err := firstRoleThatExists(d, dialect, candidate)
-		if err != nil {
-			return "", err
-		}
-
-		if taken == "" {
-			return candidate, nil
-		}
-	}
-
-	return "", fmt.Errorf("no free name near %q after 98 attempts", name)
-}
-
-func setRoleName(d migration.Datasource, dialect, from, to string) error {
-	if _, err := d.SQL.Exec(
-		sqldb.Rebind(dialect, "UPDATE roles SET name = ? WHERE name = ?"), to, from); err != nil {
-		return fmt.Errorf("renaming the %q role to %q: %w", from, to, err)
-	}
-
-	return nil
-}
-
-// pointTheDirectoryAtTheRenamedRole updates the role name stored in the LDAP settings.
-//
-// It lives inside a JSON document in the settings table, so this reads it, changes the
-// one field and writes it back rather than editing the text - a string replacement would
-// depend on how the encoder happened to space the document out.
-//
-// Getting this wrong would not be visible until somebody signed in from the directory
-// for the first time after the upgrade: the name would match no role, and the account
-// would start as an ordinary user rather than as whatever the settings had chosen.
-func pointTheDirectoryAtTheRenamedRole(d migration.Datasource, dialect string) error {
-	var stored string
-
-	err := d.SQL.QueryRow(
-		sqldb.Rebind(dialect, "SELECT value FROM settings WHERE key_name = ?"),
-		"ldap.config").Scan(&stored)
-	if err != nil || strings.TrimSpace(stored) == "" {
-		// No directory configured, which is the ordinary case. A missing row is
-		// sql.ErrNoRows here and not a problem worth failing an upgrade over; a
-		// corrupt one is left alone for the same reason the settings screen leaves
-		// it alone - it has to stay repairable from the interface.
-		return nil
-	}
-
-	var config map[string]any
-
-	if err := json.Unmarshal([]byte(stored), &config); err != nil {
-		return nil
-	}
-
-	// The field has no JSON tag on the model, so it is spelled as the Go field is.
-	current, ok := config["DefaultRole"].(string)
-	if !ok {
-		return nil
-	}
-
-	switch current {
-	case "employee":
-		config["DefaultRole"] = model.RoleUser
-	case "employee-admin":
-		config["DefaultRole"] = model.RoleUserAdmin
-	default:
-		// A role this installation named itself, which keeps its name.
-		return nil
-	}
-
-	patched, err := json.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("rewriting the directory configuration: %w", err)
-	}
-
-	if _, err := d.SQL.Exec(
-		sqldb.Rebind(dialect, "UPDATE settings SET value = ? WHERE key_name = ?"),
-		string(patched), "ldap.config"); err != nil {
-		return fmt.Errorf("storing the directory configuration: %w", err)
-	}
-
-	return nil
-}
-
-// retireReadingEverybodysTime withdraws timesheets:read:all and timesheets:write:all
-// from every role.
-//
-// They were the last of the manager. One opened everybody's entries, balances, totals
-// and exports; the other let somebody book and change time in another person's name.
-// No default role has held either since the review path was retired, and by then the
-// four screens that asked "which person" had been narrowed to a dropdown with one
-// entry, so ticking one changed nothing anybody could see - while the API went on
-// answering every question about every colleague.
-//
-// Each role keeps the half of what it held that is still a right: whoever could read
-// everybody's time could read their own, and whoever could write everybody's could
-// write their own. Granted before the wider one is withdrawn, in that order, so no
-// role is left granting nothing - a role that grants nothing is one somebody assigns
-// and then wonders about, because its holder signs in to an interface with no screen
-// on it.
-//
-// The two names are literals. This migration is the reason the constants no longer
-// exist, and a finished migration that referred to them would have to be edited every
-// time the model moves on.
-func retireReadingEverybodysTime(d migration.Datasource, dialect string) error {
-	for _, right := range []struct{ all, own string }{
-		{"timesheets:read:all", model.PermTimesheetReadOwn},
-		{"timesheets:write:all", model.PermTimesheetWriteOwn},
-	} {
-		if err := grantToAllRolesHolding(d, dialect, right.all, right.own); err != nil {
-			return err
-		}
-
-		if _, err := d.SQL.Exec(
-			sqldb.Rebind(dialect, "DELETE FROM role_permissions WHERE permission = ?"),
-			right.all); err != nil {
-			return fmt.Errorf("withdrawing %q: %w", right.all, err)
+		for _, permission := range role.Permissions {
+			if _, err := d.SQL.Exec(grant, permission, role.Name); err != nil {
+				return fmt.Errorf("granting %q to %q: %w", permission, role.Name, err)
+			}
 		}
 	}
 
 	return nil
 }
 
-// separateAdministeringFromWorking takes the working day off the built-in account and
-// offers it as a role instead.
+// createUsers keeps the accounts: the people on the staff side, and the
+// customers who were given access to the portal.
 //
-// The account that exists on every installation before anybody has chosen anything is
-// how you get in, not somebody's working day. It used to book and read its own hours
-// "like anybody else who works here"; whoever does work here has an account of their
-// own, and if that person also administers, they get a role that says so rather than a
-// second sign-in.
+// The second factor's column is 255 wide although a seed is 32 characters,
+// because it is stored encrypted where a key is configured, and the ciphertext
+// is a nonce, the seed, a tag and a marker in base64. SQLite does not enforce a
+// width and the servers do, so a column cut to the plain value works everywhere
+// it is tried and fails only where it matters.
 //
-// Two halves, in this order. The role is seeded first, so an installation that had
-// somebody using the built-in account for both jobs has somewhere to move them before
-// the rights come off it - and this migration deliberately does not move anybody. Who
-// works here is not something a database can work out, and guessing would either
-// invent a colleague or take an administrator's hours away.
-//
-// What it does instead: the built-in administrator keeps its recorded entries, its
-// projects and its figures in the tables. They stop being reachable through the
-// interface, because the rights that reach them are gone - and they come back the
-// moment somebody assigns it the combined role, which is the honest way to undo this
-// if an installation wants the old arrangement.
-func separateAdministeringFromWorking(d migration.Datasource, dialect string) error {
-	// The role that spans both jobs, so there is somewhere to put whoever needs it.
-	//
-	// Under either name, because this migration runs before the one that renames it -
-	// and looking for one name only would seed a second copy of a role that is already
-	// there under the other.
-	combined, err := theCombinedRoleName(d, dialect)
-	if err != nil {
-		return err
-	}
-
-	if combined == "" {
-		if err := seedRole(d, dialect, shippedRole(model.RoleUserAdmin)); err != nil {
-			return err
-		}
-	}
-
-	// And the working day comes off the built-in administrator's own role. Only that
-	// one: a role somebody built for themselves is their business, and this is about
-	// what arrives with the software.
-	revoke := sqldb.Rebind(dialect,
-		`DELETE FROM role_permissions
-		  WHERE permission = ?
-		    AND role_id = (SELECT id FROM roles WHERE name = ? AND is_system = TRUE)`)
-
-	// TRUE is spelled differently on SQLite, which stores it as 1.
-	if dialect == sqldb.DialectSQLite {
-		revoke = strings.Replace(revoke, "is_system = TRUE", "is_system = 1", 1)
-	}
-
-	for _, permission := range []string{
-		"projects:read", "projects:write", "projects:archive", "projects:delete",
-		"timesheets:read:own", "timesheets:write:own",
-		"reports:read:own", "settings:write:own",
-	} {
-		if _, err := d.SQL.Exec(revoke, permission, model.RoleAdmin); err != nil {
-			return fmt.Errorf("taking %q off the built-in administrator: %w", permission, err)
-		}
-	}
-
-	return nil
+// An empty timezone, language and theme mean "follow the installation", "the
+// default" and "the time of day". Stored empty rather than resolved, so changing
+// the installation's choice moves everybody who never made their own.
+func createUsers(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE users (
+		%[1]s,
+		name VARCHAR(255) NOT NULL,
+		email VARCHAR(255) NOT NULL UNIQUE,
+		role_id %[2]s NOT NULL REFERENCES roles(id),
+		password_hash VARCHAR(255) NOT NULL DEFAULT '',
+		must_change_password %[3]s NOT NULL DEFAULT %[4]s,
+		is_system %[3]s NOT NULL DEFAULT %[4]s,
+		totp_secret VARCHAR(255) NOT NULL DEFAULT '',
+		totp_enabled %[3]s NOT NULL DEFAULT %[4]s,
+		language VARCHAR(8) NOT NULL DEFAULT '',
+		theme VARCHAR(8) NOT NULL DEFAULT '',
+		timezone VARCHAR(64) NOT NULL DEFAULT '',
+		tour_seen %[3]s NOT NULL DEFAULT %[4]s,
+		is_external %[3]s NOT NULL DEFAULT %[4]s,
+		external_id VARCHAR(128) NOT NULL DEFAULT ''
+	)`, primaryKey(dialect), foreignKeyID(dialect), boolean(dialect), falseLiteral(dialect)))
 }
 
-// giveEveryProjectAnOwner turns the shared projects into personal ones.
+// createSessions keeps who is signed in. The token's hash is the primary key:
+// lookups happen on every request, by that and nothing else.
 //
-// There were two kinds: a shared project everybody could see and book on, and a
-// private category for organising your own day. Each account is its own world now, so
-// the second is the only kind - which leaves the question of who owns the first.
-//
-// Copied rather than handed to one person. A shared project two colleagues booked on
-// becomes a project each, keeping the name, and each person's entries move to their
-// own copy. Nobody loses an hour and nobody loses sight of one, which handing the
-// project to the largest booker would have done to everybody else: their entries would
-// have stayed attached to a project they could no longer see.
-//
-// The cost is duplicate names, and it is the honest one: two people who worked on the
-// same thing now each have their own record of it, which is exactly what "no view
-// across accounts" means.
-//
-// A shared project with no bookings at all is deleted. Nobody has a claim on it, and
-// leaving it without an owner would leave a row no reader can reach - which is worse
-// than removing it, because it would sit in the table failing the promise that every
-// project belongs to somebody. What is lost is a name and a date range that nothing
-// was ever recorded against.
-//
-// projects:write:own goes at the same time, into projects:write. Two rights told the
-// two kinds apart; with one kind, one of them would grant nothing.
-func giveEveryProjectAnOwner(d migration.Datasource, dialect string) error {
-	shared, err := sharedProjectIDs(d)
-	if err != nil {
-		return err
-	}
-
-	for _, projectID := range shared {
-		if err := splitProjectPerBooker(d, dialect, projectID); err != nil {
-			return err
-		}
-	}
-
-	// Whoever could keep a private category may now keep a project, because that is
-	// the same thing - and keeping one means finishing it and removing it as well,
-	// which the own-project right already allowed for your own. Granted before the old
-	// right is withdrawn, so nobody is left holding neither.
-	for _, permission := range []string{
-		model.PermProjectWrite, model.PermProjectArchive, model.PermProjectDelete,
-	} {
-		if err := grantToAllRolesHolding(d, dialect, "projects:write:own", permission); err != nil {
-			return err
-		}
-	}
-
-	if _, err := d.SQL.Exec(
-		sqldb.Rebind(dialect, "DELETE FROM role_permissions WHERE permission = ?"),
-		"projects:write:own"); err != nil {
-		return fmt.Errorf("withdrawing the own-project right: %w", err)
-	}
-
-	return nil
+// last_seen_at is what an idle timeout measures against, and api_token_id the
+// personal token a session was exchanged for, so that taking the token back
+// ends the session with it. That one is no foreign key: a session goes with its
+// token rather than holding it, and the erasure deletes an account's tokens
+// before its sessions.
+func createSessions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE sessions (
+		token_hash VARCHAR(64) PRIMARY KEY,
+		user_id %[1]s NOT NULL REFERENCES users(id),
+		created_at %[2]s NOT NULL,
+		expires_at %[2]s NOT NULL,
+		last_seen_at %[2]s,
+		api_token_id %[1]s
+	)`, foreignKeyID(dialect), timestamp(dialect)))
 }
 
-// sharedProjectIDs lists the projects that belong to nobody.
-func sharedProjectIDs(d migration.Datasource) ([]uint, error) {
-	rows, err := d.SQL.Query("SELECT id FROM projects WHERE owner_id IS NULL ORDER BY id")
-	if err != nil {
-		return nil, fmt.Errorf("looking for projects without an owner: %w", err)
-	}
-
-	defer func() { _ = rows.Close() }()
-
-	var ids []uint
-
-	for rows.Next() {
-		var id uint
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("reading a project id: %w", err)
-		}
-
-		ids = append(ids, id)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("reading the projects without an owner: %w", err)
-	}
-
-	return ids, nil
-}
-
-// splitProjectPerBooker gives one shared project to each person who booked on it.
-func splitProjectPerBooker(d migration.Datasource, dialect string, projectID uint) error {
-	bookers, err := bookersOf(d, dialect, projectID)
-	if err != nil {
-		return err
-	}
-
-	if len(bookers) == 0 {
-		// Nobody's, and nothing recorded against it.
-		if _, err := d.SQL.Exec(
-			sqldb.Rebind(dialect, "DELETE FROM projects WHERE id = ?"), projectID); err != nil {
-			return fmt.Errorf("removing an unclaimed project: %w", err)
-		}
-
-		return nil
-	}
-
-	// The first becomes the owner of the original, so one person's entries need not
-	// move at all and the id they already point at stays valid.
-	if _, err := d.SQL.Exec(
-		sqldb.Rebind(dialect, "UPDATE projects SET owner_id = ? WHERE id = ?"),
-		bookers[0], projectID); err != nil {
-		return fmt.Errorf("giving project %d an owner: %w", projectID, err)
-	}
-
-	for _, booker := range bookers[1:] {
-		copyID, err := copyProjectTo(d, dialect, projectID, booker)
-		if err != nil {
-			return err
-		}
-
-		if _, err := d.SQL.Exec(sqldb.Rebind(dialect,
-			"UPDATE timesheets SET project_id = ? WHERE project_id = ? AND user_id = ?"),
-			copyID, projectID, booker); err != nil {
-			return fmt.Errorf("moving the entries of user %d: %w", booker, err)
-		}
-	}
-
-	return nil
-}
-
-// bookersOf lists everybody who recorded time against a project, oldest account
-// first so the choice of who keeps the original is not left to the engine.
-func bookersOf(d migration.Datasource, dialect string, projectID uint) ([]uint, error) {
-	rows, err := d.SQL.Query(sqldb.Rebind(dialect,
-		"SELECT DISTINCT user_id FROM timesheets WHERE project_id = ? ORDER BY user_id"),
-		projectID)
-	if err != nil {
-		return nil, fmt.Errorf("looking for who booked on project %d: %w", projectID, err)
-	}
-
-	defer func() { _ = rows.Close() }()
-
-	var ids []uint
-
-	for rows.Next() {
-		var id uint
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("reading a user id: %w", err)
-		}
-
-		ids = append(ids, id)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("reading who booked on project %d: %w", projectID, err)
-	}
-
-	return ids, nil
-}
-
-// copyProjectTo duplicates a project for one person and returns the copy's id.
+// createAPITokens keeps the personal tokens used for API access.
 //
-// Inserted from a select so every column comes along without this having to name them
-// twice, then read back by owner and name rather than by a last-inserted id: that is
-// available on two of the three engines this runs on and not on the third.
-func copyProjectTo(
-	d migration.Datasource,
-	dialect string,
-	projectID uint,
-	owner uint,
-) (uint, error) {
-	if _, err := d.SQL.Exec(sqldb.Rebind(dialect,
-		`INSERT INTO projects (name, description, start_date, end_date, status, owner_id)
-		 SELECT name, description, start_date, end_date, status, ? FROM projects WHERE id = ?`),
-		owner, projectID); err != nil {
-		return 0, fmt.Errorf("copying project %d for user %d: %w", projectID, owner, err)
-	}
-
-	var copyID uint
-
-	err := d.SQL.QueryRow(sqldb.Rebind(dialect,
-		`SELECT id FROM projects WHERE owner_id = ?
-		   AND name = (SELECT name FROM projects WHERE id = ?)
-		 ORDER BY id DESC`), owner, projectID).Scan(&copyID)
-	if err != nil {
-		return 0, fmt.Errorf("finding the copy of project %d for user %d: %w",
-			projectID, owner, err)
-	}
-
-	return copyID, nil
-}
-
-// grantToAllRolesHolding gives a permission to every role that holds another one.
-func grantToAllRolesHolding(d migration.Datasource, dialect, holds, grant string) error {
-	if _, err := d.SQL.Exec(sqldb.Rebind(dialect,
-		`INSERT INTO role_permissions (role_id, permission)
-		 SELECT DISTINCT rp.role_id, ? FROM role_permissions rp
-		  WHERE rp.permission = ?
-		    AND NOT EXISTS (
-			  SELECT 1 FROM role_permissions other
-			   WHERE other.role_id = rp.role_id AND other.permission = ?)`),
-		grant, holds, grant); err != nil {
-		return fmt.Errorf("granting %q to every role holding %q: %w", grant, holds, err)
-	}
-
-	return nil
-}
-
-// handWorkingTimesToTheirOwners withdraws settings:write:other from every role.
-//
-// A daily target and a daily ceiling are time figures, and everything to do with time
-// belongs to the person it is about. The right existed so this installation's
-// administrator could set them for somebody else, and the reason that does not work is
-// the arrangement itself: the administrator cannot read that person's entries, their
-// balance or their figures. Setting a number whose effect is invisible to you is not
-// administration, and the number's only consumer is an overtime balance nobody but its
-// owner may see.
-//
-// It was not the lock it looked like either. The same two fields were writable through
-// PUT /users/{id} and through the spreadsheet import, both of which check only
-// users:write - so the right guarded one of three doors. All three are closed now, and
-// the one that remains asks whose account it is.
-//
-// Nothing is lost by withdrawing it. A new account starts on the built-in target and
-// the installation's ceiling under Settings, and its owner changes either from there.
-func handWorkingTimesToTheirOwners(d migration.Datasource, dialect string) error {
-	if _, err := d.SQL.Exec(
-		sqldb.Rebind(dialect, "DELETE FROM role_permissions WHERE permission = ?"),
-		"settings:write:other"); err != nil {
-		return fmt.Errorf("withdrawing the right to set somebody else's working times: %w", err)
-	}
-
-	return nil
-}
-
-// retireTheSeparateReportRight withdraws reports:read from every role.
-//
-// Whether somebody may see another person's recorded time is one question, and
-// timesheets:read:all is the one right that answers it. reports:read was a second
-// answer to the same question, asked of a total rather than of a list, and it
-// belonged to the role that reviewed other people's hours. That role is gone.
-//
-// What it left behind was worse than untidy: no role held it, and a whole screen was
-// gated on it, so the project report was unreachable on every installation - while
-// anybody who did grant it would have got a per-colleague breakdown of hours, which
-// is exactly what nobody is meant to see. The report now covers the caller's own
-// hours, and only the one right widens that.
-//
-// Nothing replaces it. A role that held it keeps timesheets:read:all if it had that,
-// and an installation that wants somebody to see everybody's time grants that one.
-func retireTheSeparateReportRight(d migration.Datasource, dialect string) error {
-	if _, err := d.SQL.Exec(
-		sqldb.Rebind(dialect, "DELETE FROM role_permissions WHERE permission = ?"),
-		"reports:read"); err != nil {
-		return fmt.Errorf("withdrawing the separate report right: %w", err)
-	}
-
-	return nil
-}
-
-// repairAccountsWithoutARole puts back a role for every account left without one,
-// and makes sure there is one to put back.
-//
-// The migration before this one moves whoever was a manager to the employee role.
-// It does that with a subselect on the role name, and a subselect that matches
-// nothing yields NULL rather than nothing - so on an installation that had renamed
-// or deleted the default employee role, every ex-manager's role_id became NULL.
-//
-// That is worse than it sounds. The users table is read into a struct whose role id
-// is a plain uint, so a NULL in that column is not a user with no rights: it is a
-// scan error. The affected person cannot sign in, and every listing of accounts
-// fails for everybody, because one unreadable row fails the whole query. An
-// administrator would see an empty user list and no reason for it.
-//
-// Written as a new migration rather than as a correction to the one that caused it.
-// That one has shipped; an installation that already ran it has the NULL rows now,
-// and editing it would repair nothing while quietly changing history for anyone who
-// has not upgraded yet. This runs in the same start-up either way.
-//
-// What it cannot do is guess which role a renamed one was meant to be. An
-// installation that renamed the default employee role gets the default back,
-// alongside whatever they renamed it to, and their ex-managers land in it: two roles
-// where there was one, which is a tidying job for an administrator rather than an
-// account nobody can sign in to.
-func repairAccountsWithoutARole(d migration.Datasource, dialect string) error {
-	// A destination has to exist before anybody can be pointed at it, under whichever
-	// name this installation calls it - and seeded only if it calls it neither, which
-	// is the broken case this repair is for. An ordinary upgrade changes nothing here.
-	ordinary, err := theOrdinaryRoleName(d, dialect)
-	if err != nil {
-		return err
-	}
-
-	if ordinary == "" {
-		ordinary = model.RoleUser
-
-		if err := seedRole(d, dialect, shippedRole(model.RoleUser)); err != nil {
-			return err
-		}
-	}
-
-	// Everybody who has no role, whatever left them that way.
-	adopt := sqldb.Rebind(dialect, `UPDATE users SET role_id =
-		(SELECT id FROM roles WHERE name = ?) WHERE role_id IS NULL`)
-
-	if _, err := d.SQL.Exec(adopt, ordinary); err != nil {
-		return fmt.Errorf("giving roleless accounts the %q role: %w", ordinary, err)
-	}
-
-	return nil
-}
-
-// retireTheReviewPath removes the entry status and the role that reviewed it.
-//
-// An entry travelled open -> submitted -> approved, and an approved one was locked
-// against every later change. That needs somebody to do the approving, and there is
-// nobody: everyone keeps their own hours and the built-in administrator runs the
-// installation rather than reading other people's work. A review path with no
-// reviewer is a step that only ever stands between a person and the time they
-// recorded.
-//
-// So the column goes, and with it the manager role, the approve right, and the
-// nightly sweep that moved stale entries along. Whoever was a manager becomes an
-// ordinary account, which now carries everything about its own work - including its
-// own projects.
-func retireTheReviewPath(d migration.Datasource, dialect string) error {
-	// Whichever name this installation calls the everyday role. Read once, up here,
-	// because the first thing this migration does is point people at it - and a
-	// subselect that matches no row yields NULL rather than nothing, which is how an
-	// earlier version of this left accounts unable to sign in at all.
-	ordinary, err := theOrdinaryRoleName(d, dialect)
-	if err != nil {
-		return err
-	}
-
-	// The people first, while the role still exists to be moved away from. An
-	// account left pointing at a role that has gone cannot sign in.
-	moveUsers := sqldb.Rebind(dialect, `UPDATE users SET role_id =
-		(SELECT id FROM roles WHERE name = ?)
-		WHERE role_id IN (SELECT id FROM roles WHERE name = ?)`)
-
-	if _, err := d.SQL.Exec(moveUsers, ordinary, "manager"); err != nil {
-		return fmt.Errorf("moving managers to %q: %w", ordinary, err)
-	}
-
-	// Then the role, permissions first: role_permissions references roles(id), and
-	// on the engines that enforce it the delete would be refused.
-	for _, statement := range []string{
-		`DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE name = ?)`,
-		`DELETE FROM roles WHERE name = ?`,
-	} {
-		if _, err := d.SQL.Exec(sqldb.Rebind(dialect, statement), "manager"); err != nil {
-			return fmt.Errorf("removing the manager role: %w", err)
-		}
-	}
-
-	// The approve right is gone from the application, so any role still holding it
-	// holds a permission no line of code reads.
-	if _, err := d.SQL.Exec(
-		sqldb.Rebind(dialect, "DELETE FROM role_permissions WHERE permission = ?"),
-		"timesheets:approve"); err != nil {
-		return fmt.Errorf("revoking the approve permission: %w", err)
-	}
-
-	// What an ordinary account is now: its own time, and its own projects.
-	grant := sqldb.Rebind(dialect, `INSERT INTO role_permissions (role_id, permission)
-		SELECT id, ? FROM roles WHERE name = ?
-		  AND NOT EXISTS (
-			SELECT 1 FROM role_permissions rp
-			WHERE rp.role_id = roles.id AND rp.permission = ?)`)
-
-	for _, permission := range []string{
-		model.PermProjectWrite, model.PermProjectArchive, model.PermProjectDelete,
-		model.PermTimesheetTransfer,
-	} {
-		if _, err := d.SQL.Exec(grant, permission, ordinary, permission); err != nil {
-			return fmt.Errorf("granting %q to %q: %w", permission, ordinary, err)
-		}
-	}
-
-	// The description on screen, which would otherwise still promise submitting.
-	//
-	// Matched on today's names, so on an installation that still calls the everyday
-	// role employee this updates nothing - and the migration that renames it writes the
-	// descriptions again afterwards, which is where that case is caught.
-	describe := sqldb.Rebind(dialect, "UPDATE roles SET description = ? WHERE name = ?")
-
-	for _, role := range model.DefaultRoles() {
-		if _, err := d.SQL.Exec(describe, role.Description, role.Name); err != nil {
-			return fmt.Errorf("describing %q: %w", role.Name, err)
-		}
-	}
-
-	// And the column itself. Supported by all three engines in the versions this
-	// application requires - SQLite has taken DROP COLUMN since 3.35, which predates
-	// the driver in go.mod.
-	if _, err := d.SQL.Exec("ALTER TABLE timesheets DROP COLUMN status"); err != nil {
-		return fmt.Errorf("dropping the timesheet status: %w", err)
-	}
-
-	return nil
-}
-
-// separateSystemAdministration narrows the administrator role to the installation.
-//
-// The role was seeded holding every permission, which made the one account that
-// exists on every installation also the account that could read, edit and approve
-// everybody's recorded hours. Administering the installation and reading what
-// people recorded in it are different jobs; see model.SystemAdminPermissions.
-//
-// Changing the seed only helps installations yet to be created, so the rights are
-// revoked here for the ones that already ran it. The report right moves to the
-// manager role in the same step, or it would be held by nobody at all.
-//
-// Only the permissions this migration is about are touched. An installation that
-// has since added its own to either role keeps them: this is a correction of what
-// was seeded, not a reset to what the seed says today.
-func separateSystemAdministration(d migration.Datasource, dialect string) error {
-	revoke := sqldb.Rebind(dialect, `DELETE FROM role_permissions
-		WHERE permission = ?
-		  AND role_id IN (SELECT id FROM roles WHERE name = ?)`)
-
-	// What running the work is, as opposed to running the installation.
-	// Literals rather than the model's constants throughout: a migration records
-	// what was done at the time, and every name in this list has since been removed
-	// from the model - the review path, the role that used it, and finally the two
-	// rights that opened everybody's time at once. Referring to a constant would tie
-	// a finished migration to a definition that is allowed to change.
-	for _, permission := range []string{
-		"timesheets:read:all",
-		"timesheets:write:all",
-		"timesheets:approve",
-		"reports:read",
-		model.PermTimesheetTransfer,
-		model.PermProjectWrite,
-		model.PermProjectDelete,
-		model.PermProjectArchive,
-	} {
-		if _, err := d.SQL.Exec(revoke, permission, model.RoleAdmin); err != nil {
-			return fmt.Errorf("revoking %q from %q: %w", permission, model.RoleAdmin, err)
-		}
-	}
-
-	// NOT EXISTS rather than a bare insert: an installation that already granted
-	// these to the manager role would otherwise get a duplicate row, and the
-	// pair is the primary key.
-	grant := sqldb.Rebind(dialect, `INSERT INTO role_permissions (role_id, permission)
-		SELECT id, ? FROM roles WHERE name = ?
-		  AND NOT EXISTS (
-			SELECT 1 FROM role_permissions rp
-			WHERE rp.role_id = roles.id AND rp.permission = ?)`)
-
-	// PermProjectDelete as well: it was the administrator's alone, and a project
-	// with entries is refused, so what this deletes is an empty project created by
-	// mistake rather than anybody's recorded time.
-	for _, permission := range []string{"reports:read", model.PermProjectDelete} {
-		if _, err := d.SQL.Exec(grant, permission, "manager", permission); err != nil {
-			return fmt.Errorf("granting %q to %q: %w", permission, "manager", err)
-		}
-	}
-
-	// The descriptions are on screen in the role list, where "Full administrative
-	// access" would now be describing something the role no longer is.
-	describe := sqldb.Rebind(dialect, "UPDATE roles SET description = ? WHERE name = ?")
-
-	for _, role := range model.DefaultRoles() {
-		if role.Name != model.RoleAdmin && role.Name != "manager" {
-			continue
-		}
-
-		if _, err := d.SQL.Exec(describe, role.Description, role.Name); err != nil {
-			return fmt.Errorf("describing %q: %w", role.Name, err)
-		}
-	}
-
-	return nil
-}
-
-// createRunningTimers holds the clock somebody has started and not yet stopped.
-//
-// A table of its own rather than columns on timesheets, because a running timer
-// is not a time entry yet and cannot satisfy what a time entry has to: it has no
-// duration until it stops, no status to be in, and no calendar day until the zone
-// and the stop time are both known. Storing it as a timesheet would mean an entry
-// of zero hours, which validation refuses and every total would have to learn to
-// skip.
-//
-// The user is the primary key, so one person can have exactly one clock running.
-// Two would be a question nobody has an answer for - which of them does the next
-// stop belong to.
-func createRunningTimers(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE running_timers (
-		user_id %s PRIMARY KEY REFERENCES users(id),
-		project_id %s REFERENCES projects(id),
-		description TEXT,
-		started_at %s NOT NULL
-	)`, foreignKeyID(dialect), foreignKeyID(dialect), timestamp(dialect)))
+// A token stores only a hash, plus a short readable prefix so its owner can
+// tell their tokens apart in a list without the secret being present.
+func createAPITokens(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE api_tokens (
+		%[1]s,
+		user_id %[2]s NOT NULL REFERENCES users(id),
+		name VARCHAR(120) NOT NULL,
+		token_hash VARCHAR(64) NOT NULL UNIQUE,
+		prefix VARCHAR(32) NOT NULL,
+		created_at %[3]s NOT NULL,
+		expires_at %[3]s,
+		last_used_at %[3]s
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
 }
 
 // createPasskeys stores the WebAuthn credentials users register for signing in.
 //
 // Nothing here is worth stealing: a passkey's private half never leaves the
 // device, so what is kept is the public key and the counters needed to verify a
-// signature. That is also why there is no "revoke everything" concern - a
-// credential is useless without the device that holds its other half.
+// signature.
 //
 // credential_id is unique across the installation because it is what a sign-in
 // arrives with: the browser sends the credential, and the credential names its
 // owner. That is what allows signing in without typing a username.
 func createPasskeys(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE passkeys (
-		%s,
-		user_id %s NOT NULL REFERENCES users(id),
+	return exec(d, fmt.Sprintf(`CREATE TABLE passkeys (
+		%[1]s,
+		user_id %[2]s NOT NULL REFERENCES users(id),
 		name VARCHAR(120) NOT NULL,
-		credential_id %s NOT NULL,
-		public_key %s NOT NULL,
+		credential_id %[3]s NOT NULL UNIQUE,
+		public_key %[4]s NOT NULL,
 		attestation_type VARCHAR(32) NOT NULL DEFAULT '',
 		transports VARCHAR(120) NOT NULL DEFAULT '',
 		sign_count BIGINT NOT NULL DEFAULT 0,
-		backup_eligible BOOLEAN NOT NULL DEFAULT FALSE,
-		backed_up BOOLEAN NOT NULL DEFAULT FALSE,
+		backup_eligible %[5]s NOT NULL DEFAULT %[6]s,
+		backed_up %[5]s NOT NULL DEFAULT %[6]s,
+		created_at %[7]s NOT NULL,
+		last_used_at %[7]s
+	)`, primaryKey(dialect), foreignKeyID(dialect), credentialID(dialect), blob(dialect),
+		boolean(dialect), falseLiteral(dialect), timestamp(dialect)))
+}
+
+// createOpenIDIdentities keeps which account each identity at a sign-in provider
+// is linked to: the provider's issuer and the subject it gives that person.
+//
+// One identity an account, and one account an identity - both unique, so the
+// table's two lookups have their indexes from the constraints. The issuer is
+// bounded at 255 like the subject the specification bounds, so that the pair
+// stays inside MySQL's index key length in four-byte characters.
+func createOpenIDIdentities(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE openid_identities (
+		%s,
+		user_id %s NOT NULL UNIQUE REFERENCES users(id),
+		issuer VARCHAR(255) NOT NULL,
+		subject VARCHAR(255) NOT NULL,
 		created_at %s NOT NULL,
-		last_used_at %s
-	)`, primaryKey(dialect), foreignKeyID(dialect),
-		credentialID(dialect), blob(dialect),
-		timestamp(dialect), timestamp(dialect)),
-		"CREATE INDEX idx_passkeys_user ON passkeys (user_id)",
-		"CREATE UNIQUE INDEX idx_passkeys_credential ON passkeys (credential_id)")
+		UNIQUE (issuer, subject)
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
 }
 
-// credentialID is the type for the lookup key.
+// createPushSubscriptions keeps the browsers each person asked for notifications
+// to be pushed to: the push service's address, the two keys a message is
+// encrypted for, and the address the browser reached the installation at.
 //
-// MySQL cannot index a BLOB without a prefix length, so the identifier is
-// stored as VARBINARY there - long enough for anything an authenticator
-// produces, and indexable whole.
-func credentialID(dialect string) string {
-	if dialect == sqldb.DialectMySQL {
-		return "VARBINARY(255)"
-	}
-
-	return blob(dialect)
-}
-
-// blob is the dialect's binary column type.
-func blob(dialect string) string {
-	switch dialect {
-	case sqldb.DialectPostgres:
-		return "BYTEA"
-	case sqldb.DialectMySQL:
-		return "BLOB"
-	default:
-		return "BLOB"
-	}
-}
-
-// addUserTimezone lets an individual work in a zone other than the instance's.
-//
-// Empty means "follow the instance setting", which is what nearly everyone
-// does; only someone working from another country needs their own. Storing the
-// empty string rather than the resolved name matters, because it means changing
-// the instance setting moves those people with it.
-func addUserTimezone(d migration.Datasource, _ string) error {
-	return execAll(d,
-		"ALTER TABLE users ADD COLUMN timezone VARCHAR(64) NOT NULL DEFAULT ''",
-	)
-}
-
-// addExternalIdentity gives directory-backed accounts a stable identifier.
-//
-// The synchronisation used to match on the mail address, which meant a renamed
-// mailbox looked like one person leaving and another arriving - and the
-// departure would have deleted their recorded hours.
-//
-// Existing rows keep an empty identifier and are matched by mail address until
-// their next sign-in fills it in, so an upgrade loses nothing.
-func addExternalIdentity(d migration.Datasource, dialect string) error {
-	return execAll(d,
-		"ALTER TABLE users ADD COLUMN external_id VARCHAR(128) NOT NULL DEFAULT ''",
-		// Not UNIQUE: every local account carries the empty string, and most
-		// engines would count those as duplicates.
-		"CREATE INDEX idx_users_external_id ON users (external_id)",
-	)
-}
-
-// addUserTourSeen remembers who has already been shown the guided tour.
-//
-// Existing accounts default to false and are therefore offered the tour once,
-// which is the right outcome for an upgrade: they have not seen it either.
-func addUserTourSeen(d migration.Datasource, _ string) error {
-	return execAll(d,
-		"ALTER TABLE users ADD COLUMN tour_seen BOOLEAN NOT NULL DEFAULT FALSE",
-	)
-}
-
-// createAPITokens adds the personal tokens used for API access.
-//
-// A token stores only a hash, plus a short readable prefix so its owner can
-// tell their tokens apart in a list without the secret being present.
-func createAPITokens(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE api_tokens (
+// The endpoint is unique, because a browser's push channel is one subscription
+// and is what one is replaced and forgotten by. It is bounded at 700 so that
+// MySQL can index it in four-byte characters, which a push service's address -
+// some two hundred and fifty characters - comes nowhere near. Not unique per
+// person: somebody with two browsers has two.
+func createPushSubscriptions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE push_subscriptions (
 		%s,
 		user_id %s NOT NULL REFERENCES users(id),
-		name VARCHAR(120) NOT NULL,
-		token_hash VARCHAR(64) NOT NULL UNIQUE,
-		prefix VARCHAR(32) NOT NULL,
-		created_at %s NOT NULL,
-		expires_at %s,
-		last_used_at %s
-	)`, primaryKey(dialect), foreignKeyID(dialect),
-		timestamp(dialect), timestamp(dialect), timestamp(dialect)),
-		"CREATE INDEX idx_api_tokens_user ON api_tokens (user_id)")
+		endpoint VARCHAR(700) NOT NULL UNIQUE,
+		p256dh VARCHAR(100) NOT NULL,
+		auth VARCHAR(50) NOT NULL,
+		origin VARCHAR(255) NOT NULL,
+		created_at %s NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
 }
 
-// addPrivateProjects lets every user keep personal categories.
-//
-// A project with an owner is private to that user; NULL keeps the existing
-// shared projects exactly as they were, so nothing has to be migrated.
-func addPrivateProjects(d migration.Datasource, dialect string) error {
-	err := execAll(d,
-		fmt.Sprintf("ALTER TABLE projects ADD COLUMN owner_id %s REFERENCES users(id)",
-			foreignKeyID(dialect)),
-		"CREATE INDEX idx_projects_owner ON projects (owner_id)",
-	)
-	if err != nil {
-		return err
-	}
-
-	// Grant the new permission to every existing role, so upgrading an
-	// installation does not silently take the feature away from its users.
-	//
-	// A literal, because the constant is gone: projects:write:own and projects:write
-	// collapsed into one when every project became somebody's own. A finished
-	// migration says what it did at the time, and must not be tied to a definition
-	// that is allowed to change under it.
-	return grantToAllRoles(d, dialect, "projects:write:own")
-}
-
-// grantToAllRoles adds a permission to every role that does not have it yet.
-//
-// Per role in Go, although a single INSERT ... SELECT guarded by NOT EXISTS
-// works on all three engines - grantToAllRolesHolding is one, and runs in every
-// integration leg - because this migration has run everywhere as it is. Skipping
-// existing rows matters: a freshly seeded admin role already holds every
-// permission, and a duplicate insert would abort the migration.
-func grantToAllRoles(d migration.Datasource, dialect, permission string) error {
-	rows, err := d.SQL.Query("SELECT id FROM roles")
-	if err != nil {
-		return fmt.Errorf("reading roles: %w", err)
-	}
-
-	var roleIDs []int64
-
-	for rows.Next() {
-		var id int64
-		if scanErr := rows.Scan(&id); scanErr != nil {
-			_ = rows.Close()
-
-			return fmt.Errorf("reading roles: %w", scanErr)
-		}
-
-		roleIDs = append(roleIDs, id)
-	}
-
-	err = rows.Err()
-	_ = rows.Close()
-
-	if err != nil {
-		return fmt.Errorf("reading roles: %w", err)
-	}
-
-	countQuery := sqldb.Rebind(dialect,
-		"SELECT COUNT(*) FROM role_permissions WHERE role_id = ? AND permission = ?")
-	insertQuery := sqldb.Rebind(dialect,
-		"INSERT INTO role_permissions (role_id, permission) VALUES (?, ?)")
-
-	for _, roleID := range roleIDs {
-		var existing int
-
-		if err := d.SQL.QueryRow(countQuery, roleID, permission).Scan(&existing); err != nil {
-			return fmt.Errorf("checking %q on role %d: %w", permission, roleID, err)
-		}
-
-		if existing > 0 {
-			continue
-		}
-
-		if _, err := d.SQL.Exec(insertQuery, roleID, permission); err != nil {
-			return fmt.Errorf("granting %q to role %d: %w", permission, roleID, err)
-		}
-	}
-
-	return nil
-}
-
-// widenTOTPSecret makes room for an encrypted second factor.
-//
-// The column was VARCHAR(64), which fits the 32 characters a secret actually is
-// with room to spare. Encrypted it is 87: a nonce, the ciphertext, an
-// authentication tag, base64, and a marker saying which it is.
-//
-// SQLite does not enforce a column width and the servers do, so this was a change
-// that worked everywhere it was tried and failed only where it mattered -
-// "pq: value too long for type character varying(64)" on the first enrolment
-// after turning encryption on. It is the exact shape field_limit.go warns about,
-// and it was caught by the integration suite's PostgreSQL and MySQL legs.
-//
-// 255 rather than 87: it matches the other bounded columns here, and a limit
-// chosen to fit today's ciphertext exactly is a limit that breaks on the next
-// change to any part of it.
-func widenTOTPSecret(d migration.Datasource, dialect string) error {
-	switch dialect {
-	case sqldb.DialectPostgres:
-		return execAll(d, "ALTER TABLE users ALTER COLUMN totp_secret TYPE VARCHAR(255)")
-	case sqldb.DialectMySQL:
-		return execAll(d,
-			"ALTER TABLE users MODIFY totp_secret VARCHAR(255) NOT NULL DEFAULT ''")
-	default:
-		// SQLite stores what it is given whatever the declared type says, so the
-		// column already holds this. Nothing to do, and rebuilding the users table
-		// to change a width it never enforced would be all risk and no change.
-		return nil
-	}
-}
-
-// makeProjectOptional lets a time entry be booked without a project, so hours
-// can be recorded first and categorised later (or not at all).
-//
-// SQLite cannot drop a NOT NULL constraint in place, so there the table is
-// rebuilt; the other engines alter the column directly.
-func makeProjectOptional(d migration.Datasource, dialect string) error {
-	switch dialect {
-	case sqldb.DialectPostgres:
-		return execAll(d, "ALTER TABLE timesheets ALTER COLUMN project_id DROP NOT NULL")
-	case sqldb.DialectMySQL:
-		return execAll(d, fmt.Sprintf("ALTER TABLE timesheets MODIFY project_id %s NULL",
-			foreignKeyID(dialect)))
-	default: // sqlite
-		return execAll(d,
-			fmt.Sprintf(`CREATE TABLE timesheets_new (
-				%s,
-				user_id %s NOT NULL REFERENCES users(id),
-				project_id %s REFERENCES projects(id),
-				date %s NOT NULL,
-				duration_hours %s NOT NULL,
-				description TEXT,
-				status VARCHAR(32) NOT NULL
-			)`, primaryKey(dialect), foreignKeyID(dialect), foreignKeyID(dialect),
-				timestamp(dialect), float(dialect)),
-
-			"INSERT INTO timesheets_new (id, user_id, project_id, date, duration_hours, description, status) "+
-				"SELECT id, user_id, project_id, date, duration_hours, description, status FROM timesheets",
-
-			// Dropping the table takes its indexes with it, so they are
-			// recreated against the replacement below.
-			"DROP TABLE timesheets",
-			"ALTER TABLE timesheets_new RENAME TO timesheets",
-			"CREATE INDEX idx_timesheets_user_date ON timesheets (user_id, date)",
-			"CREATE INDEX idx_timesheets_project ON timesheets (project_id)",
-		)
-	}
-}
-
-// createSettings adds the key/value table behind the administration screen:
-// branding, and the LDAP connection.
+// createSettings adds the key/value table behind the administration screen.
 //
 // The database connection itself is deliberately *not* stored here - it would
 // live in the very database it configures - and goes to a file instead.
+//
+// The value is the long kind of text. An uploaded logo is kept here whole, as a
+// data URI of a few hundred kilobytes, and MySQL's TEXT ends at 64 of them.
 func createSettings(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE settings (
+	return exec(d, fmt.Sprintf(`CREATE TABLE settings (
 		key_name VARCHAR(64) PRIMARY KEY,
-		value TEXT NOT NULL,
+		value %s NOT NULL,
 		updated_at %s NOT NULL
-	)`, timestamp(dialect)))
+	)`, longText(dialect), timestamp(dialect)))
 }
 
-// addSessionsAndPreferences introduces real sign-in sessions, per-user
-// two-factor authentication and the user's interface language.
-func addSessionsAndPreferences(d migration.Datasource, dialect string) error {
-	err := execAll(d,
-		// The token hash is the primary key: lookups happen on every request,
-		// and there is nothing else worth indexing.
-		fmt.Sprintf(`CREATE TABLE sessions (
-			token_hash VARCHAR(64) PRIMARY KEY,
-			user_id %s NOT NULL REFERENCES users(id),
-			created_at %s NOT NULL,
-			expires_at %s NOT NULL
-		)`, foreignKeyID(dialect), timestamp(dialect), timestamp(dialect)),
-
-		"CREATE INDEX idx_sessions_user ON sessions (user_id)",
-		"CREATE INDEX idx_sessions_expiry ON sessions (expires_at)",
-
-		// The secret stays empty until the user completes enrolment, so a
-		// half-finished setup never locks anyone out.
-		"ALTER TABLE users ADD COLUMN totp_secret VARCHAR(64) NOT NULL DEFAULT ''",
-		fmt.Sprintf("ALTER TABLE users ADD COLUMN totp_enabled %s NOT NULL DEFAULT %s",
-			boolean(dialect), falseLiteral(dialect)),
-		"ALTER TABLE users ADD COLUMN language VARCHAR(8) NOT NULL DEFAULT ''",
-
-		// Set by LDAP-provisioned accounts, which have no local password.
-		fmt.Sprintf("ALTER TABLE users ADD COLUMN is_external %s NOT NULL DEFAULT %s",
-			boolean(dialect), falseLiteral(dialect)),
-	)
-	if err != nil {
-		return err
-	}
-
-	// Only the built-in administrator may read everyone's aggregate reports,
-	// so the permission is withdrawn from every other role.
-	return execAll(d, fmt.Sprintf(
-		"DELETE FROM role_permissions WHERE permission = '%s' "+
-			"AND role_id <> (SELECT id FROM roles WHERE name = '%s')",
-		"reports:read", model.RoleAdmin))
-}
-
-// addRoleBasedAccess introduces roles, credentials and per-user working times.
+// createAdminEvents keeps who changed how the installation is run, and when:
+// accounts, roles, settings, queues, a restart.
 //
-// Roles move from a free-text column on users into their own table so they can
-// be administered at run time. Any role names already present are preserved,
-// so an existing installation keeps its assignments.
-func addRoleBasedAccess(d migration.Datasource, dialect string) error {
-	err := execAll(d,
-		fmt.Sprintf(`CREATE TABLE roles (
-			%s,
-			name VARCHAR(64) NOT NULL UNIQUE,
-			description VARCHAR(255) NOT NULL DEFAULT '',
-			is_system %s NOT NULL DEFAULT %s
-		)`, primaryKey(dialect), boolean(dialect), falseLiteral(dialect)),
-
-		fmt.Sprintf(`CREATE TABLE role_permissions (
-			role_id %s NOT NULL REFERENCES roles(id),
-			permission VARCHAR(64) NOT NULL,
-			PRIMARY KEY (role_id, permission)
-		)`, foreignKeyID(dialect)),
-
-		// Nullable on purpose: the column is filled in below from the existing
-		// role names, and only then would NOT NULL be satisfiable.
-		fmt.Sprintf("ALTER TABLE users ADD COLUMN role_id %s", foreignKeyID(dialect)),
-		"ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''",
-		fmt.Sprintf("ALTER TABLE users ADD COLUMN must_change_password %s NOT NULL DEFAULT %s",
-			boolean(dialect), falseLiteral(dialect)),
-		fmt.Sprintf("ALTER TABLE users ADD COLUMN is_system %s NOT NULL DEFAULT %s",
-			boolean(dialect), falseLiteral(dialect)),
-		fmt.Sprintf("ALTER TABLE users ADD COLUMN daily_target_hours %s NOT NULL DEFAULT 0", float(dialect)),
-		fmt.Sprintf("ALTER TABLE users ADD COLUMN max_daily_hours %s NOT NULL DEFAULT 0", float(dialect)),
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := seedRoles(d, dialect); err != nil {
-		return err
-	}
-
-	// Carry existing users over to the new roles, then retire the old column.
-	// Anyone whose role name no longer exists lands on the everyday role, the least
-	// privileged one, rather than losing access entirely.
-	//
-	// The constant rather than a literal, unusually for a migration this old: this one
-	// seeds the roles itself, a few lines up and from the model, so the name it should
-	// fall back to is whatever the model calls that role today.
-	return execAll(d,
-		"UPDATE users SET role_id = (SELECT id FROM roles WHERE roles.name = users.role)",
-		fmt.Sprintf("UPDATE users SET role_id = (SELECT id FROM roles WHERE name = '%s') WHERE role_id IS NULL",
-			model.RoleUser),
-		"ALTER TABLE users DROP COLUMN role",
-	)
+// The actor and the target are ids without a foreign key, on purpose. A key would
+// put the table on the erasure's list, and erasing an account would then erase the
+// record of what that account did to everybody else's - the one thing a log of
+// administration exists to keep. An id is never handed out twice, so once its
+// account is gone it names nobody, and the names are read when the log is shown.
+func createAdminEvents(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE admin_events (
+		%[1]s,
+		at %[2]s NOT NULL,
+		actor_id %[3]s NOT NULL,
+		action VARCHAR(64) NOT NULL,
+		target_id %[3]s,
+		detail VARCHAR(255) NOT NULL DEFAULT ''
+	)`, primaryKey(dialect), timestamp(dialect), foreignKeyID(dialect)))
 }
 
-// theOrdinaryRoleName is the name the everyday role has in this database, and
-// theCombinedRoleName the same for the one that works and administers.
+// createDirectoryRuns keeps a row for every directory run that changed
+// something: when, whether somebody confirmed it against a preview, how many
+// accounts it removed or added, and how many tickets were left without an owner
+// by the removals.
 //
-// The everyday role was called employee and is called user; the combined one was
-// employee-admin and is user-admin. The migration that renames them is at the end of
-// this chain, so a migration in the middle of it can be looking at either name.
+// Nothing about whom, and that is the point rather than an omission. The people
+// a run removed are the people the erasure exists to erase, so a table naming
+// them would keep exactly what the deletion was for; the log names them, for as
+// long as the log lasts.
 //
-// Which one it sees depends on the installation, not on the position in the chain. The
-// migration that first moved roles into the database builds them from the model, so a
-// fresh installation is seeded with today's names from the very beginning; one that has
-// been running since before the rename carries the old ones until the rename runs.
+// No key to users: the rows outlive the accounts they counted.
+func createDirectoryRuns(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE directory_runs (
+		%s,
+		ran_at %s NOT NULL,
+		confirmed %s NOT NULL,
+		deleted INT NOT NULL,
+		tickets_released INT NOT NULL,
+		created INT NOT NULL
+	)`, primaryKey(dialect), timestamp(dialect), boolean(dialect)))
+}
+
+// createTicketStates keeps the states a ticket can be in. A state is a row
+// because an installation names its own - waiting for the customer is a pending
+// state as much as the shipped one is - and what a state does is its type, which
+// is code (model.StateType): a type the code did not know would be a word with
+// no behaviour behind it.
 //
-// Matching both is what keeps a migration in the middle honest. The constant alone
-// would silently do nothing on every existing installation, and a literal alone would
-// silently do nothing on every fresh one - and a migration that does nothing looks
-// exactly like a migration that worked.
+// valid says whether the state is offered for a ticket from now on; one that is
+// not stays on the tickets already in it. is_system marks a state the code moves
+// tickets into by itself, which is neither renamed, retyped, made invalid nor
+// deleted.
+func createTicketStates(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_states (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		state_type VARCHAR(32) NOT NULL,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		is_system %[2]s NOT NULL DEFAULT %[4]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), falseLiteral(dialect)))
+}
+
+// seedTicketStates gives a new installation the states KIX18 ships, named by
+// identifiers the interface translates, and with no description: one stored in
+// English would be shown in English to every reader, and the type says what each
+// is for. Four are the code's own - a ticket
+// starts new, an answer from its customer opens it again, a pending close ends
+// closed, a merge leaves it merged - and are marked is_system; the other three
+// are an installation's to rename, retire or delete.
 //
-// An empty answer means neither is there, which is a repair rather than an upgrade: the
-// caller seeds the role under today's name.
-func theOrdinaryRoleName(d migration.Datasource, dialect string) (string, error) {
-	return firstRoleThatExists(d, dialect, "employee", model.RoleUser)
-}
+// Written out rather than taken from the model: a finished migration says what
+// it did, and must not change with a constant that is allowed to.
+func seedTicketStates(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect,
+		"INSERT INTO ticket_states (name, state_type, is_system) VALUES (?, ?, ?)")
 
-func theCombinedRoleName(d migration.Datasource, dialect string) (string, error) {
-	return firstRoleThatExists(d, dialect, "employee-admin", model.RoleUserAdmin)
-}
-
-func firstRoleThatExists(d migration.Datasource, dialect string, names ...string) (string, error) {
-	count := sqldb.Rebind(dialect, "SELECT COUNT(*) FROM roles WHERE name = ?")
-
-	for _, name := range names {
-		var found int
-
-		if err := d.SQL.QueryRow(count, name).Scan(&found); err != nil {
-			return "", fmt.Errorf("looking for the %q role: %w", name, err)
-		}
-
-		if found > 0 {
-			return name, nil
-		}
-	}
-
-	return "", nil
-}
-
-// shippedRole is one of the roles a fresh installation gets, by name.
-func shippedRole(name string) model.Role {
-	for _, role := range model.DefaultRoles() {
-		if role.Name == name {
-			return role
-		}
-	}
-
-	// Unreachable while name is one of the defaults, and a compile-time constant is
-	// not enough to promise that at run time.
-	return model.Role{Name: name, Description: "Keeps their own time"}
-}
-
-// seedRoles inserts the default roles and their permissions.
-func seedRoles(d migration.Datasource, dialect string) error {
-	for _, role := range model.DefaultRoles() {
-		if err := seedRole(d, dialect, role); err != nil {
-			return err
+	for _, state := range []struct {
+		name, kind string
+		system     bool
+	}{
+		{"new", "new", true},
+		{"open", "open", true},
+		{"pending-reminder", "pending-reminder", false},
+		{"pending-auto-close", "pending-auto", false},
+		{"closed", "closed", true},
+		{"removed", "removed", false},
+		{"merged", "merged", true},
+	} {
+		if _, err := d.SQL.Exec(insert, state.name, state.kind, state.system); err != nil {
+			return fmt.Errorf("seeding the ticket state %q: %w", state.name, err)
 		}
 	}
 
 	return nil
 }
 
-// seedRole inserts one role and its permissions.
-//
-// Its own function because two places need it: first start, which writes every
-// default role, and the repair above, which writes exactly one back.
-func seedRole(d migration.Datasource, dialect string, role model.Role) error {
-	insertRole := sqldb.Rebind(dialect,
-		"INSERT INTO roles (name, description, is_system) VALUES (?, ?, ?)")
+// createTicketPriorities keeps how urgent a ticket can be. level orders them,
+// the most urgent first, because a name says nothing about where it belongs:
+// very-high sorts after normal by its letters. valid and is_system mean what
+// they mean for a state.
+func createTicketPriorities(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_priorities (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		level INT NOT NULL,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		is_system %[2]s NOT NULL DEFAULT %[4]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), falseLiteral(dialect)))
+}
 
-	if _, err := d.SQL.Exec(insertRole, role.Name, role.Description, role.IsSystem); err != nil {
-		return fmt.Errorf("seeding role %q: %w", role.Name, err)
+// seedTicketPriorities gives a new installation KIX18's five priorities. normal
+// is what a ticket starts with when nobody says otherwise, so it is the code's
+// own and marked is_system; the others are the installation's.
+func seedTicketPriorities(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect,
+		"INSERT INTO ticket_priorities (name, level, is_system) VALUES (?, ?, ?)")
+
+	for level, name := range []string{"very-high", "high", "normal", "low", "very-low"} {
+		if _, err := d.SQL.Exec(insert, name, level+1, name == "normal"); err != nil {
+			return fmt.Errorf("seeding the ticket priority %q: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
+// createServiceLevels keeps what a ticket is owed: how long until the first
+// answer, how long between answers, how long until it is solved - each in
+// minutes of the installation's service hours, and zero where that promise is
+// not made.
+//
+// Before the queues, which name the one their tickets start with.
+func createServiceLevels(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE service_levels (
+		%s,
+		name VARCHAR(255) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		first_response_minutes INT NOT NULL DEFAULT 0,
+		update_minutes INT NOT NULL DEFAULT 0,
+		solution_minutes INT NOT NULL DEFAULT 0
+	)`, primaryKey(dialect)))
+}
+
+// createQueues keeps where tickets are sorted to, and what a queue decides for
+// the tickets in it: the address its answers are sent from, the signature under
+// them, what a new ticket's sender is told, the service level a ticket starts
+// with, what an answer to a closed ticket does, and after how many minutes
+// without its owner doing anything a ticket is free for somebody else again.
+//
+// parent_id puts a queue under another, as KIX18 nests its teams; the tree is
+// for finding a queue, and a queue's access is its own rather than its
+// parent's. valid says whether a ticket may still be moved into it.
+//
+// The two texts have no default because MySQL allows none on a text column;
+// they are written with every row, empty where there is nothing to say.
+func createQueues(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE queues (
+		%[1]s,
+		name VARCHAR(255) NOT NULL UNIQUE,
+		parent_id %[3]s REFERENCES queues(id),
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		email VARCHAR(255) NOT NULL DEFAULT '',
+		signature %[2]s NOT NULL,
+		auto_reply %[2]s NOT NULL,
+		service_level_id %[3]s REFERENCES service_levels(id),
+		follow_up VARCHAR(16) NOT NULL,
+		unlock_minutes INT NOT NULL DEFAULT 0,
+		portal %[4]s NOT NULL DEFAULT %[6]s,
+		valid %[4]s NOT NULL DEFAULT %[5]s
+	)`, primaryKey(dialect), longText(dialect), foreignKeyID(dialect), boolean(dialect), trueLiteral(dialect),
+		falseLiteral(dialect)))
+}
+
+// createQueueRoles keeps which role reaches which queue, and how far: to read
+// its tickets, or to work in it. A role with no row for a queue does not reach
+// it at all - the queue's tickets are not there for it.
+func createQueueRoles(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE queue_roles (
+		queue_id %[1]s NOT NULL REFERENCES queues(id),
+		role_id %[1]s NOT NULL REFERENCES roles(id),
+		access VARCHAR(8) NOT NULL,
+		PRIMARY KEY (queue_id, role_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// createTicketTypes keeps the kinds of ticket an installation tells apart. Rows
+// rather than constants, because nothing here behaves differently by type: a
+// type is a word to filter and count by, and which words is the installation's
+// to say. valid and is_system mean what they mean for a state.
+func createTicketTypes(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_types (
+		%[1]s,
+		name VARCHAR(120) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		is_system %[2]s NOT NULL DEFAULT %[4]s
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), falseLiteral(dialect)))
+}
+
+// seedTheFirstQueue gives a new installation one queue its agents can work in,
+// so that the first ticket has somewhere to go before anybody has set anything
+// up. An answer to a closed ticket opens it again, which is what somebody
+// answering expects, and customers open their tickets in it from the portal.
+//
+// The names are written out rather than taken from the model: a finished
+// migration says what it did, and must not change with a constant that is
+// allowed to.
+func seedTheFirstQueue(d migration.Datasource, dialect string) error {
+	insertQueue := sqldb.Rebind(dialect,
+		"INSERT INTO queues (name, description, signature, auto_reply, follow_up, portal) VALUES (?, ?, ?, ?, ?, ?)")
+
+	if _, err := d.SQL.Exec(insertQueue, "Service Desk",
+		"Where tickets arrive until an installation sorts them further", "", "", "reopen", true); err != nil {
+		return fmt.Errorf("seeding the first queue: %w", err)
 	}
 
 	grant := sqldb.Rebind(dialect,
-		"INSERT INTO role_permissions (role_id, permission) SELECT id, ? FROM roles WHERE name = ?")
+		"INSERT INTO queue_roles (queue_id, role_id, access) "+
+			"SELECT q.id, r.id, ? FROM queues q, roles r WHERE q.name = ? AND r.name = ?")
 
-	for _, permission := range role.Permissions {
-		if _, err := d.SQL.Exec(grant, permission, role.Name); err != nil {
-			return fmt.Errorf("granting %q to %q: %w", permission, role.Name, err)
+	if _, err := d.SQL.Exec(grant, "write", "Service Desk", "agent"); err != nil {
+		return fmt.Errorf("letting agents work in the first queue: %w", err)
+	}
+
+	return nil
+}
+
+// seedTicketTypes gives a new installation KIX18's three types. unclassified is
+// what a ticket is when nobody has said what it is, so it is the code's own and
+// marked is_system; the other two are the installation's to rename, retire or
+// delete.
+func seedTicketTypes(d migration.Datasource, dialect string) error {
+	insert := sqldb.Rebind(dialect, "INSERT INTO ticket_types (name, is_system) VALUES (?, ?)")
+
+	for _, name := range []string{"unclassified", "incident", "service-request"} {
+		if _, err := d.SQL.Exec(insert, name, name == "unclassified"); err != nil {
+			return fmt.Errorf("seeding the ticket type %q: %w", name, err)
 		}
 	}
 
 	return nil
 }
 
-func execAll(d migration.Datasource, statements ...string) error {
-	for _, stmt := range statements {
-		if _, err := d.SQL.Exec(stmt); err != nil {
-			return fmt.Errorf("migration statement failed (%s): %w", stmt, err)
+// createUserQueues keeps the queues each agent asked to be told about: a new
+// ticket in one of them is news for that agent, and one in a queue they merely
+// reach is not. Both ends are keys, so the table is on the erasure's list.
+func createUserQueues(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE user_queues (
+		user_id %[1]s NOT NULL REFERENCES users(id),
+		queue_id %[1]s NOT NULL REFERENCES queues(id),
+		PRIMARY KEY (user_id, queue_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// createOrganisations keeps the companies tickets come from. The name is not
+// unique: two customers may well be called the same, and the number an
+// installation gives each - its customer number, as KIX18 has one - is what
+// tells them apart. That number is unique and may be absent, which is why it is
+// nullable rather than empty: every database counts two empty strings as the
+// same value where it counts two NULLs as different.
+//
+// valid says whether the organisation is offered for a ticket or a contact from
+// now on; one that is not keeps the tickets and contacts it has.
+func createOrganisations(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE organisations (
+		%[1]s,
+		name VARCHAR(255) NOT NULL,
+		number VARCHAR(64) UNIQUE,
+		address VARCHAR(1000) NOT NULL DEFAULT '',
+		url VARCHAR(255) NOT NULL DEFAULT '',
+		note VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[2]s NOT NULL DEFAULT %[3]s,
+		created_at %[4]s NOT NULL
+	)`, primaryKey(dialect), boolean(dialect), trueLiteral(dialect), timestamp(dialect)))
+}
+
+// createContacts keeps the people tickets come from.
+//
+// The address is unique and may be absent, which is why it is nullable rather
+// than empty: an arriving message finds its sender by it, so no two contacts
+// may share one, and every database counts two empty strings as the same value
+// where it counts two NULLs as different.
+//
+// user_id is the account a contact signs in to the portal with, absent for the
+// many who never do. Unique, because the portal shows an account its contact's
+// tickets, and an account that were two contacts would have no answer to whose.
+//
+// valid means what it means for an organisation.
+func createContacts(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE contacts (
+		%[1]s,
+		organisation_id %[2]s REFERENCES organisations(id),
+		name VARCHAR(255) NOT NULL,
+		email VARCHAR(255) UNIQUE,
+		phone VARCHAR(64) NOT NULL DEFAULT '',
+		note VARCHAR(2000) NOT NULL DEFAULT '',
+		user_id %[2]s UNIQUE REFERENCES users(id),
+		sees_organisation %[3]s NOT NULL DEFAULT %[4]s,
+		valid %[3]s NOT NULL DEFAULT %[6]s,
+		created_at %[5]s NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), boolean(dialect), falseLiteral(dialect), timestamp(dialect),
+		trueLiteral(dialect)))
+}
+
+// createTickets keeps the tickets.
+//
+// The number is unique and absent for the moment between a ticket's row being
+// written and its number being worked out from the id that row was given - both
+// inside one transaction, so nobody ever reads a ticket without one.
+//
+// owner_id and responsible_id are keys to accounts and still not erased with
+// one: a ticket outlives the agent who owned it, and the erasure takes the
+// agent's name off it rather than the ticket away. created_by is an id without a
+// key for the reason the administration log's are - it says who opened a ticket
+// for as long as that account exists, and names nobody afterwards.
+//
+// merged_into is the ticket this one was folded into, without a key: a ticket
+// pointing at itself or at one deleted since is a question for the code that
+// reads it, not a reason to refuse a deletion.
+func createTickets(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE tickets (
+		%[1]s,
+		number VARCHAR(32) UNIQUE,
+		title VARCHAR(255) NOT NULL,
+		queue_id %[2]s NOT NULL REFERENCES queues(id),
+		state_id %[2]s NOT NULL REFERENCES ticket_states(id),
+		priority_id %[2]s NOT NULL REFERENCES ticket_priorities(id),
+		type_id %[2]s NOT NULL REFERENCES ticket_types(id),
+		owner_id %[2]s REFERENCES users(id),
+		responsible_id %[2]s REFERENCES users(id),
+		locked %[3]s NOT NULL DEFAULT %[4]s,
+		locked_at %[5]s,
+		contact_id %[2]s REFERENCES contacts(id),
+		organisation_id %[2]s REFERENCES organisations(id),
+		service_level_id %[2]s REFERENCES service_levels(id),
+		channel VARCHAR(16) NOT NULL,
+		created_by %[2]s,
+		created_at %[5]s NOT NULL,
+		updated_at %[5]s NOT NULL,
+		closed_at %[5]s,
+		pending_until %[5]s,
+		first_response_due %[5]s,
+		first_response_at %[5]s,
+		update_due %[5]s,
+		solution_due %[5]s,
+		merged_into %[2]s
+	)`, primaryKey(dialect), foreignKeyID(dialect), boolean(dialect), falseLiteral(dialect), timestamp(dialect)))
+}
+
+// createArticles keeps what is written in a ticket: an answer, a note, a call,
+// a message that arrived.
+//
+// author_id and contact_id are ids without a key, like a ticket's created_by: an
+// article outlives whoever wrote it, and is then signed by nobody.
+//
+// message_id and in_reply_to are a message's own, kept so that an answer
+// arriving weeks later finds the ticket it answers, and so that the same
+// message fetched twice is not written twice.
+func createArticles(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE articles (
+		%[1]s,
+		ticket_id %[2]s NOT NULL REFERENCES tickets(id),
+		sender VARCHAR(16) NOT NULL,
+		channel VARCHAR(16) NOT NULL,
+		customer_visible %[3]s NOT NULL,
+		subject VARCHAR(255) NOT NULL DEFAULT '',
+		body %[4]s NOT NULL,
+		from_address VARCHAR(500) NOT NULL DEFAULT '',
+		to_addresses VARCHAR(2000) NOT NULL DEFAULT '',
+		cc_addresses VARCHAR(2000) NOT NULL DEFAULT '',
+		message_id VARCHAR(255) NOT NULL DEFAULT '',
+		in_reply_to VARCHAR(255) NOT NULL DEFAULT '',
+		author_id %[2]s,
+		contact_id %[2]s,
+		created_at %[5]s NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), boolean(dialect), longText(dialect), timestamp(dialect)))
+}
+
+// createAttachments keeps the files that came with an article, in the database
+// rather than beside it: the installation is one binary and one database, and a
+// directory of uploads would be a third thing to back up, move and lose.
+func createAttachments(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE attachments (
+		%s,
+		article_id %s NOT NULL REFERENCES articles(id),
+		filename VARCHAR(255) NOT NULL,
+		content_type VARCHAR(255) NOT NULL,
+		size INT NOT NULL,
+		content %s NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), largeBlob(dialect)))
+}
+
+// createTimeAccounting keeps the time worked on tickets, a line each time
+// somebody notes some, with the article it was noted with where there was one -
+// so a ticket's total is a sum rather than a figure anybody keeps and could get
+// wrong.
+//
+// created_by is an id without a key, like an article's author: the time stays
+// the organisation's record after the account that noted it is gone.
+func createTimeAccounting(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE time_accounting (
+		%[1]s,
+		ticket_id %[2]s NOT NULL REFERENCES tickets(id),
+		article_id %[2]s REFERENCES articles(id),
+		minutes INT NOT NULL,
+		created_by %[2]s,
+		created_at %[3]s NOT NULL
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
+}
+
+// createTicketHistory keeps what happened to a ticket, a line at a time: who
+// did it, what changed, from what to what. The actor is an id without a key,
+// for the reason an article's author is.
+func createTicketHistory(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_history (
+		%[1]s,
+		ticket_id %[2]s NOT NULL REFERENCES tickets(id),
+		at %[3]s NOT NULL,
+		actor_kind VARCHAR(16) NOT NULL,
+		actor_id %[2]s,
+		event VARCHAR(32) NOT NULL,
+		old_value VARCHAR(255) NOT NULL DEFAULT '',
+		new_value VARCHAR(255) NOT NULL DEFAULT ''
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
+}
+
+// createLinks keeps the links between records, as KIX18's link_relation keeps
+// them: each end by its kind and id, so that a ticket, a configuration item and
+// the kinds still to come are joined through one table and shown by one part of
+// the screen. No key can follow an end named that way, so a record's repository
+// deletes its links in the transaction that deletes the record. A link is found
+// from its source through the unique index and from its target through an
+// index of its own. created_by is an id without a key, read as a name when
+// shown, as an article's author is.
+func createLinks(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE links (
+		%[1]s,
+		source_object VARCHAR(20) NOT NULL,
+		source_id INT NOT NULL,
+		target_object VARCHAR(20) NOT NULL,
+		target_id INT NOT NULL,
+		type VARCHAR(40) NOT NULL,
+		created_at %[2]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0,
+		UNIQUE (source_object, source_id, target_object, target_id)
+	)`, primaryKey(dialect), timestamp(dialect)))
+}
+
+// createTicketWatchers keeps who asked to be told about a ticket that is not
+// theirs. Erased with the account: a watch is the person's own choice, and
+// means nothing without them.
+func createTicketWatchers(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_watchers (
+		ticket_id %[1]s NOT NULL REFERENCES tickets(id),
+		user_id %[1]s NOT NULL REFERENCES users(id),
+		PRIMARY KEY (ticket_id, user_id)
+	)`, foreignKeyID(dialect)))
+}
+
+// createNotifications keeps what each agent was told about a ticket, in the
+// words the notification had for them then, and whether they have read it.
+// definition_id names the notification that told them and has no key: what was
+// told stays told when the notification is changed or deleted. sent says whether
+// it has left for the browsers and the address that asked for it, so that the
+// job which sends them sends each once.
+func createNotifications(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE notifications (
+		%[1]s,
+		user_id %[2]s NOT NULL REFERENCES users(id),
+		ticket_id %[2]s NOT NULL REFERENCES tickets(id),
+		definition_id INT NOT NULL,
+		subject VARCHAR(255) NOT NULL,
+		body %[6]s NOT NULL,
+		created_at %[3]s NOT NULL,
+		read_at %[3]s,
+		sent %[4]s NOT NULL DEFAULT %[5]s
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), boolean(dialect), falseLiteral(dialect),
+		longText(dialect)))
+}
+
+// createResponseTemplates keeps the answers written once and sent often, as
+// KIX18 keeps its text modules: a subject and a text, offered in the queue named
+// or, without one, in every queue, while valid.
+func createResponseTemplates(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE response_templates (
+		%[1]s,
+		name VARCHAR(255) NOT NULL UNIQUE,
+		subject VARCHAR(255) NOT NULL DEFAULT '',
+		body %[2]s NOT NULL,
+		queue_id %[3]s REFERENCES queues(id),
+		valid %[4]s NOT NULL DEFAULT %[5]s
+	)`, primaryKey(dialect), longText(dialect), foreignKeyID(dialect), boolean(dialect), trueLiteral(dialect)))
+}
+
+// createMailAccounts keeps the mailboxes tickets arrive through: where each is,
+// how it is signed in to, and the queue what arrives in it goes to. The
+// password is stored encrypted where a key is configured, which is why its
+// column is wider than any password.
+//
+// last_error is what the last fetch failed on, empty after one that worked - a
+// mailbox that stopped being read looks exactly like one nobody writes to,
+// unless something says so.
+func createMailAccounts(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE mail_accounts (
+		%[1]s,
+		name VARCHAR(255) NOT NULL UNIQUE,
+		host VARCHAR(255) NOT NULL,
+		port INT NOT NULL,
+		username VARCHAR(255) NOT NULL,
+		password VARCHAR(1000) NOT NULL DEFAULT '',
+		security VARCHAR(16) NOT NULL,
+		folder VARCHAR(255) NOT NULL,
+		queue_id %[2]s NOT NULL REFERENCES queues(id),
+		active %[3]s NOT NULL DEFAULT %[4]s,
+		last_fetch_at %[5]s,
+		last_error VARCHAR(500) NOT NULL DEFAULT ''
+	)`, primaryKey(dialect), foreignKeyID(dialect), boolean(dialect), trueLiteral(dialect), timestamp(dialect)))
+}
+
+// createFAQCategories keeps the headings the knowledge base is sorted under.
+func createFAQCategories(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE faq_categories (
+		%[1]s,
+		parent_id %[2]s REFERENCES faq_categories(id),
+		name VARCHAR(255) NOT NULL UNIQUE,
+		description VARCHAR(2000) NOT NULL DEFAULT '',
+		valid %[3]s NOT NULL DEFAULT %[4]s
+	)`, primaryKey(dialect), foreignKeyID(dialect), boolean(dialect), trueLiteral(dialect)))
+}
+
+// createFAQArticles keeps the knowledge base: what each article says, and who
+// may read it - the staff alone, customers who are signed in, or anybody.
+// updated_by is an id without a key, like an article's author in a ticket.
+func createFAQArticles(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE faq_articles (
+		%[1]s,
+		category_id %[2]s NOT NULL REFERENCES faq_categories(id),
+		title VARCHAR(255) NOT NULL,
+		body %[3]s NOT NULL,
+		keywords VARCHAR(255) NOT NULL DEFAULT '',
+		visibility VARCHAR(16) NOT NULL,
+		language VARCHAR(8) NOT NULL DEFAULT '',
+		valid %[5]s NOT NULL DEFAULT %[6]s,
+		created_at %[4]s NOT NULL,
+		updated_at %[4]s NOT NULL,
+		updated_by INT
+	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect), timestamp(dialect), boolean(dialect),
+		trueLiteral(dialect)))
+}
+
+// createClassDefinitions keeps the versions of each configuration item class's
+// definition: the attributes an item of the class holds, as JSON, a row a
+// version. A version is never changed, because an item is read under the one
+// it was written with; the pair of class and version is therefore unique.
+//
+// created_by is an id without a key, read as a name when shown, so that the
+// versions an erased account wrote remain - and 0 for the shipped ones.
+func createClassDefinitions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ci_class_definitions (
+		%[1]s,
+		class_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		version INT NOT NULL,
+		attributes %[3]s NOT NULL,
+		created_at %[4]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0,
+		UNIQUE (class_id, version)
+	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect), timestamp(dialect)))
+}
+
+// createConfigItems keeps the configuration items: numbered, of a class, and
+// carrying what their newest version says - its name and its two states - so a
+// listing reads a row an item. The number is written in the transaction that
+// makes the row, as a ticket's is, and is nullable for that moment.
+//
+// version_id names the newest version without a key: a version points at its
+// item, and a key both ways round would make neither insertable first.
+// created_by and changed_by are ids without a key, read as names when shown.
+func createConfigItems(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE config_items (
+		%[1]s,
+		number VARCHAR(40) UNIQUE,
+		class_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		name VARCHAR(255) NOT NULL,
+		deployment_state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		incident_state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		version_id INT NOT NULL DEFAULT 0,
+		version_count INT NOT NULL DEFAULT 0,
+		created_at %[3]s NOT NULL,
+		changed_at %[3]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0,
+		changed_by INT NOT NULL DEFAULT 0
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
+}
+
+// createConfigItemVersions keeps what an item said at each moment, under the
+// definition its class had then; its values as JSON, by the definition's keys.
+// A version is never changed: a change to an item is its next version.
+func createConfigItemVersions(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE config_item_versions (
+		%[1]s,
+		item_id %[2]s NOT NULL REFERENCES config_items(id),
+		definition_id %[2]s NOT NULL REFERENCES ci_class_definitions(id),
+		name VARCHAR(255) NOT NULL,
+		deployment_state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		incident_state_id %[2]s NOT NULL REFERENCES general_catalog(id),
+		data %[3]s NOT NULL,
+		created_at %[4]s NOT NULL,
+		created_by INT NOT NULL DEFAULT 0
+	)`, primaryKey(dialect), foreignKeyID(dialect), longText(dialect), timestamp(dialect)))
+}
+
+// seedAttribute is one attribute of a shipped definition, written with the
+// JSON names the definitions are kept under. A type of the migration's own,
+// so that what was seeded stays what it was whatever the model becomes.
+type seedAttribute struct {
+	Key          string          `json:"key"`
+	Name         string          `json:"name"`
+	Type         string          `json:"type"`
+	CountMin     int             `json:"countMin"`
+	CountMax     int             `json:"countMax"`
+	CountDefault int             `json:"countDefault"`
+	Required     bool            `json:"required,omitempty"`
+	Searchable   bool            `json:"searchable,omitempty"`
+	MaxLength    int             `json:"maxLength,omitempty"`
+	Catalog      string          `json:"catalog,omitempty"`
+	Classes      []string        `json:"classes,omitempty"`
+	Sub          []seedAttribute `json:"sub,omitempty"`
+}
+
+// counted gives an attribute KIX18's counts: at least, at most, and where a new
+// item begins.
+func (a seedAttribute) counted(least, most, begin int) seedAttribute {
+	a.CountMin, a.CountMax, a.CountDefault = least, most, begin
+
+	return a
+}
+
+// required marks a value given as one that may not be empty.
+func (a seedAttribute) required() seedAttribute {
+	a.Required = true
+
+	return a
+}
+
+// with gives an attribute its sub-attributes.
+func (a seedAttribute) with(sub ...seedAttribute) seedAttribute {
+	a.Sub = sub
+
+	return a
+}
+
+// seedSection is a heading over the attributes given, occurring once. Like
+// every shipped attribute below it occurs once in an item unless counted says
+// otherwise, and the others are searchable, as KIX18 marks them, unless quiet
+// is said.
+func seedSection(key, name string, sub ...seedAttribute) seedAttribute {
+	return seedAttribute{Key: key, Name: name, Type: "Section", CountMin: 1, CountMax: 1, CountDefault: 1, Sub: sub}
+}
+
+// seedOf is an attribute of the type given.
+func seedOf(kind, key, name string) seedAttribute {
+	return seedAttribute{Key: key, Name: name, Type: kind, CountMin: 1, CountMax: 1, CountDefault: 1, Searchable: true}
+}
+
+// seedText is a text of up to the length given.
+func seedText(key, name string, length int) seedAttribute {
+	a := seedOf("Text", key, name)
+	a.MaxLength = length
+
+	return a
+}
+
+// seedCatalog picks a value of the general catalog class given.
+func seedCatalog(key, name, class string) seedAttribute {
+	a := seedOf("GeneralCatalog", key, name)
+	a.Catalog = class
+
+	return a
+}
+
+// seedReference points at an item of one of the classes given.
+func seedReference(key, name string, classes ...string) seedAttribute {
+	a := seedOf("CIClassReference", key, name)
+	a.Classes = classes
+
+	return a
+}
+
+// quiet leaves an attribute out of a search for items.
+func quiet(a seedAttribute) seedAttribute {
+	a.Searchable = false
+
+	return a
+}
+
+// seedClassDefinitions gives each shipped class the definition KIX18 ships it
+// with, as version 1 - read from kix-backend's scripts/database/
+// kix-initial_insert.xml. Two things are left out: the Attachment attributes,
+// until an item can hold files, and the patterns KIX18 checks some texts
+// against, which nothing here reads yet. A class an installation adds has no
+// definition until somebody writes one.
+func seedClassDefinitions(d migration.Datasource, dialect string) error {
+	note := seedOf("TextArea", "Note", "Note").counted(0, 1, 0).required()
+	owner := seedSection("SectionOwner", "Owner",
+		seedOf("Organisation", "OwnerOrganisation", "Owner organisation"),
+		seedOf("Contact", "OwnerContact", "Owner contact").counted(0, 25, 1),
+	)
+	warranty := seedSection("SectionWarranty", "Warranty",
+		seedOf("Date", "WarrantyExpirationDate", "Warranty expiration date"),
+		seedOf("Date", "FirstUsageDate", "First usage date").required(),
+	)
+	network := func(interfaceName string, begin int) seedAttribute {
+		return seedSection("SectionNetwork", "Network",
+			seedText("FQDN", "FQDN", 100).counted(1, 8, 1),
+			quiet(seedText("NIC", interfaceName, 100)).counted(0, 10, begin).required().with(
+				seedCatalog("IPoverDHCP", "IP over DHCP", "ITSM::ConfigItem::YesNo").required(),
+				seedText("IPAddress", "IP address", 40).counted(0, 20, 0).required(),
+				seedReference("Network", "Network", "network").counted(0, 1, 0),
+			),
+		)
+	}
+	contacts := seedSection("SectionContacts", "Contacts",
+		seedText("ContactRole", "Contact role", 255).counted(0, 25, 1).required().with(
+			seedOf("Contact", "Contact", "Contact"),
+		),
+	)
+	address := func(countryRequired bool) seedAttribute {
+		country := seedText("Country", "Country", 255).counted(0, 1, 0)
+		if countryRequired {
+			country = country.required()
 		}
+
+		return seedSection("SectionAddress", "Address",
+			seedText("Street", "Street", 255),
+			seedText("Street2", "Street 2", 255).counted(0, 1, 0),
+			seedText("City", "City", 255),
+			seedText("ZIP", "ZIP", 255),
+			seedText("Region", "Region", 255).counted(0, 1, 0),
+			country,
+		)
+	}
+
+	definitions := map[string][]seedAttribute{
+		"computer": {
+			seedSection("SectionGeneral", "General",
+				seedCatalog("Type", "Type", "ITSM::ConfigItem::Computer::Type"),
+				seedText("Vendor", "Vendor", 50),
+				seedText("Model", "Model", 50),
+				seedReference("Location", "Location", "location", "building", "room"),
+				seedOf("TextArea", "Description", "Description").counted(0, 1, 0),
+				note,
+			),
+			owner,
+			network("Network interface", 0),
+			seedSection("SectionHardware", "Hardware",
+				seedText("SerialNumber", "Serial number", 100),
+				quiet(seedText("CPU", "CPU", 100)).counted(0, 16, 1),
+				quiet(seedText("RAM", "RAM", 100)).counted(1, 8, 1),
+				quiet(seedText("HardDisk", "Hard disk", 100)).counted(1, 8, 1).with(
+					quiet(seedText("Capacity", "Capacity", 10)),
+				),
+				// KIX18 writes CountMin twice here, 0 and then 1, beside a default of 0;
+				// read as a hash the 1 wins and the default lies below it, which no
+				// item could begin with. The 0 is what the default says was meant.
+				quiet(seedText("GraphicAdapter", "Graphic adapter", 100)).counted(0, 1, 0),
+				quiet(seedOf("TextArea", "OtherEquipment", "Other equipment")).counted(0, 1, 0).required(),
+			),
+			seedSection("SectionSoftware", "Software",
+				quiet(seedText("OperatingSystem", "Operating system", 100)),
+				seedReference("InstalledSoftware", "Installed software", "software").counted(0, 25, 1),
+			),
+			warranty,
+		},
+		"hardware": {
+			seedSection("SectionGeneral", "General",
+				seedCatalog("Type", "Type", "ITSM::ConfigItem::Hardware::Type"),
+				seedText("Vendor", "Vendor", 50),
+				seedText("Model", "Model", 50),
+				seedReference("Location", "Location", "location", "building", "room"),
+				seedOf("TextArea", "Description", "Description").counted(0, 1, 0),
+				note,
+			),
+			owner,
+			network("Network adapter", 1),
+			seedSection("SectionHardware", "Hardware",
+				seedText("SerialNumber", "Serial number", 100),
+				quiet(seedText("FirmwareVersion", "Firmware version", 100)).counted(0, 1, 1).required(),
+			),
+			warranty,
+		},
+		"location": {
+			seedSection("SectionGeneral", "General",
+				seedText("GLN", "GLN", 13),
+				note,
+			),
+			address(true),
+			contacts,
+		},
+		"building": {
+			seedSection("SectionGeneral", "General",
+				seedReference("ParentLocation", "Location", "location").counted(0, 1, 0).required(),
+				seedText("GLN", "GLN", 13),
+				note,
+			),
+			address(false).counted(0, 1, 0),
+			contacts,
+		},
+		"room": {
+			seedSection("SectionGeneral", "General",
+				seedReference("ParentLocation", "Building", "building").counted(0, 1, 0).required(),
+				seedText("RoomType", "Room type", 50),
+				seedText("Floor", "Floor", 50),
+				seedText("RoomLabel", "Room label", 50),
+				note,
+			),
+			contacts.counted(0, 1, 0),
+		},
+		"network": {
+			seedCatalog("Type", "Type", "ITSM::ConfigItem::Network::Type"),
+			seedOf("TextArea", "Description", "Description"),
+			seedText("NetworkAddress", "Network address", 20).counted(0, 100, 1).required().with(
+				quiet(seedText("SubnetMask", "Subnet mask", 20)).counted(0, 1, 0).required(),
+				quiet(seedText("Gateway", "Gateway", 20)).counted(0, 10, 0).required(),
+			),
+			note,
+		},
+		"software": {
+			seedSection("SectionGeneral", "General",
+				seedCatalog("Type", "Type", "ITSM::ConfigItem::Software::Type"),
+				seedText("Vendor", "Vendor", 50),
+				seedText("Product", "Product", 50).with(
+					seedText("Version", "Version", 50).counted(0, 1, 0),
+				),
+				seedOf("TextArea", "Description", "Description").counted(0, 1, 0),
+			),
+			owner,
+			seedSection("SectionLicence", "Licence",
+				seedCatalog("LicenceType", "Licence type", "ITSM::ConfigItem::Software::LicenceType"),
+				seedText("LicenceKey", "Licence key", 50).counted(0, 20, 0).required().with(
+					quiet(seedText("Quantity", "Quantity", 20)).counted(0, 1, 0).required(),
+					quiet(seedOf("Date", "ExpirationDate", "Expiration date")).counted(0, 1, 0).required(),
+				),
+			),
+			note,
+		},
+	}
+
+	insert := sqldb.Rebind(dialect, "INSERT INTO ci_class_definitions (class_id, version, attributes, created_at) "+
+		"SELECT id, 1, ?, ? FROM general_catalog WHERE catalog_class = 'ITSM::ConfigItem::Class' AND name = ?")
+
+	for _, class := range []string{"computer", "hardware", "location", "building", "room", "network", "software"} {
+		encoded, err := json.Marshal(definitions[class])
+		if err != nil {
+			return fmt.Errorf("writing the %s definition: %w", class, err)
+		}
+
+		if _, err := d.SQL.Exec(insert, string(encoded), time.Now().UTC(), class); err != nil {
+			return fmt.Errorf("seeding the %s definition: %w", class, err)
+		}
+	}
+
+	return nil
+}
+
+// createIndex adds one index, as a migration of its own - see All for why it is
+// not a second statement beside its table.
+//
+// The three names are written in All and nowhere else, so nothing a request
+// carries reaches this statement.
+func createIndex(d migration.Datasource, name, table, columns string) error {
+	return exec(d, "CREATE INDEX "+name+" ON "+table+" ("+columns+")")
+}
+
+// exec runs one statement of a migration and says which one failed.
+func exec(d migration.Datasource, statement string) error {
+	if _, err := d.SQL.Exec(statement); err != nil {
+		return fmt.Errorf("migration statement failed (%s): %w", statement, err)
 	}
 
 	return nil
@@ -1587,16 +2022,6 @@ func foreignKeyID(dialect string) string {
 	return "INTEGER"
 }
 
-// float returns the dialect's double-precision floating point type. MySQL
-// rejects PostgreSQL's "DOUBLE PRECISION" spelling.
-func float(dialect string) string {
-	if dialect == sqldb.DialectMySQL {
-		return "DOUBLE"
-	}
-
-	return "DOUBLE PRECISION"
-}
-
 // boolean returns the dialect's boolean type.
 func boolean(dialect string) string {
 	if dialect == sqldb.DialectSQLite {
@@ -1617,462 +2042,56 @@ func falseLiteral(dialect string) string {
 	return "FALSE"
 }
 
-func createUsers(dialect string) string {
-	return fmt.Sprintf(`CREATE TABLE users (
-		%s,
-		name VARCHAR(255) NOT NULL,
-		email VARCHAR(255) NOT NULL UNIQUE,
-		role VARCHAR(32) NOT NULL
-	)`, primaryKey(dialect))
-}
-
-func createProjects(dialect string) string {
-	return fmt.Sprintf(`CREATE TABLE projects (
-		%s,
-		name VARCHAR(255) NOT NULL,
-		description TEXT,
-		start_date %s NOT NULL,
-		end_date %s,
-		status VARCHAR(32) NOT NULL
-	)`, primaryKey(dialect), timestamp(dialect), timestamp(dialect))
-}
-
-func createTimesheets(dialect string) string {
-	return fmt.Sprintf(`CREATE TABLE timesheets (
-		%s,
-		user_id %s NOT NULL REFERENCES users(id),
-		project_id %s NOT NULL REFERENCES projects(id),
-		date %s NOT NULL,
-		duration_hours %s NOT NULL,
-		description TEXT,
-		status VARCHAR(32) NOT NULL
-	)`, primaryKey(dialect), foreignKeyID(dialect), foreignKeyID(dialect), timestamp(dialect), float(dialect))
-}
-
-// moveTheAppearanceOntoTheAccount gives each account its own light or dark.
-//
-// It was a device setting, kept in the browser, which is right for one person
-// with one laptop and wrong everywhere else: a shared machine handed the next
-// person the last one's dark mode, on a screen with nothing else of theirs on
-// it. Empty is what every existing account gets - follow the time of day, which
-// is what a browser that has never been told anything does.
-func moveTheAppearanceOntoTheAccount(d migration.Datasource, dialect string) error {
-	_ = dialect
-
-	return execAll(d,
-		"ALTER TABLE users ADD COLUMN theme VARCHAR(8) NOT NULL DEFAULT ''")
-}
-
-// planTheWorkingWeek keeps the weeks people plan their hours in: seven figures,
-// Monday first, in force from a day until the next plan's.
-//
-// A row per plan rather than seven columns on the account, because a plan
-// changes - to part time and back - and the months before a change have to go on
-// being measured against the week that was planned then.
-//
-// The person and the first day are unique together, so two plans can never claim
-// one day, and that constraint is also the index every read goes through. Part of
-// the table rather than an index made after it, so this stays the one schema
-// statement a migration here carries.
-func planTheWorkingWeek(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE work_schedules (
-		%s,
-		user_id %s NOT NULL REFERENCES users(id),
-		valid_from %s NOT NULL,
-		monday %s NOT NULL,
-		tuesday %s NOT NULL,
-		wednesday %s NOT NULL,
-		thursday %s NOT NULL,
-		friday %s NOT NULL,
-		saturday %s NOT NULL,
-		sunday %s NOT NULL,
-		UNIQUE (user_id, valid_from)
-	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect),
-		float(dialect), float(dialect), float(dialect), float(dialect),
-		float(dialect), float(dialect), float(dialect)))
-}
-
-// keepEntryTemplates keeps the bookings people make often, to fill the booking
-// form with: a project, hours and a description, each of them optional.
-//
-// The project is a plain number rather than a foreign key, deliberately. A
-// template is a convenience that may outlive its project, and a key would turn it
-// into an obstacle - to deleting the project, to handing it to somebody else, and
-// to purging the person it then belongs to while somebody else's template still
-// names it. Whether the project can still be booked is asked where that matters:
-// when the form is filled from the template, and again when the booking is made.
-func keepEntryTemplates(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE entry_templates (
-		%s,
-		user_id %s NOT NULL REFERENCES users(id),
-		project_id %s,
-		duration_hours %s,
-		description TEXT
-	)`, primaryKey(dialect), foreignKeyID(dialect), foreignKeyID(dialect), float(dialect)))
-}
-
-// recordAbsences keeps the days people record themselves as away, and why: leave,
-// half a day of it, illness, a day taken against overtime, a local holiday.
-//
-// A row per day rather than per stretch, because a day is what a balance and an
-// allowance count, and a fortnight's leave that is cut short is one day removed
-// rather than a stretch rewritten. The person and the day are unique together, so
-// one day has one reason, and that is also the index every read goes through.
-func recordAbsences(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE absences (
-		%s,
-		user_id %s NOT NULL REFERENCES users(id),
-		day %s NOT NULL,
-		kind VARCHAR(16) NOT NULL,
-		UNIQUE (user_id, day)
-	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
-}
-
-// letEachPersonKeepTheirStatesHolidays records which state's public holidays a
-// person keeps, for somebody who works in another state than the installation's.
-//
-// Empty is what every existing account gets - follow the installation, which is
-// what nobody having chosen anything means.
-func letEachPersonKeepTheirStatesHolidays(d migration.Datasource, dialect string) error {
-	_ = dialect
-
-	return execAll(d,
-		"ALTER TABLE users ADD COLUMN holiday_region VARCHAR(8) NOT NULL DEFAULT ''")
-}
-
-// letEachPersonCountEveryWorkingDay records the day from which every working day
-// counts towards somebody's overtime balance, booked or not.
-//
-// Null for every existing account, which keeps the rule they had - only the days
-// booked on count - because a month already behind somebody must not turn into a
-// deficit the moment holidays and absences are known.
-func letEachPersonCountEveryWorkingDay(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(
-		"ALTER TABLE users ADD COLUMN every_day_counts_from %s", timestamp(dialect)))
-}
-
-// keepTheYearlyLeave keeps how many days of leave a year gives somebody, from a
-// year on until the next entitlement's.
-//
-// A row per change rather than one figure on the account, because an allowance
-// changes and the years before keep what they gave - which is what they carried
-// into the next. The person and the year are unique together, and that is also
-// the index every read goes through.
-func keepTheYearlyLeave(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE vacation_entitlements (
-		%s,
-		user_id %s NOT NULL REFERENCES users(id),
-		from_year INTEGER NOT NULL,
-		days %s NOT NULL,
-		UNIQUE (user_id, from_year)
-	)`, primaryKey(dialect), foreignKeyID(dialect), float(dialect)))
-}
-
-// giveProjectsAnHourBudget lets a project's owner say how many hours they mean to
-// spend on it. Null for every project there is, which is no budget at all.
-func giveProjectsAnHourBudget(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf("ALTER TABLE projects ADD COLUMN budget_hours %s", float(dialect)))
-}
-
-// keepCalendarFeeds keeps the address each person's calendar program reads their
-// recorded days from - only a hash of its key, as an API token's.
-//
-// The person is unique, because one address is all anybody has, and the hash is
-// unique because it is what every reading of a feed is looked up by: both are the
-// indexes the table needs, declared as constraints so that one statement makes it.
-func keepCalendarFeeds(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE calendar_feeds (
-		%s,
-		user_id %s NOT NULL UNIQUE REFERENCES users(id),
-		key_hash VARCHAR(64) NOT NULL UNIQUE,
-		prefix VARCHAR(32) NOT NULL,
-		created_at %s NOT NULL,
-		last_read_at %s
-	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect), timestamp(dialect)))
-}
-
-// linkOpenIDIdentities keeps which account each identity at a sign-in provider is
-// linked to: the provider's issuer and the subject it gives that person.
-//
-// One identity an account, and one account an identity - both unique, so the
-// table's two lookups have their indexes from the constraints and one statement
-// makes it. The issuer is bounded at 255 like the subject the specification
-// bounds, so that the pair stays inside MySQL's index key length in four-byte
-// characters.
-func linkOpenIDIdentities(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE openid_identities (
-		%s,
-		user_id %s NOT NULL UNIQUE REFERENCES users(id),
-		issuer VARCHAR(255) NOT NULL,
-		subject VARCHAR(255) NOT NULL,
-		created_at %s NOT NULL,
-		UNIQUE (issuer, subject)
-	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
-}
-
-// recordWorkingTimes keeps when people worked, a day at a time: when they began,
-// when they finished and how long their breaks were, in minutes on the clock.
-//
-// The person and the day are unique together, so a day has one record, and that
-// is also the index every read goes through.
-func recordWorkingTimes(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE work_days (
-		%s,
-		user_id %s NOT NULL REFERENCES users(id),
-		day %s NOT NULL,
-		start_minute INTEGER NOT NULL,
-		end_minute INTEGER NOT NULL,
-		break_minutes INTEGER NOT NULL,
-		UNIQUE (user_id, day)
-	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
-}
-
-// keepWhatEntriesSaidBefore keeps every version of an entry a correction replaced:
-// its day, hours, project and description, and when it was replaced.
-//
-// The project is a number and not a reference: a version can name a project the
-// entry has since been moved off and its owner has since deleted, and a reference
-// would forbid the deletion for the sake of a history nobody asked to keep it.
-func keepWhatEntriesSaidBefore(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE timesheet_revisions (
-		%s,
-		timesheet_id %s NOT NULL REFERENCES timesheets(id),
-		user_id %s NOT NULL REFERENCES users(id),
-		date %s NOT NULL,
-		duration_hours %s NOT NULL,
-		project_id %s,
-		description TEXT,
-		replaced_at %s NOT NULL
-	)`, primaryKey(dialect), foreignKeyID(dialect), foreignKeyID(dialect), timestamp(dialect),
-		float(dialect), foreignKeyID(dialect), timestamp(dialect)))
-}
-
-// findAnEntrysHistoryByTheEntry indexes the history by the entry it belongs to,
-// which is how every read of it asks - in a migration of its own, as each schema
-// statement is.
-func findAnEntrysHistoryByTheEntry(d migration.Datasource) error {
-	return execAll(d, "CREATE INDEX idx_timesheet_revisions_entry ON timesheet_revisions (timesheet_id)")
-}
-
-// letABalanceHaveAnUpperBound records the most a person means their running
-// balance to stand at, in hours. Null for every account there is, which is no
-// bound at all - and a statement of its own, as the lower bound below has one.
-func letABalanceHaveAnUpperBound(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf("ALTER TABLE users ADD COLUMN balance_upper_limit %s", float(dialect)))
-}
-
-// letABalanceHaveALowerBound records the least a person means their running
-// balance to stand at, in hours; null is no bound.
-func letABalanceHaveALowerBound(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf("ALTER TABLE users ADD COLUMN balance_lower_limit %s", float(dialect)))
-}
-
-// letSomebodySkipTheUnbookedDayReminder records who has switched off the banner
-// about a last working day with nothing booked on it. False for every account
-// there is, which is the reminder: it is switched off, not on.
-func letSomebodySkipTheUnbookedDayReminder(d migration.Datasource) error {
-	return execAll(d, "ALTER TABLE users ADD COLUMN skip_unbooked_reminder BOOLEAN NOT NULL DEFAULT FALSE")
-}
-
-// letSomebodyChooseWhenTheStopwatchIsMentioned records after how many hours a
-// running stopwatch is mentioned. Null for every account there is, which is the
-// default; zero is never.
-func letSomebodyChooseWhenTheStopwatchIsMentioned(d migration.Datasource) error {
-	return execAll(d, "ALTER TABLE users ADD COLUMN timer_alert_hours INTEGER")
-}
-
-// keepALogOfAdministration keeps who changed how the installation is run, and
-// when: accounts, roles, settings, a restart.
-//
-// The actor and the target are ids without a foreign key, on purpose. A key would
-// put the table on the erasure's list, and erasing an account would then erase the
-// record of what that account did to everybody else's - the one thing a log of
-// administration exists to keep. An id is never handed out twice, so once its
-// account is gone it names nobody, and the names are read when the log is shown.
-func keepALogOfAdministration(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE admin_events (
-		%s,
-		at %s NOT NULL,
-		actor_id %s NOT NULL,
-		action VARCHAR(64) NOT NULL,
-		target_id %s,
-		detail VARCHAR(255) NOT NULL DEFAULT ''
-	)`, primaryKey(dialect), timestamp(dialect), foreignKeyID(dialect), foreignKeyID(dialect)))
-}
-
-// keepWhomEachManagerLooksAfter keeps which accounts an administrator assigned to
-// each manager: both ends are accounts, so both are on the erasure's list, and the
-// pair is the key, which is also the one index the table needs.
-func keepWhomEachManagerLooksAfter(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE managed_accounts (
-		manager_id %s NOT NULL REFERENCES users(id),
-		user_id %s NOT NULL REFERENCES users(id),
-		PRIMARY KEY (manager_id, user_id)
-	)`, foreignKeyID(dialect), foreignKeyID(dialect)))
-}
-
-// rememberWhoBookedAnEntry records the manager who booked an entry in somebody's
-// name. Null for every entry there is, which is the owner: before managers there
-// was nobody else who could have. No foreign key, as in the administration log -
-// an erased manager leaves a number that names nobody rather than taking the
-// entry's history with them.
-func rememberWhoBookedAnEntry(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf("ALTER TABLE timesheets ADD COLUMN recorded_by %s", foreignKeyID(dialect)))
-}
-
-// rememberWhoLastChangedAnEntry records the manager who last changed an entry, in
-// a statement of its own; null is the owner.
-func rememberWhoLastChangedAnEntry(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf("ALTER TABLE timesheets ADD COLUMN updated_by %s", foreignKeyID(dialect)))
-}
-
-// rememberWhoReplacedAVersion records the manager whose correction replaced each
-// kept version of an entry; null is the owner.
-func rememberWhoReplacedAVersion(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf("ALTER TABLE timesheet_revisions ADD COLUMN replaced_by %s", foreignKeyID(dialect)))
-}
-
-// shipTheManagerRole gives an installation the manager role.
-//
-// No installation arrives here holding the shipped one. A fresh installation is
-// seeded at its start with the roles of today's model, manager among them, and the
-// migration that retired the review path's manager removes that one as well, by
-// name. So a role called manager at this point is one an installation made itself
-// after that retirement: it is moved aside under a free name with everything it
-// has, as renameRole moves aside a role in the way of a shipped name, rather than
-// having its people quietly handed the team rights. One already holding them could
-// only be the shipped role, and is not shipped twice.
-func shipTheManagerRole(d migration.Datasource, dialect string) error {
-	existing, err := firstRoleThatExists(d, dialect, model.RoleManager)
-	if err != nil {
-		return err
+// trueLiteral returns how the dialect spells true in a DEFAULT clause.
+func trueLiteral(dialect string) string {
+	if dialect == sqldb.DialectSQLite {
+		return "1"
 	}
 
-	if existing != "" {
-		var shipped int
+	return "TRUE"
+}
 
-		if err := d.SQL.QueryRow(sqldb.Rebind(dialect,
-			"SELECT COUNT(*) FROM role_permissions rp JOIN roles r ON r.id = rp.role_id "+
-				"WHERE r.name = ? AND rp.permission = ?"),
-			model.RoleManager, model.PermTimesheetReadTeam).Scan(&shipped); err != nil {
-			return fmt.Errorf("asking whether the manager role is the shipped one: %w", err)
-		}
-
-		if shipped > 0 {
-			return nil
-		}
-
-		free, err := aFreeRoleName(d, dialect, model.RoleManager)
-		if err != nil {
-			return err
-		}
-
-		if err := setRoleName(d, dialect, model.RoleManager, free); err != nil {
-			return fmt.Errorf("moving an installation's own manager role aside: %w", err)
-		}
+// longText is the type for text with no sensible bound: what somebody wrote in
+// a ticket, a message as it arrived. TEXT everywhere but MySQL, whose TEXT ends
+// at 64 kilobytes - less than one long message with its quoted history.
+func longText(dialect string) string {
+	if dialect == sqldb.DialectMySQL {
+		return "MEDIUMTEXT"
 	}
 
-	return seedRole(d, dialect, shippedRole(model.RoleManager))
+	return "TEXT"
 }
 
-// letAProjectBeBillable marks whether a project's hours are charged to somebody.
-// False for every project there is: nothing was billed before there was a way to
-// say so, and a statement listing all of somebody's projects at once would be a
-// guess about which of them they charge for.
-func letAProjectBeBillable(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf("ALTER TABLE projects ADD COLUMN billable %s NOT NULL DEFAULT %s",
-		boolean(dialect), falseLiteral(dialect)))
-}
-
-// giveAProjectAnHourlyRate keeps what an hour on a project is charged at, in
-// hundredths of its currency; null until its owner sets one.
-func giveAProjectAnHourlyRate(d migration.Datasource) error {
-	return execAll(d, "ALTER TABLE projects ADD COLUMN hourly_rate BIGINT")
-}
-
-// giveAProjectACurrency keeps what a project's rate is in, euros until its owner
-// says otherwise - which is what this application's own users charge in.
-func giveAProjectACurrency(d migration.Datasource) error {
-	return execAll(d, "ALTER TABLE projects ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'EUR'")
-}
-
-// placeEveryHolidayStateInGermany writes every stored choice of public holidays
-// the way a place is written now that there are countries: a German state's code
-// alone, which was every place there was, becomes the state's ISO 3166-2 code with
-// its country - BY becomes DE-BY. Empty and none mean what they meant.
+// credentialID is the type for a passkey's lookup key.
 //
-// Once, here, rather than read both ways from now on: BE is Berlin written the old
-// way and Belgium the new one, so a reader asked to accept both could not tell
-// which one somebody meant. The states are written out rather than asked of the
-// model, because what this converts is what was stored then.
-func placeEveryHolidayStateInGermany(d migration.Datasource, dialect string) error {
-	installation := sqldb.Rebind(dialect, "UPDATE settings SET value = ? WHERE key_name = ? AND value = ?")
-	people := sqldb.Rebind(dialect, "UPDATE users SET holiday_region = ? WHERE holiday_region = ?")
-
-	for _, state := range []string{
-		"BW", "BY", "BE", "BB", "HB", "HH", "HE", "MV",
-		"NI", "NW", "RP", "SL", "SN", "ST", "SH", "TH",
-	} {
-		if _, err := d.SQL.Exec(installation, "DE-"+state, "instance.holidayRegion", state); err != nil {
-			return fmt.Errorf("placing the installation's holidays in %s: %w", state, err)
-		}
-
-		if _, err := d.SQL.Exec(people, "DE-"+state, state); err != nil {
-			return fmt.Errorf("placing the holidays of the people in %s: %w", state, err)
-		}
+// MySQL cannot index a BLOB without a prefix length, so the identifier is
+// stored as VARBINARY there - long enough for anything an authenticator
+// produces, and indexable whole.
+func credentialID(dialect string) string {
+	if dialect == sqldb.DialectMySQL {
+		return "VARBINARY(255)"
 	}
 
-	return nil
+	return blob(dialect)
 }
 
-// keepPushSubscriptions keeps the browsers each person asked for the reminders to
-// be pushed to: the push service's address, the two keys a message is encrypted
-// for, and the address the browser reached the installation at.
-//
-// The endpoint is unique, because a browser's push channel is one subscription
-// and is what one is replaced and forgotten by; the constraint is the table's
-// index as well, so one statement makes it. It is bounded at 700 so that MySQL
-// can index it in four-byte characters, which a push service's address - some
-// two hundred and fifty characters - comes nowhere near. Not unique per person:
-// somebody with two browsers has two.
-func keepPushSubscriptions(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf(`CREATE TABLE push_subscriptions (
-		%s,
-		user_id %s NOT NULL REFERENCES users(id),
-		endpoint VARCHAR(700) NOT NULL UNIQUE,
-		p256dh VARCHAR(100) NOT NULL,
-		auth VARCHAR(50) NOT NULL,
-		origin VARCHAR(255) NOT NULL,
-		created_at %s NOT NULL
-	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
+// blob is the dialect's binary column type.
+func blob(dialect string) string {
+	if dialect == sqldb.DialectPostgres {
+		return "BYTEA"
+	}
+
+	return "BLOB"
 }
 
-// rememberWhichTokenOpenedASession records the personal token a session was
-// exchanged for, so that taking the token back ends the session with it. Null for
-// every other sign-in and for every session there is. No foreign key: a session
-// goes with its token rather than holding it, and PurgeUser deletes an account's
-// tokens before its sessions.
-func rememberWhichTokenOpenedASession(d migration.Datasource, dialect string) error {
-	return execAll(d, fmt.Sprintf("ALTER TABLE sessions ADD COLUMN api_token_id %s", foreignKeyID(dialect)))
-}
+// largeBlob is the type for a file. MySQL's BLOB ends at 64 kilobytes, which is
+// smaller than most things anybody attaches; LONGBLOB is the one without a
+// bound worth naming, and the bound that matters is the one the upload is held
+// to before it gets here.
+func largeBlob(dialect string) string {
+	if dialect == sqldb.DialectMySQL {
+		return "LONGBLOB"
+	}
 
-// sealUnderTheNewMarker moves every value sealed while the project had its old
-// name - a second factor, the key check and the push key as they are kept, the
-// directory's and the sign-in provider's passwords inside their settings - to
-// the marker sealing writes now. The body after the marker is the same under
-// either, and neither marker's dots and colon can occur inside base64, so a
-// replace moves the marker and nothing else.
-//
-// Once, here, rather than read both ways from now on, as the holiday places
-// were: what this converts is what was stored then, and the program that wrote
-// the old marker is gone.
-func sealUnderTheNewMarker(d migration.Datasource) error {
-	return execAll(d,
-		"UPDATE users SET totp_secret = REPLACE(totp_secret, 'gtr.v1:', 'timepulse.v1:') "+
-			"WHERE totp_secret LIKE 'gtr.v1:%'",
-		"UPDATE settings SET value = REPLACE(value, 'gtr.v1:', 'timepulse.v1:') "+
-			"WHERE value LIKE 'gtr.v1:%'",
-		`UPDATE settings SET value = REPLACE(value, '"gtr.v1:', '"timepulse.v1:') `+
-			`WHERE value LIKE '%"gtr.v1:%'`,
-	)
+	return blob(dialect)
 }

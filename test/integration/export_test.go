@@ -13,47 +13,13 @@ import (
 )
 
 // Everything held about an account is handed over with it, a part per table, on
-// every database - and none of the secrets: not the personal token or the
-// calendar address the account was just shown once, and no column that holds a
-// hash, a seed or a key. A part with nothing in it is there as an empty list.
+// every database - and none of the secrets: not the personal token the account
+// was just shown once, and no column that holds a hash, a seed or a key. A part
+// with nothing in it is there as an empty list.
 func TestAnAccountIsHandedOverWholeAndWithoutItsSecrets(t *testing.T) {
 	t.Parallel()
 
-	_, _, worker := startWithWorker(t)
-
-	var project struct {
-		ID uint `json:"id"`
-	}
-
-	worker.must(worker.api(http.MethodPost, "/projects", map[string]any{
-		"name": "Portal", "startDate": "2026-08-01", "budgetHours": 10,
-	}), http.StatusCreated, http.StatusOK).Data(t, &project)
-
-	var entry struct {
-		ID uint `json:"id"`
-	}
-
-	worker.must(worker.api(http.MethodPost, "/timesheets", map[string]any{
-		"date": "2026-08-03", "durationHours": 4, "projectId": project.ID, "description": "first",
-	}), http.StatusCreated, http.StatusOK).Data(t, &entry)
-
-	worker.must(worker.api(http.MethodPut, path("/timesheets/", entry.ID), map[string]any{
-		"date": "2026-08-03", "durationHours": 5, "projectId": project.ID, "description": "corrected",
-	}), http.StatusOK)
-
-	for _, call := range []struct {
-		method, path string
-		body         any
-	}{
-		{http.MethodPost, "/me/templates", map[string]any{"projectId": project.ID, "durationHours": 0.25, "description": "Daily"}},
-		{http.MethodPost, "/me/absences", map[string]any{"from": "2026-08-10", "to": "2026-08-10", "kind": "vacation"}},
-		{http.MethodPut, "/me/vacation", map[string]any{"fromYear": 2026, "days": 28}},
-		{http.MethodPost, "/me/schedules", map[string]any{"validFrom": "2026-08-03", "hours": []float64{8, 8, 8, 8, 6, 0, 0}}},
-		{http.MethodPut, "/me/workdays/2026-08-03", map[string]any{"start": "08:00", "end": "16:30", "breakMinutes": 30}},
-		{http.MethodPost, "/me/timer", map[string]any{"description": "running"}},
-	} {
-		worker.must(worker.api(call.method, call.path, call.body), http.StatusOK, http.StatusCreated)
-	}
+	_, admin, worker := startWithWorker(t)
 
 	var token struct {
 		Secret *string `json:"secret"`
@@ -62,18 +28,59 @@ func TestAnAccountIsHandedOverWholeAndWithoutItsSecrets(t *testing.T) {
 	worker.must(worker.api(http.MethodPost, "/me/tokens", map[string]any{"name": "ci", "expiresInDays": 30}),
 		http.StatusCreated, http.StatusOK).Data(t, &token)
 
-	var feed struct {
-		Path *string `json:"path"`
+	if token.Secret == nil {
+		t.Fatal("the token was not shown once")
 	}
 
-	worker.must(worker.api(http.MethodPost, "/me/calendar-feed", nil),
-		http.StatusCreated, http.StatusOK).Data(t, &feed)
+	parts, whole := exportOf(t, worker)
 
-	if token.Secret == nil || feed.Path == nil {
-		t.Fatalf("the token or the calendar address was not shown once: %v %v", token.Secret, feed.Path)
+	for _, part := range []string{"account", "api-tokens", "sessions"} {
+		if len(parts[part]) == 0 {
+			t.Errorf("%s holds nothing, though the account has some", part)
+		}
 	}
 
-	exported := worker.api(http.MethodGet, "/me/export", nil)
+	for _, part := range []string{"owned-tickets", "tickets-responsible-for", "contact", "watched-tickets",
+		"notifications", "queues-told-about", "passkeys", "push-subscriptions", "openid-links",
+		"written-articles", "config-item-versions-written", "links-made", "changes-managed", "changes-built",
+		"tickets-opened", "ticket-history-made", "administration-log", "config-items-made", "config-items-last-changed",
+		"class-definitions-written", "changes-made", "changes-last-changed", "work-orders-assigned",
+		"work-orders-made", "work-orders-last-changed"} {
+		if rows, there := parts[part]; !there || len(rows) != 0 {
+			t.Errorf("%s reads %v, want an empty list", part, rows)
+		}
+	}
+
+	// The administrator made the worker's account, which the administration log
+	// keeps; the export says when and what, and never to whom.
+	administered, _ := exportOf(t, admin)
+	if len(administered["administration-log"]) == 0 {
+		t.Error("the administrator's export holds nothing of the administration log, though it made an account")
+	}
+
+	for _, entry := range administered["administration-log"] {
+		for column := range entry {
+			if column != "at" && column != "action" {
+				t.Errorf("the administration log is handed over with %q, which names somebody else's", column)
+			}
+		}
+	}
+
+	for _, secret := range []string{*token.Secret,
+		"password_hash", "totp_secret", "token_hash", "key_hash", "public_key", "credential_id"} {
+		if strings.Contains(whole, secret) {
+			t.Errorf("the export holds %q", secret)
+		}
+	}
+}
+
+// exportOf is what the account behind a client is handed when it asks for
+// everything held about it: its rows by the part they are in, and the whole of
+// the archive as text, to look for what must not be in it.
+func exportOf(t *testing.T, c *client) (map[string][]map[string]any, string) {
+	t.Helper()
+
+	exported := c.api(http.MethodGet, "/me/export", nil)
 	if exported.Status != http.StatusOK {
 		t.Fatalf("the export answered %d: %s", exported.Status, exported.Body)
 	}
@@ -108,30 +115,5 @@ func TestAnAccountIsHandedOverWholeAndWithoutItsSecrets(t *testing.T) {
 		parts[strings.TrimSuffix(file.Name, ".json")] = rows
 	}
 
-	for _, part := range []string{"account", "stopwatch", "entry-history", "time-entries", "projects",
-		"api-tokens", "sessions", "planned-weeks", "entry-templates", "absences", "leave-entitlements",
-		"calendar-subscription", "working-times"} {
-		if len(parts[part]) == 0 {
-			t.Errorf("%s holds nothing, though the account has some", part)
-		}
-	}
-
-	for _, part := range []string{"passkeys", "openid-links"} {
-		if rows, there := parts[part]; !there || len(rows) != 0 {
-			t.Errorf("%s reads %v, want an empty list", part, rows)
-		}
-	}
-
-	if history := parts["entry-history"]; len(history) == 1 && history[0]["description"] != "first" {
-		t.Errorf("the history holds %v, want the version the correction replaced", history[0])
-	}
-
-	key := (*feed.Path)[strings.LastIndex(*feed.Path, "/")+1:]
-
-	for _, secret := range []string{*token.Secret, strings.TrimSuffix(key, ".ics"),
-		"password_hash", "totp_secret", "token_hash", "key_hash", "public_key", "credential_id"} {
-		if strings.Contains(whole, secret) {
-			t.Errorf("the export holds %q", secret)
-		}
-	}
+	return parts, whole
 }

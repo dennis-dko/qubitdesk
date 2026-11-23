@@ -175,7 +175,7 @@ jobs:
     # Where the image waits while it is being checked. Named once, because three
     # steps have to agree about it.
     env:
-      STAGED_IMAGE: localhost:5000/timepulse:${{ needs.version.outputs.version }}
+      STAGED_IMAGE: localhost:5000/qubitdesk:${{ needs.version.outputs.version }}
 
     # A registry on this runner, because the daemon cannot hold what is built
     # here. An image for two architectures is a manifest list, and `docker load`
@@ -280,7 +280,7 @@ jobs:
           # Each platform gets the installation, from the same commit with the
           # same version stamped in.
           build() {
-            compile timepulse-web ./cmd "$@"
+            compile qubitdesk-web ./cmd "$@"
           }
 
           build linux   amd64
@@ -317,18 +317,18 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
           ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
-          TIMEPULSE_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          TIMEPULSE_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          QUBITDESK_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          QUBITDESK_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           # The name the key has inside the keystore in the secret, not in this
           # repository: Gradle asks the keystore for exactly this entry, so the
           # line and the secret change together.
-          TIMEPULSE_ANDROID_KEY_ALIAS: timepulse
-          TIMEPULSE_ANDROID_KEYSTORE: /key/release.jks
+          QUBITDESK_ANDROID_KEY_ALIAS: qubitdesk
+          QUBITDESK_ANDROID_KEYSTORE: /key/release.jks
           SIGNER_SHA256: b38ca23d7cc1ea62dcab31096dea87c5c6e98c8c197d8af084309adafb770050
         run: |
           set -euo pipefail
 
-          if [ -z "${ANDROID_KEYSTORE}" ] || [ -z "${TIMEPULSE_ANDROID_KEYSTORE_PASSWORD}" ]; then
+          if [ -z "${ANDROID_KEYSTORE}" ] || [ -z "${QUBITDESK_ANDROID_KEYSTORE_PASSWORD}" ]; then
             echo "::error::the release environment has no ANDROID_KEYSTORE and ANDROID_KEYSTORE_PASSWORD, which the Android app is signed with"
             exit 1
           fi
@@ -337,14 +337,14 @@ jobs:
           mkdir -p "${key}"
           printf '%s' "${ANDROID_KEYSTORE}" | base64 -d > "${key}/release.jks"
 
-          docker build -t timepulse-android - < internal/interface/mobile/Dockerfile
+          docker build -t qubitdesk-android - < internal/interface/mobile/Dockerfile
           docker run --rm -v "$PWD:/src" -v "${key}:/key:ro" -w /src/internal/interface/mobile \
-            -e VERSION -e TIMEPULSE_ANDROID_KEYSTORE -e TIMEPULSE_ANDROID_KEYSTORE_PASSWORD -e TIMEPULSE_ANDROID_KEY_ALIAS -e TIMEPULSE_ANDROID_KEY_PASSWORD \
-            timepulse-android gradle --no-daemon --console=plain assembleRelease
+            -e VERSION -e QUBITDESK_ANDROID_KEYSTORE -e QUBITDESK_ANDROID_KEYSTORE_PASSWORD -e QUBITDESK_ANDROID_KEY_ALIAS -e QUBITDESK_ANDROID_KEY_PASSWORD \
+            qubitdesk-android gradle --no-daemon --console=plain assembleRelease
           rm -rf "${key}"
 
-          apk=bin/mobile/outputs/apk/release/timepulse-mobile-release.apk
-          signers=$(docker run --rm -v "$PWD:/src" timepulse-android /opt/android-sdk/build-tools/36.0.0/apksigner verify --print-certs "/src/${apk}")
+          apk=bin/mobile/outputs/apk/release/qubitdesk-mobile-release.apk
+          signers=$(docker run --rm -v "$PWD:/src" qubitdesk-android /opt/android-sdk/build-tools/36.0.0/apksigner verify --print-certs "/src/${apk}")
           echo "${signers}"
 
           if ! grep -q "certificate SHA-256 digest: ${SIGNER_SHA256}$" <<< "${signers}"; then
@@ -352,7 +352,7 @@ jobs:
             exit 1
           fi
 
-          cp "${apk}" "dist/timepulse-mobile_${VERSION}.apk"
+          cp "${apk}" "dist/qubitdesk-mobile_${VERSION}.apk"
 
       # An asset larger than the versions already installed will download is one
       # none of them can take: the update card offers it, every install is turned
@@ -530,8 +530,8 @@ jobs:
           target_commitish: ${{ needs.version.outputs.sha }}
           generate_release_notes: true
           files: |
-            dist/timepulse-web_*
-            dist/timepulse-mobile_*
+            dist/qubitdesk-web_*
+            dist/qubitdesk-mobile_*
             dist/SHA256SUMS
           # append_body puts this below the generated notes, which is where it
           # belongs: the changelog is what a returning reader came for, and this
@@ -550,17 +550,17 @@ jobs:
             run it. It is self-contained: the interface, the timezone database and
             the migrations are compiled in.
 
-            `timepulse-web_*` is the installation: the server and its web
-            interface. `timepulse-mobile_*.apk` is the Android app - the
+            `qubitdesk-web_*` is the installation: the server and its web
+            interface. `qubitdesk-mobile_*.apk` is the Android app - the
             installation's web interface in an app - which belongs to this release:
             use it with an installation that runs this version. It is connected by
             scanning the code a new personal token is shown with.
 
-            An installation running v0.4.11 or earlier cannot update itself to
-            this one from the interface: it asks the release for a file under a
-            name from before the project was called TimePulse, which releases no
-            longer carry. Replace it by hand once; from then on it updates itself
-            again.
+            An installation running a version from before the binary was called
+            `qubitdesk-web` cannot update itself to this one from the
+            interface: it asks the release for a file under its old name, which
+            releases no longer carry. Replace it by hand once; from then on it
+            updates itself again.
 
             With **no database configured** it serves an installer on its own port
             and waits, so the first start needs nothing but the binary.

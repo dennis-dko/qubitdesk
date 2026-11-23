@@ -2,6 +2,11 @@
 
 What the application does, and the rules it keeps while doing it.
 
+The ticket system itself is being built: the queues, the tickets, the customers
+they are for, service levels, the automation, the knowledge base and the
+customer portal are here, and mail comes next. What follows is what an
+installation already has.
+
 ## What is included
 
 | Area | Implementation |
@@ -14,177 +19,29 @@ What the application does, and the rules it keeps while doing it.
 | Screens in tabs | *My account* is sorted into working time, sign-in, apps and calendar, and privacy and help; *Settings* into general, sign-in, operation and logs. A tab with nothing on it for an account is not offered, a screen comes back on the tab it was left on, and whatever points at a card - a banner's link, the guided tour - opens its tab |
 | Access control | RBAC with roles administered at run time; bcrypt password hashes |
 | Sign-in | Session cookies, optional passkeys and TOTP two-factor per user, a browser's Kerberos ticket where a keytab and a directory are configured, and an OpenID Connect provider - Keycloak, Authentik, Entra ID, Google - for the accounts their owners linked to it |
-| Live log | The process log, filterable and searchable, for the built-in administrator |
-| Administration log | Who created, changed or deleted an account or a role, saved a setting, switched maintenance mode, made or downloaded a backup or restarted the application, kept across restarts and readable under *Settings* by whoever administers |
+| Live log | The process log, filterable and searchable, for whoever administers |
+| Administration log | Who created, changed or deleted an account, a role, a ticket state, priority or type, saved a setting, switched maintenance mode, made or downloaded a backup or restarted the application, kept across restarts and readable under *Settings* by whoever administers |
 | Backups | The whole installation in one file sealed with `BACKUP_PASSPHRASE`, made under *Settings* now and downloaded, or on a schedule and kept on the server, the oldest going past the number set; restored through the installer into an empty database of any of the three dialects |
-| A way back in | `timepulse-web recover` on the server gives the built-in administrator a one-time password and takes its second factor off; an administrator removes a lost second factor from anybody else's account |
-| Managers | Switched on under *Settings*, off as shipped: a manager looks after the time and projects of the accounts an administrator assigned to them, choosing whose under *Whose time*. Whoever is looked after sees who under *My account* and the manager's name on every entry they booked or changed; a manager learns that a day was away, never why, and never sees anybody's working times |
+| A way back in | `qubitdesk-web recover` on the server gives the built-in administrator a one-time password and takes its second factor off; an administrator removes a lost second factor from anybody else's account |
+| Tickets | Under *Tickets*, the tickets of the queues the reader's role reaches, what is still to do first, narrowed by queue, to the reader's own and by words in the title or number. A ticket is opened with a title, its queue and what was said, and starts new, normal and unclassified unless told otherwise, owed what its queue's service level promises - the moments it is owed shown with it, and marked overdue in the list once one has passed unkept; opened from the list by its number it shows what was written in it, takes a note or a call with the minutes worked and the files that come with it - at most 20 MB each, saved again under the names they came with - is corrected in the form that opened it, locked - which makes whoever locks a ticket nobody owns its owner, which a move to another queue releases unless the installation says otherwise, and which frees itself once it has run as long as the queue allows, counted from the lock or from the last answer the customer saw in the installation's working hours where it names a calendar of its own - set to wait for a moment, after which a ticket in a state that moves on by itself goes to the state that state names - closed for the one that ships - and loses its lock where that closes it, watched, and tells what happened to it by the names things had then. A ticket of a queue the role only reads is shown and not offered for change, and one of a queue the role does not reach is not there at all |
+| Customers | Under *Customers*, the organisations tickets come from - each with its number where it has one, its address and its website, shown as a link - and the people at them, found by name or address and narrowed to one organisation: seen by whoever holds *See customers* and changed by whoever holds *Create and change customers*, whichever queue a ticket for them landed in. A ticket is for a contact, found by typing in the form that opens it, and for the contact's organisation unless corrected, and it names both. An organisation contacts or tickets belong to is retired rather than deleted; deleting a contact tickets are for asks a second time, saying how many, and keeps the tickets, for nobody. Whoever changes customers gives a contact access to the customer portal from the contact's row: an account under the contact's name and address, which reaches the portal and nothing else, with a password for one sign-in - a new one is given the same way and ends the sessions the account had open. The account follows the contact's name and address and goes with the contact, or when the access is taken away; whether the contact sees their organisation's tickets in the portal as well as their own is a switch on the contact, off unless somebody turns it on. An account a contact signs in with is given no role that administers the installation, whichever way it would get there |
+| Ticket setup | The queues tickets are sorted to - a tree, each with the roles that reach it to read its tickets or to work in it, and nobody else, and saying whether customers open tickets in it from the portal, as the shipped Service Desk does - and the states, priorities and types tickets are sorted by, a waiting state with the state it moves a ticket on to, the service levels a ticket is owed - minutes until the first answer, between answers - counted from the last answer the customer saw, or from the first of what they wrote since, and owed by nobody while a ticket waits or is finished - and until the solution, counted in the level's calendar, in the installation's where it names none, or around the clock - the calendars their minutes are counted in - the hours of each weekday with their breaks, less the public holidays of a place and free days of its own, once or every year - and the state types a queue's unlock time frees a lock in, new and open always among them, and the answer templates - KIX18's text modules, each offered in its queue or in every queue and filled for the ticket an article is started from it in - administered under *Ticket setup* by whoever holds *Set up queues*. Shipped with KIX18's values - seven states, one of each type, five priorities and three types - named in the reader's language; an installation adds its own, and retires a value tickets carry rather than deleting it. What the application moves tickets into by itself - the states new, open, closed and merged, the priority normal, the type unclassified - stays as it shipped |
+| Customer portal | For a contact given access, under *My tickets*: the tickets opened for them - and their organisation's where the contact is said to see them - those still being worked on first and the finished ones apart, each opened to read what the service desk answered, with its files, and to answer it with files of their own; and a ticket opened there, in the queue the portal offers or, where it offers several, the one chosen. An answer opens a waiting ticket again, and a finished one as its queue says - opened again, refused, or a new ticket for the answer. Nothing of how the service desk works a ticket - its queue, its owner, its lock or what it is owed - and no internal note or its files are shown there |
+| Knowledge base | Under *Knowledge base*, KIX18's FAQ: articles filed in a tree of categories, searched by the words in their title, keywords or text and by category, each saying who may read it - the staff alone, customers signed in as well, or anybody - and for the staff unless told otherwise. Whoever holds *Write the knowledge base* writes and corrects articles and categories and alone sees an article made invalid; a category holding articles is made invalid rather than deleted. Outside the staff it is read, never what is retired: a customer finds in the portal what is meant for customers and what is public, and anybody finds what is public from the sign-in screen, which offers it only where something is - each searching by words and by category, shown only the categories that hold something they may read |
+| General catalog | Under *Assets*, for whoever holds *Set up the general catalog*: KIX18's lists the configuration items will pick from - their classes, the deployment and incident states with what each means to the code, and lists of the installation's own begun by adding their first value. Shipped values are named in the reader's words; a value nobody should pick any more is retired from its row, never deleted |
+| Class definitions | Under *Assets*, beside the general catalog: what a configuration item of each class holds, written as KIX18 writes it - sections, texts, dates, a value of the catalog, another item, a contact or an organisation, each with how often it occurs and attributes of its own - and checked whole on the server. A change is kept as a new version beside the ones before it, so an item stays readable the way it was written; the shipped classes start with KIX18's definitions |
+| Automation | Under *Automation*, for whoever holds *Set up the automation*: macros - runs of KIX18's ticket steps, from setting the state to deleting the ticket, put together a step at a time and each checked as it is saved - execution plans that start jobs at times of day on the weekdays they name, in the installation's timezone, or when something happens to a ticket, and jobs that run their macros on the tickets their criteria take - by queue, state, priority, type and lock - when a plan says so or when somebody runs one there. A job acts as the application, so every step meets the rules a person's change meets and goes into the ticket's history as the system's; a step it could not take leaves the ticket where it stood and is shown with its reason in the reader's words, and every run is kept for thirty days |
+| System configuration | Under *Settings*, how the installation behaves, option by option, each under the name KIX18 gives it and with its default - the word a ticket's number is written after and what stands between them, and whether moving a ticket to another queue releases its lock - changed by whoever holds *Administer the installation* and put back to its default with one press. Only what was changed is kept, so an option nobody touched follows a new default after an update |
 | Version | The running build in the footer of every page |
 | API access | Personal tokens, scoped by the owner's current role |
-| Android app | The installation's own web interface in an app, so everything the browser does in the same design, connected by scanning the code a new token is shown with, which signs it in; released with every version as `timepulse-mobile_<version>.apk`, signed with one key so each release installs over the last - and offered by the app itself: at every start it asks the installation which release it runs, and downloads and installs that release's app at a press once it is newer, Android asking to confirm |
-| Stopwatch | Start and stop the clock; the measured time becomes an entry, to the second. A start pressed late can be corrected, a clock left running is booked up to the time the work ended, and switching to the next project books the clock and carries on from the same second |
-| Reminders | A banner names the last working day with nothing booked on it and leads to the booking form on that day; another says when the stopwatch has run longer than its owner chose - ten hours unless they chose otherwise - with a notification as well where the browser allows one, and pushed to a closed browser where the installation pushes. The Android app shows both as notifications of its own, open or not. Both are chosen under *My account* |
-| Finding entries | The list narrows by project, by period and by text in the description, and the export follows the same filters |
-| Entry history | Every correction of an entry keeps the version it replaced - its day, hours, project and description, and when it was replaced - whether it was made in the form, by moving the entry to another project, on the week grid or for a whole selection at once. The entry's owner opens it from the entry; deleting the entry deletes its history |
-| Hour budgets | A project may carry the hours its owner means to spend on it; the list shows how much of that is booked, marked from four fifths and past the whole, and the booking that crosses either says so |
-| Statement of work | A project may be billable at an hourly rate in a currency of its own; under *Reports* a period's billable hours come to a line per project with its rate and amount, a total per currency, and leave as a PDF or an .xlsx. Not an invoice: no number, no tax, no customer |
-| Templates | A booking made often - a project, hours, a description - is kept from the form and fills it in again when chosen. Nothing is booked from a template on its own, and one whose project has closed can no longer be chosen |
-| Own statistics | Hours per day, per project and per activity, drawn as charts, for everybody rather than administrators |
-| Activities | A second way of sorting the same hours beside the project, written into the description with a # - #meeting, #review - and totalled under *Own statistics*. Nothing to set up first, and every description already written counts; an entry naming two counts towards both |
-| Evaluation | The same figures as bars, columns or a pie — whichever shape answers the question being asked |
-| Overtime | Balance per day and per period against a personal daily target, and a running balance with bounds of your own that raise a banner while it lies past them |
-| Calendar | Month view of where hours were booked |
-| Working time | When each day began and finished and how long its breaks were, beside the hours booked on it, under the calendar - a day booked on with no times recorded is shown as the gap it is, the running stopwatch's start is offered as the day's, a day past a limit of the Working Hours Act says which, and the month leaves as a PDF. Kept by each person for themselves; nobody else sees it |
-| Calendar subscription | An address of your own, made under *My account*, that Outlook, Google or a telephone subscribes to: every day you booked on - how many hours, and what on - and every day you are away, in the year either side of today. Read-only, shown once, and taken back by making a new one |
-| Everything about me | Everything the installation keeps about your account, as a ZIP with a JSON file per part - exactly what erasing it would delete, without the hashes, seeds and keys - from *My account*, for anybody signed in |
-| The year | Every day of a year as a tile, as dark as the hours booked on it, with the public holidays and the days away outlined rather than told by colour alone - beside the year before up to the same day, and both month by month as figures |
-| Week grid | A week as a table - projects as rows, days as columns, hours typed straight into the cells - with what was booked, what each day asked and the balance underneath. *Copy last week* books the week before into the days that have nothing on them yet, leaving out what was booked on projects that have closed since |
-| Days away | Leave, half a day of it, sick days, days taken against overtime and holidays that hold only where somebody works, recorded over a range - but only on the days the planned week asks something of, so a fortnight of leave is its ten working days - and named in the calendar and on the week grid. From the day every working day counts from, each takes its part off what the day asks |
-| Leave | Days of leave a year, from a year on, and for each year what is left of them: what the year gives, what the year before left over - carried in, or owed where it was overdrawn - and what is taken and still planned, counted from the days of leave recorded on working days |
-| Public holidays | The public holidays of seventeen countries - Austria, Belgium, Czechia, Denmark, Finland, France, Germany, Ireland, Italy, Luxembourg, the Netherlands, Norway, Poland, Portugal, Sweden, the United Kingdom and the United States - worked out in the binary rather than fetched from anywhere. A country is chosen first, Germany standing ready, and a second picker follows where its holidays differ: a German state or a British nation always, and Alsace, Moselle, South Tyrol, the Azores or Madeira where they keep a day or two more than the rest of their country. The installation chooses under *Settings*, and anybody can choose another place - or none - under *My account*. A holiday a country moves off a weekend is kept on the weekday it moves to, and said to be. They are named in the calendar and on the week, leave is not recorded on them, and from the day every working day counts from they ask nothing |
+| Android app | The installation's own web interface in an app, so everything the browser does in the same design, connected by scanning the code a new token is shown with, which signs it in; released with every version as `qubitdesk-mobile_<version>.apk`, signed with one key so each release installs over the last |
+| Notifications | Set up under *Ticket setup* by whoever holds *Set up queues*, as KIX18 sets up its ticket notifications: the ticket events one is sent on, the tickets it is about, and who is told - the owner, the responsible agent, those watching the ticket, those who chose its queue, those who work in or read it - with a subject and a text per language, KIX18's placeholders filled in each agent's words, once a day at most where it says so. Nobody is told about their own change, the built-in administrator never, and nobody about a ticket they cannot read; a job's change is news like a person's. Each agent finds what they were told under *Tickets*, the unread first to the eye, and reads it by opening the ticket, and under *My account* switches off the ones that let them and chooses the queues they follow; pushing it to a browser is switched on under *Settings*, off as shipped, and each person lets a browser have it under *My account*, where it arrives even with no page open and one that arrives late is shown only while still unread |
+| Public holidays | The public holidays of seventeen countries - Austria, Belgium, Czechia, Denmark, Finland, France, Germany, Ireland, Italy, Luxembourg, the Netherlands, Norway, Poland, Portugal, Sweden, the United Kingdom and the United States - worked out in the binary rather than fetched from anywhere. A country is chosen first, Germany standing ready, and a second picker follows where its holidays differ: a German state or a British nation always, and Alsace, Moselle, South Tyrol, the Azores or Madeira where they keep a day or two more than the rest of their country. The installation chooses under *Settings*. A holiday a country moves off a weekend is kept on the weekday it moves to, and said to be. Nothing reads them yet: they are kept for the service hours a service level is measured in |
+| Everything about me | Everything the installation keeps about your account, as a ZIP with a JSON file per part - exactly what erasing it would delete or release, without the hashes, seeds and keys - from *My account*, for anybody signed in |
 | Transport | Optional HTTPS with automatic Let's Encrypt certificates |
-| Installable | A manifest and icons per installation - its own name, and TimePulse's mark - so the page installs as an app on a telephone or a desktop, with shortcuts to the time entries, the calendar and the overtime. Browsers offer this over HTTPS or on localhost only. *My account* shows the installation's address beside the offer, as text and as a QR code, to open it on a telephone by scanning it rather than typing it |
-| Booking offline | The installed application opens without a network from the shell it kept, and says the installation cannot be reached rather than showing a dead page. A booking made in the form while the connection is gone waits on the device, a banner says how many wait, and they are sent - once each - when it is back; one the installation then refuses stays with its reason until it is corrected. Nothing the installation answers is ever shown from a copy. Over HTTPS or on localhost only, like installing |
+| Installable | A manifest and icons per installation - its own name, and QubitDesk's mark - so the page installs as an app on a telephone or a desktop, with a shortcut to *My account*. Browsers offer this over HTTPS or on localhost only. *My account* shows the installation's address beside the offer, as text and as a QR code, to open it on a telephone by scanning it rather than typing it |
+| Offline | The installed application opens without a network from the shell it kept, and says the installation cannot be reached rather than showing a dead page. Nothing the installation answers is ever shown from a copy. Over HTTPS or on localhost only, like installing |
 | Operations | Health and liveness endpoints, Prometheus metrics, tracing (all from GoFr), administered under *Settings* |
-
-## Projects
-
-Projects are optional on a time entry: hours can be recorded first and
-categorised later, or left uncategorised. The entry list counts the ones still
-waiting for a project and leads to them, and several are given a project at once
-from the bar that appears when rows are ticked - each through the same check a
-single entry's transfer makes.
-
-**A project belongs to one person.** Only its owner sees it, only its owner books
-on it, and that includes the administrator — whose own projects are equally its own
-and nobody else's. Two people working on the same thing therefore keep a project
-each, with the same name if they like, and nothing adds them together, because
-nothing is meant to.
-
-There were two kinds until recently: a shared project everybody could see, and a
-private category for organising your own day. The second is the only kind now, and
-with it went the second right — `projects:write:own` and `projects:write` were two
-rights for two kinds of project, so one of them would have granted nothing. Whoever
-held the old one holds `projects:write`, which an upgrade takes care of.
-
-A start date is optional, for the same reason: a project is one person's way of
-organising their hours, not a plan somebody signed off.
-
-That stays true of an **hour budget**, which a project may carry: how many hours
-its owner means to spend on it, set by them, seen by nobody else and signed off by
-nobody. The project list says how much of it the hours booked so far use, and marks
-it from four fifths and again past the whole; the booking that takes a project past
-either says so once, and the evaluation of one project names its budget beside its
-total. A budget of nothing takes it off.
-
-A project may also be **billable**, at an hourly rate in a currency of its own -
-euros unless its owner says otherwise. Under *Reports*, the **statement of work**
-takes a period and lists each billable project with hours in it: the hours, the
-rate and what they come to, and under them a total for each currency, never one
-across two. A project with no rate yet is listed with its hours and no amount,
-rather than with a guess. The amount is the rate times the hours, rounded once to
-the hundredth, and money is kept in hundredths throughout, so nothing on a statement
-is a sum of roundings. It leaves as a PDF and as an .xlsx with the same figures.
-
-It is a statement and deliberately not an invoice. It has no number, no tax and no
-customer: each of those is a rule about somebody's books that this application
-cannot know, and an invoice that gets one of them wrong is worse than a figure that
-says what it is. A rate of nothing takes the rate off.
-
-## Overtime
-
-Every user has a **daily target** (the basis for overtime) and a **daily maximum**
-(the booking limit); both are set under *My account*, by the person they are about and
-by nobody else. Without a personal setting, 8 h target and the instance-wide
-`MAX_DAILY_HOURS` apply.
-
-The two ceilings are not alternatives: the **stricter** one holds. You may hold your
-own day shorter than the installation allows, because that is your time; you cannot
-raise it past what the installation allows, because that ceiling is configuration and
-configuration is the administrator's.
-
-The balance is the sum of `booked − target` over the days that count, and which
-days count is each person's choice of a day under *My account*. Until one is
-chosen, only the days that **have bookings** count — the rule from before there
-was a holiday and leave calendar, kept so that a month already behind somebody
-does not turn into a deficit the moment holidays and absences become known.
-From the chosen day on, **every working day** up to today counts, booked or not,
-and asks what its week plans less what a public holiday or an absence takes off
-it: nothing on a public holiday, a day of leave, a sick day or a holiday that
-holds only where somebody works; half on half a day of leave; the whole day on
-a day off against overtime, which is what takes it off the balance. A day after
-today counts once something is booked on it. The overtime table names the
-holiday or the absence on each day that asks less, and says which rule counted.
-
-What a day asks is the **week planned** for it. Under *My account* a week is
-planned as seven figures, Monday first, from a day on: a later plan takes over
-from its own day, and the weeks before it keep the plan that was in force then,
-so going part time does not rewrite last month. Without a plan the daily target
-applies from Monday to Friday and the weekend asks nothing - so hours worked on a
-Saturday count as overtime. Every booked day used to be measured against the full
-daily target whichever day it was, which stood a Saturday's work in the balance as
-a shortfall.
-
-The **running balance** is the same sum from the first day that counts - the first
-day booked on, or the chosen day where that is earlier - up to today, as a
-flexitime account keeps it. Under *My account* each person can give it two
-**bounds**, an upper one at zero or above and a lower one at zero or below; while
-the running balance lies past one of them, a banner says so on every screen, with
-the way back to the bounds inside it, and goes once the balance is inside again.
-Standing exactly on a bound is inside it, and an empty field is no bound.
-
-The same rules decide the **reminder** about a day with nothing booked on it. It
-names the last day before today somebody was expected to work - their week plans
-hours for it, it is no public holiday where they work, and they were not away,
-except for half a day of leave - and only that day: somebody who books a week at a
-time is told about Thursday on Friday morning, and an earlier gap is the business
-of the day it was. A day off against overtime is passed over, though it asks its
-whole target of the balance, because nobody is meant to book on it. Nothing is said
-about a day before the balance begins. The reminder is on until its owner switches
-it off under *My account*, beside the hours after which a running stopwatch is
-mentioned: ten, the most the Working Hours Act allows in a day, unless they choose
-otherwise, and never for zero. A browser that allows it shows a notification as
-well when the stopwatch crosses those hours while the page is open - a phone's
-browser too, because it is shown through the page's service worker, and pressing
-it leads back to the page; one found already past them on loading gets the
-banner alone.
-
-The Android app shows both reminders as notifications of its own, whether it is
-open or not, once the Reminders card under *My account* has asked the phone for
-them. It asks the installation with its token every quarter of an hour and when
-somebody leaves the app, and again at the moment a reminder falls due - the
-stopwatch passing its hours, eight in the morning on the phone's clock for the
-unbooked day - and shows nothing the installation has not just confirmed: a
-stopwatch stopped in the browser in the meantime is not said to be running, and a
-notice is taken back once it stops being true. No push service is involved, so the
-app needs no Google Play services for it.
-
-A phone that is put away dozes, and holds back everything an app could ask in the
-meantime until it wakes, except an exact alarm. Up to Android 13 the app sets one
-without asking; from Android 14 on it can once *Alarms & reminders* is allowed for
-it in the phone's settings, and without that a reminder falling due while the
-phone dozes arrives when it wakes. A stopwatch started in a browser is learnt of
-at the next quarter-hourly check, which a dozing phone holds back as well.
-
-Where the installation pushes reminders - off until somebody who administers it
-switches that on under *Settings* - both reach a browser even while no page of
-it is open, once its owner has chosen *Push the reminders to this browser* under
-*My account*: the stopwatch in the minute its hours pass, the unbooked day at
-eight in the morning on its owner's clock. Each push is encrypted for that
-browser alone and leaves through the push service of the browser's maker;
-signing out of the browser takes it out of the pushes, so whoever uses it next
-is not reminded of somebody else's day. A browser on a computer has to be running
-to be reached - in the background will do - and the push service holds a reminder
-for one that is closed for up to an hour. One that arrives more than a few minutes
-late is asked about again before it is shown, so a stopwatch stopped meanwhile is
-not said to be running, and it takes the notification shown for it before away
-with it.
-
-It is your own balance. Somebody else's is their recorded time, totalled, so it
-takes the same right as reading their entries — which only a manager holds, for the
-accounts assigned to them, and then with every day away told as away, never why. The
-team-wide overview that used to sit beside it is gone, because comparing colleagues
-is the one thing this arrangement says nobody does.
 
 ## Timezones
 
@@ -193,122 +50,51 @@ individual can override it under *My account*. An empty personal setting means
 "follow the instance", which is the normal case — that way changing the
 instance zone moves everyone who has not deliberately opted out.
 
-This is not a display detail. The zone decides which **calendar day** a booking
-falls on, so getting it wrong moves recorded hours between days and quietly
-changes month-end totals. Zones are validated when saved, because a plausible
-but wrong name like `Europe/Munich` would otherwise be stored and then fall
-back to UTC at every use, with nothing on screen to show it.
+This is not a display detail. The zone decides which **calendar day** a moment
+falls on, which is the day a ticket's number is taken from and the day a service
+level's hours are counted in. Zones are validated when saved, because a
+plausible but wrong name like `Europe/Munich` would otherwise be stored and then
+fall back to UTC at every use, with nothing on screen to show it.
 
 The tz database is compiled into the binary (`time/tzdata`), so zones resolve
 identically on a scratch or distroless container with no zoneinfo files of its
 own.
 
-## Your own record of your working time
-
-Hours booked on projects say what the time went on; they do not say when it was
-spent, and since the Federal Labour Court's decision of 13 September 2022 (1 ABR
-22/21) a record of working time in Germany has to show when each day began and
-ended. Under the calendar, *Working time* keeps that: for each day, when it began,
-when it finished and how long its breaks were, as the clock showed them, with what
-that comes to and the hours booked on projects beside it. A day booked
-on with nothing recorded is listed too, so a month with a gap in it shows the gap.
-A stopwatch running on the day offers its start as the day's, and the month leaves
-as a PDF.
-
-It is each person's own record, kept for themselves. There is no view of anybody
-else's working time — not even a manager's, who looks after somebody's hours and
-never their start, end and breaks — so this documents one's own time rather than
-serving as an employer's time-keeping system.
-A night that runs past midnight is recorded as the two days it falls on.
-
-Each day is read against the three limits of the Working Hours Act
-(Arbeitszeitgesetz) that a record of start, end and breaks can show, and a day past
-one says which, in its own column and in the PDF:
-
-| Limit | Section | Marked when |
-| --- | --- | --- |
-| Ten hours a day | § 3 | more than ten hours were worked |
-| Breaks | § 4 | the breaks were shorter than 30 minutes past six hours of work, or 45 past nine |
-| Rest | § 5 | fewer than eleven hours lay between the end of one shift and the start of the next |
-
-A night recorded as the two days it falls on counts as one shift, so eight hours
-from ten at night are a shift that needed a break rather than two short days with
-no rest between them. The marks are notices and never refusals: the act has
-exceptions - a hospital, a harvest, a collective agreement - that this application
-cannot know about, and a record that refused the truth would be a worse record.
-
-## Your days in your own calendar
-
-Under **My account**, *Calendar subscription* makes an address a calendar
-program subscribes to - Outlook, Google Calendar, the calendar on a telephone.
-Every day you booked hours on is a whole day there saying how many, with each
-entry written under it, and every day you recorded yourself away is one saying
-why: the year either side of today, in the language you read the application
-in. Every event is marked free, so booked hours never make you look busy to
-whoever reads your free time.
-
-A calendar program can send nothing but the address, so the key is in the
-address, and that decides the rest:
-
-- **It is a key of its own, not an API token.** It reads your days and nothing
-  else, and never more than you could read on your own screen: it stops
-  answering when your role no longer lets you read your own entries, and while a
-  reset password waits to be chosen. Whatever the reason, it answers 404 and
-  says nothing more.
-- **It is shown once.** Only a hash of it is kept, as with a token. Making a new
-  address takes the old one back at once, and so does removing it - which is
-  what to do if anybody may have seen it. The card says when the address was
-  last read, which is how to tell whether a calendar is reading it at all.
-- **It comes as a code as well.** Beside the address, and as briefly, is a QR
-  code of exactly that address, for the telephone a calendar is usually on:
-  scanned, the address is on the phone without anybody typing it, and is added
-  to the calendar there as a subscribed one. The code is the key as much as the
-  text is, and leaves the screen with it.
-- **It is hidden in the log.** Every reading is logged under its address, so the
-  process log writes `timepulsecal_[hidden]` in place of the key - on the console as
-  well as in the log viewer - and whoever reads the log learns that a calendar
-  was read, not how to read it. Traces and metrics name the route, never the
-  address.
-
-Google Calendar and Outlook on the web fetch the address from their own
-servers, so for them the installation has to be reachable from the internet; a
-calendar on a telephone or a computer fetches it from wherever that device is,
-over a VPN for example. How often it is fetched again is the calendar program's
-choice: the feed asks for every hour, and Google takes up to a day whatever it
-is asked.
-
 ## Everything about you
 
-Under **My account**, *Everything about me* downloads what this installation keeps
-about your account as a ZIP: a JSON file per part - the account, your entries and
-the versions corrections replaced, projects, templates, absences, leave, planned
-weeks, working times, the stopwatch, and the personal tokens, passkeys, sessions,
-calendar address and provider links you have - each an array of rows with the
-columns as they are stored, and `about.json` saying what the archive is. It is the
-right of access and of portability (GDPR articles 15 and 20), open to anybody
-signed in whatever their role lets them do here, and only ever about their own
-account.
+Under **My account**, *Everything about me* downloads what this installation
+keeps about your account as a ZIP: a JSON file per part - the account, the
+tickets you own or are responsible for, the contact you sign in as, the tickets
+you watch, your notifications and the queues you are told about, the articles
+you wrote and the time you noted on tickets, and the personal tokens, passkeys,
+sessions, push subscriptions and provider links you have - each an array of rows
+with the columns as they are stored, and `about.json` saying what the archive
+is. It is the right of access and of portability (GDPR articles 15 and 20), open
+to anybody signed in whatever their role lets them do here, and only ever about
+their own account.
 
-It holds exactly what erasing the account would delete, read from the same list
-of tables, so nothing can be erased that could not have been handed over first.
-What it leaves out is what would be a way in for whoever finds the file: the
-password's hash, the second factor's seed, the hashes of tokens, sessions and the
-calendar address, and a passkey's key material. About those it says that they
-exist, when they were made and when they were last used.
+It holds exactly what erasing the account would delete or release, read from the
+same list of tables, so nothing can be erased that could not have been handed
+over first - and with it the articles and the time, which erasing leaves in the
+tickets because they are the organisation's record. An article is handed over as
+where and when it was written rather than as its text: an answer quotes the
+customer it answers, and the export of one person is not the place for another's
+words. What it leaves out is what would be a way in for whoever finds the file:
+the password's hash, the second factor's seed, the hashes of tokens and
+sessions, and a passkey's key material. About those it says that they exist,
+when they were made and when they were last used.
 
 ## Spreadsheets
 
-Every table that holds something goes out and comes back as a real **.xlsx**
-workbook, from the tab it belongs to: time entries with the date, the person, the
-project, the hours and the description; projects with their period and status;
-accounts with their role and whether the password lives in the directory; roles
-with a column per permission holding yes or no. Names rather than identifiers,
-because a column of user ids is not something anybody can fill in by hand; hours
-as a number, so the column can be totalled in Excel.
+The accounts and the roles go out and come back as a real **.xlsx** workbook,
+from the tab they belong to: accounts with their role and whether the password
+lives in the directory; roles with a column per permission holding yes or no.
+Names rather than identifiers, because a column of ids is not something anybody
+can fill in by hand.
 
 A column per right rather than one cell listing them, which is what makes the
 roles sheet honest. A list in a cell reads well and imports badly: a typo in
-`projects:read, projects:wrote` is a right silently dropped, and nothing about
+`tickets:read, tickets:wrote` is a right silently dropped, and nothing about
 it looks wrong until somebody cannot open a screen. A column is a question with
 two answers, and a heading naming a right this application does not enforce is
 refused by that name — which also catches a file exported from a different
@@ -324,12 +110,9 @@ exported in any of them imports again: the heading row is skipped by position, a
 translated values are recognised in every language.
 
 Not comma-separated text. A CSV is what Excel mangles: the separator depends on the
-machine's locale, dates are re-interpreted on opening, and a description containing
-a semicolon quietly becomes two columns — none of it recoverable once somebody has
+machine's locale, dates are re-interpreted on opening, and a cell containing a
+semicolon quietly becomes two columns — none of it recoverable once somebody has
 saved over the file.
-
-The export follows the filters on screen and the same scoping the entry list uses,
-so it can never show more than the screen did.
 
 The import is **two steps, and all or nothing**:
 
@@ -339,23 +122,17 @@ The import is **two steps, and all or nothing**:
 2. *Import* is only offered when every row can be written, and runs in one
    transaction.
 
-A file half-imported leaves nobody able to say which half, or which entries came
-from it, which is why a single refused row refuses the file. Every row goes through
-the rules the API enforces — by calling them, not by restating them: the same
-validation, the same daily ceiling (counting the file against itself, so forty rows
-on one day are checked together), the same project visibility. A row naming somebody
-else needs the right to book for others.
+A file half-imported leaves nobody able to say which half, or which rows came
+from it, which is why a single refused row refuses the file. Every row goes
+through the rules the API enforces — by calling them, not by restating them.
 
-An import of time entries **creates**; it never updates or replaces, because there is
-no way for it to know which existing entry a row was meant to be. Projects are
-matched by name, so importing the same file twice changes nothing the second time.
 Accounts are matched on the mail address and are **changed**, not created: a new
 account needs a password, and a password that arrives in a spreadsheet is a password
 that gets mailed around. Roles are matched on the name and are both — everything a
 role is fits in a row, so a file can describe one that does not exist yet without
-carrying anything that has no business being in a spreadsheet. The `admin` role is
-the exception the role editor already makes: its rights cannot be changed from a
-cell any more than from the screen.
+carrying anything that has no business being in a spreadsheet. The roles the
+application ships with are the exception the role editor already makes: their
+rights cannot be changed from a cell any more than from the screen.
 
 Why a row was refused is written in the reader's language, like the headings above it
 and the values in it. The reasons are a fixed set, so each one travels as a code with
@@ -366,7 +143,7 @@ sentence assembled on the server in English.
 
 **The logo stands at the left of the bar once somebody has signed in, and
 nowhere else.** The browser tab, the sign-in screen and the installed app's icons
-show TimePulse's own mark whatever is uploaded — decided on 2026-11-18, because
+show QubitDesk's own mark whatever is uploaded — decided on 2026-11-18, because
 those places say which program this is, before anybody has signed in to the
 installation that runs it.
 
@@ -394,32 +171,34 @@ leave it as.
 The choice is remembered per logo. Uploading a different logo forgets it, because
 a selection made against one picture means nothing against another.
 
-**Until a logo is configured, the bar shows a chip with TimePulse's T.** That slot
+**Until a logo is configured, the bar shows a chip with QubitDesk's Q.** That slot
 belongs to whoever runs the installation, and filling it with our mark would make
 an unbranded installation look branded by somebody else, so the chip only stands
-in for a logo. The application's own mark — TimePulse's T and P, a pulse running
-through them and a clock in the P — has its own places: the browser tab, the
-sign-in card, the installer, the installed app's icons, the `.exe`, the Android
-app, and the button beside the title that leads to the welcome screen. It is
-drawn (`internal/interface/web/asset/favicon.svg`) rather than a font character.
+in for a logo. The application's own mark — QubitDesk's Q and D in white on a
+blue tile, the right of the Q's ring the stem of the D, the Q's tail coming to a
+point beneath them and a ticket in its counter — has its own places: the
+browser tab, the sign-in card, the installer, the installed app's icons, the
+`.exe`, the Android app, and the button beside the title that leads to the
+welcome screen. It is drawn (`internal/interface/web/asset/favicon.svg`) rather
+than a font character.
 `go run ./build/icon > build/icon.ico` and
 `go run ./build/icon -favicon > internal/interface/web/asset/favicon.ico` redraw
 the two icon files from the same geometry whenever it changes, and tests fail
 until they have.
 
-**Every installation is called TimePulse, and the title is added to that name.**
-It follows after a bar, as in *TimePulse | htp.net*. The full name appears in the
-header, on the sign-in card, in an authenticator app, on a passkey prompt, at the
-foot of an exported document and in a subscribed calendar. With nothing written,
-the name is *TimePulse* alone. `APP_NAME` names none of these; it is the name the
-framework records traces under.
+**Every installation is called QubitDesk, and the title is added to that
+name.** It follows after a bar, as in *QubitDesk | htp.net*. The full name
+appears in the header, on the sign-in card, in an authenticator app and on a
+passkey prompt. With nothing written, the name is *QubitDesk* alone.
+`APP_NAME` names none of these; it is the name the framework records traces
+under.
 
 **The tab can add something shorter of its own**, under *Browser tab* beside the
 title. The two additions are one until the header's is too long for a tab: a
 browser cuts a tab off after a couple of dozen characters, and somebody has six
-of them open — "TimePulse | Beispiel GmbH & Co. KG" reads as "TimePulse |
-Beispie…" in every one. Left empty, the tab adds what the header adds. It
-translates like the other texts.
+of them open — "QubitDesk | Beispiel GmbH & Co. KG" reads as
+"QubitDesk | Beispie…" in every one. Left empty, the tab adds what the
+header adds. It translates like the other texts.
 
 **A language you have written nothing for follows the base.** The form fills each language
 with the base text so you can see what a reader of it currently gets; leaving
@@ -433,35 +212,19 @@ where you were on the screen.
 
 The server enforces these; the interface merely also hides what is not allowed:
 
-- A time entry belongs to the account it was booked for. Reading, editing, deleting,
-  transferring and totalling it are refused to everybody else — including the account
-  that administers the installation and the combined role — except a manager that
-  account was assigned to, while the installation has managers, and then in the open:
-  the entry names the manager who booked or last changed it. There is no state to
-  travel through and nobody to approve anything: entries were once
-  `open → submitted → approved`, and the role that approved them is gone.
-- No form asks which person. The booking form, the entry filter, the calendar and
-  the overtime form each had a dropdown of colleagues; every one of them held a single
-  name by the end, and a question with one answer is not a question. A manager has
-  one choice instead, under *Whose time*, which turns every screen at once and lists
-  only the accounts assigned to them.
-- Hours are booked only onto **active** projects, whichever way they get there:
-  booking, transferring, or editing an entry onto one.
-- The personal daily maximum applies, falling back to `MAX_DAILY_HOURS`.
-- Archiving requires a completed project with no open entries left.
-- A project that still has time entries cannot be deleted.
 - Email addresses are unique.
-- The built-in administrator cannot be deleted or stripped of administration.
-- A system role cannot be deleted or renamed, and its permissions cannot be changed —
-  in either direction. Its description can.
+- The built-in administrator cannot be deleted, and keeps a role that can still
+  administer.
+- No role the application ships with can be deleted, renamed or changed — not its
+  rights, in either direction, and not its description. The `admin` role is the
+  system role on top of that, the one that always administers.
 - A role has to grant at least one permission. One that grants nothing can be assigned,
   and whoever holds it signs in to an interface with nothing on it, which reads as a
   broken installation rather than as a decision.
 - A role still assigned to someone cannot be deleted.
-- A project is invisible to everyone but its owner, and asking for one that is not
-  yours answers `404` rather than `403`.
-- A correction keeps what the entry said before it, every time something in it
-  changes, and only the entry's owner and a manager assigned to them can read that
-  history - anybody else is told the entry is not there. A version a manager's
-  correction replaced names the manager. A save that changes nothing keeps nothing, and deleting an
-  entry deletes its history with it.
+- The role the directory hands to every account it brings in cannot be one that
+  administers the installation.
+- Deleting an account that owns unfinished tickets has to be confirmed, and the
+  refusal says how many. The tickets stay, without an owner.
+- An account the directory keeps cannot be renamed, readdressed or deleted here; the
+  directory decides who it is, and only its role is this installation's to choose.

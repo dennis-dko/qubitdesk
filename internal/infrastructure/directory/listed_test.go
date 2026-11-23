@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-ldap/ldap/v3"
 
-	appservice "github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	appservice "github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // An entry without a mail address is listed by its identifier.
@@ -24,7 +24,7 @@ import (
 func TestAnEntryWithoutAnAddressIsListedByItsIdentifier(t *testing.T) {
 	config := model.LDAPConfig{
 		EmailAttribute: "mail", IDAttribute: "entryUUID", NameAttribute: "cn",
-		DefaultRole: model.RoleUser,
+		DefaultRole: model.RoleAgent,
 	}
 
 	entries := []*ldap.Entry{
@@ -40,8 +40,8 @@ func TestAnEntryWithoutAnAddressIsListedByItsIdentifier(t *testing.T) {
 	}
 
 	want := []appservice.ExternalUser{
-		{ID: "a-1", Email: "alice@example.com", Name: "Alice", Role: model.RoleUser},
-		{ID: "c-1", Name: "Carol", Role: model.RoleUser},
+		{ID: "a-1", Email: "alice@example.com", Name: "Alice", Role: model.RoleAgent},
+		{ID: "c-1", Name: "Carol", Role: model.RoleAgent},
 	}
 
 	if got := listed(entries, config); !slices.Equal(got, want) {

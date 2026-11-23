@@ -9,8 +9,8 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // OpenIDCallbackPath is where a provider sends the browser back to. Not an API
@@ -24,9 +24,9 @@ const OpenIDCallbackPath = "/sign-in/openid"
 // Without it a code is finished by whoever presents it: somebody who began a
 // round, signed in at the provider as themselves and sent the address they came
 // back with to somebody else would have that person's browser signed in as them -
-// and everything that person then booked would be booked in an account they do
+// and everything that person then wrote would be written in an account they do
 // not own.
-const openIDCookieName = "timepulse_openid"
+const openIDCookieName = "qubitdesk_openid"
 
 // openIDCookiePath confines the cookie to the one request that reads it.
 const openIDCookiePath = "/api/v1/auth/openid"

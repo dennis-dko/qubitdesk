@@ -10,7 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // SecurityHeaders sets the response headers that a browser needs in order to
@@ -50,8 +51,8 @@ func SecurityHeaders(hstsMaxAge time.Duration) func(http.Handler) http.Handler {
 			// The application needs none of these, so they are switched off.
 			header.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()")
 
-			// Responses carry working time and personal data; a shared cache
-			// must never keep them.
+			// Responses carry tickets and personal data; a shared cache must
+			// never keep them.
 			if strings.HasPrefix(r.URL.Path, "/api/") {
 				header.Set("Cache-Control", "no-store")
 				header.Set("Pragma", "no-cache")
@@ -294,7 +295,7 @@ func (l *RateLimiter) guards(r *http.Request) bool {
 		return true
 	}
 
-	// The ticket sign-in as well: it checks a second factor as a password
+	// The Kerberos sign-in as well: it checks a second factor as a password
 	// sign-in does, and a code is guessed at the same speed through either. Its
 	// GET only says whether it is on offer, and every sign-in screen asks.
 	if strings.HasSuffix(r.URL.Path, "/auth/kerberos") && r.Method == http.MethodPost {
@@ -404,6 +405,10 @@ func (l *RateLimiter) clientKey(r *http.Request) string {
 const (
 	maxRequestBody = 2 << 20
 	maxImportBody  = 32 << 20
+
+	// maxAttachmentBody is one file and the few lines of the form around it;
+	// the bound on the file itself is the domain's, model.MaxAttachmentBytes.
+	maxAttachmentBody = model.MaxAttachmentBytes + 64<<10
 )
 
 // LimitRequestBody refuses a body larger than the endpoint has any use for.
@@ -421,6 +426,10 @@ func LimitRequestBody() func(http.Handler) http.Handler {
 			allowed := int64(maxRequestBody)
 			if strings.HasSuffix(r.URL.Path, "/import") {
 				allowed = maxImportBody
+			}
+
+			if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/attachments") {
+				allowed = maxAttachmentBody
 			}
 
 			if r.ContentLength > allowed {

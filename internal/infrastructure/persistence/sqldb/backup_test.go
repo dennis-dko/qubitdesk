@@ -5,13 +5,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/migration"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/migration"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
 )
 
 // newestMigration is the schema the test databases are at.
@@ -25,14 +26,16 @@ func newestMigration() int64 {
 }
 
 // filled is a database with something of each kind a backup has to carry: an
-// id, text, a number of hours, a moment, a boolean, bytes and a NULL.
+// id, text, a number, a moment, a boolean, bytes and a NULL - an account, a
+// ticket it owns with the article it was opened with and the minutes noted
+// there, a passkey and two settings.
 func filled(t *testing.T) (*sql.DB, *model.User) {
 	t.Helper()
 
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	role, err := sqldb.NewRoleRepository(db, sqldb.DialectSQLite).GetByName(ctx, model.RoleUser)
+	role, err := sqldb.NewRoleRepository(db, sqldb.DialectSQLite).GetByName(ctx, model.RoleAgent)
 	if err != nil {
 		t.Fatalf("read seeded role: %v", err)
 	}
@@ -44,21 +47,31 @@ func filled(t *testing.T) (*sql.DB, *model.User) {
 		t.Fatalf("create user: %v", err)
 	}
 
-	project, err := sqldb.NewProjectRepository(db, sqldb.DialectSQLite).Save(ctx, &model.Project{
-		Name: "Portal", StartDate: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Status: model.ProjectStatusActive,
-		OwnerID: &wera.ID,
-	})
-	if err != nil {
-		t.Fatalf("create project: %v", err)
+	var queue, state, priority, kind uint
+
+	for _, read := range []struct {
+		into  *uint
+		query string
+	}{
+		{&queue, "SELECT id FROM queues WHERE name = 'Service Desk'"},
+		{&state, "SELECT id FROM ticket_states WHERE name = 'open'"},
+		{&priority, "SELECT id FROM ticket_priorities WHERE name = 'normal'"},
+		{&kind, "SELECT id FROM ticket_types WHERE name = 'unclassified'"},
+	} {
+		if err := db.QueryRow(read.query).Scan(read.into); err != nil {
+			t.Fatalf("%s: %v", read.query, err)
+		}
 	}
 
-	ticket := "Ticket 4711"
+	at := time.Date(2026, 11, 19, 8, 30, 0, 0, time.UTC)
 
-	if _, err := sqldb.NewTimesheetRepository(db, sqldb.DialectSQLite).Save(ctx, &model.Timesheet{
-		UserID: wera.ID, ProjectID: &project.ID, Date: time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC),
-		DurationHours: 2.75, Description: &ticket,
-	}); err != nil {
-		t.Fatalf("book: %v", err)
+	if _, err := sqldb.NewTicketRepository(db, sqldb.DialectSQLite).Create(ctx, &model.Ticket{
+		Title: "Printer jams", QueueID: queue, StateID: state, PriorityID: priority, TypeID: kind,
+		OwnerID: &wera.ID, Channel: model.ChannelPhone, CreatedAt: at, UpdatedAt: at,
+	}, &model.Article{
+		Sender: model.SenderAgent, Channel: model.ChannelPhone, Body: "It jams at page two.", CreatedAt: at,
+	}, 15, func(id uint) string { return fmt.Sprintf("20261119%08d", id) }); err != nil {
+		t.Fatalf("open a ticket: %v", err)
 	}
 
 	if _, err := sqldb.NewPasskeyRepository(db, sqldb.DialectSQLite).Save(ctx, &model.Passkey{
@@ -100,8 +113,9 @@ func dumped(t *testing.T, db *sql.DB) *bytes.Buffer {
 }
 
 // A backup restored into a database the migrations have just made holds what
-// the original held: the accounts, the hours to the minute, the moments, the
-// booleans, the bytes - and the ids, which everything else points at.
+// the original held: the accounts, the tickets and what was written in them, the
+// moments, the booleans, the bytes - and the ids, which everything else points
+// at.
 func TestABackupRestoresWhatWasBackedUp(t *testing.T) {
 	original, wera := filled(t)
 	backup := dumped(t, original)
@@ -127,15 +141,32 @@ func TestABackupRestoresWhatWasBackedUp(t *testing.T) {
 		t.Errorf("the account came back as %+v, want id %d, Wera, must change her password", back, wera.ID)
 	}
 
-	entries, err := sqldb.NewTimesheetRepository(restored, sqldb.DialectSQLite).GetAll(ctx)
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("the entries came back as %v, %v; want one", entries, err)
+	tickets := sqldb.NewTicketRepository(restored, sqldb.DialectSQLite)
+
+	var id uint
+
+	if err := restored.QueryRow("SELECT id FROM tickets").Scan(&id); err != nil {
+		t.Fatalf("the ticket did not come back: %v", err)
 	}
 
-	if e := entries[0]; e.UserID != wera.ID || e.DurationHours != 2.75 || e.Description == nil ||
-		*e.Description != "Ticket 4711" ||
-		!e.Date.Equal(time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC)) || e.ProjectID == nil {
-		t.Errorf("the entry came back as %+v", e)
+	ticket, err := tickets.GetByID(ctx, id)
+	if err != nil {
+		t.Fatalf("the ticket came back unreadable: %v", err)
+	}
+
+	if ticket.Title != "Printer jams" || ticket.OwnerID == nil || *ticket.OwnerID != wera.ID ||
+		ticket.Locked || ticket.PendingUntil != nil ||
+		!ticket.CreatedAt.Equal(time.Date(2026, 11, 19, 8, 30, 0, 0, time.UTC)) {
+		t.Errorf("the ticket came back as %+v", ticket)
+	}
+
+	articles, err := tickets.Articles(ctx, ticket.ID)
+	if err != nil || len(articles) != 1 || articles[0].Body != "It jams at page two." {
+		t.Errorf("the ticket's articles came back as %+v, %v", articles, err)
+	}
+
+	if minutes, err := tickets.AccountedMinutes(ctx, ticket.ID); err != nil || minutes != 15 {
+		t.Errorf("the ticket came back with %d minutes noted (%v), want 15", minutes, err)
 	}
 
 	keys, err := sqldb.NewPasskeyRepository(restored, sqldb.DialectSQLite).GetByUser(ctx, wera.ID)
@@ -156,7 +187,7 @@ func TestABackupRestoresWhatWasBackedUp(t *testing.T) {
 	}
 
 	// And the next account gets an id of its own rather than one the restore wrote.
-	role, _ := sqldb.NewRoleRepository(restored, sqldb.DialectSQLite).GetByName(ctx, model.RoleUser)
+	role, _ := sqldb.NewRoleRepository(restored, sqldb.DialectSQLite).GetByName(ctx, model.RoleAgent)
 
 	next, err := sqldb.NewUserRepository(restored, sqldb.DialectSQLite).Save(ctx, &model.User{
 		Name: "Next", Email: "next@example.com", RoleID: role.ID,
@@ -244,7 +275,7 @@ func TestABackupIsReadWholeBeforeItIsRestored(t *testing.T) {
 	original, _ := filled(t)
 
 	if _, err := original.Exec("INSERT INTO settings (key_name, value, updated_at) VALUES (?, ?, ?)",
-		model.SettingSecretKeyCheck, "timepulse.v1:as-it-was-kept", time.Now()); err != nil {
+		model.SettingSecretKeyCheck, "qubitdesk.v1:as-it-was-kept", time.Now()); err != nil {
 		t.Fatalf("keeping a key check: %v", err)
 	}
 
@@ -252,7 +283,7 @@ func TestABackupIsReadWholeBeforeItIsRestored(t *testing.T) {
 
 	contents, err := sqldb.InspectBackup(strings.NewReader(backup), newestMigration())
 	if err != nil || contents.Tables != len(sqldb.BackupTables) || contents.Rows == 0 ||
-		contents.KeyCheck != "timepulse.v1:as-it-was-kept" {
+		contents.KeyCheck != "qubitdesk.v1:as-it-was-kept" {
 		t.Fatalf("the whole backup reads as %+v (%v), want every table, its rows and the key check", contents, err)
 	}
 
@@ -306,5 +337,67 @@ func TestABackupIsDescribedOnOneLine(t *testing.T) {
 
 	if !strings.Contains(said, "v1.0.0") || !strings.Contains(said, "2026-11-19T21:00:00Z") {
 		t.Errorf("a backup is described as %q, without its release or its moment", said)
+	}
+}
+
+// A row pointing at a later row of its own table comes back pointing at it.
+//
+// A restore inserts each table after every table it points at, and its rows in
+// the order the backup holds them. Three tables point at themselves - a queue
+// and a category at the one they are filed under, a waiting state at the state
+// it moves a ticket on to - and each can point at a row made after it: a queue
+// or a category moved under a newer one, a closing state added later and named
+// as where a waiting state goes. Inserted as it stood, such a row names an id not there yet, which a
+// database enforcing its keys refuses - PostgreSQL always, SQLite on a
+// connection that asks, as this one does - and the whole restore with it.
+func TestARowPointingAtALaterOneOfItsOwnTableIsRestored(t *testing.T) {
+	original, _ := filled(t)
+
+	for _, statement := range []string{
+		"INSERT INTO queues (name, signature, auto_reply, follow_up) VALUES ('Printer desk', '', '', 'reopen')",
+		"INSERT INTO queues (name, signature, auto_reply, follow_up) VALUES ('Hardware desk', '', '', 'reopen')",
+		"UPDATE queues SET parent_id = (SELECT id FROM queues WHERE name = 'Hardware desk') " +
+			"WHERE name = 'Printer desk'",
+		"INSERT INTO faq_categories (name) VALUES ('Printers')",
+		"INSERT INTO faq_categories (name) VALUES ('Hardware')",
+		"UPDATE faq_categories SET parent_id = (SELECT id FROM faq_categories WHERE name = 'Hardware') " +
+			"WHERE name = 'Printers'",
+		"INSERT INTO ticket_states (name, state_type) VALUES ('closed by the night', 'closed')",
+		"UPDATE ticket_states SET next_state_id = (SELECT id FROM ticket_states WHERE name = 'closed by the night') " +
+			"WHERE state_type = 'pending-auto'",
+	} {
+		if _, err := original.Exec(statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+
+	backup := dumped(t, original)
+
+	restored := newTestDBWithKeys(t)
+	ctx := context.Background()
+
+	if _, err := sqldb.Restore(ctx, restored, sqldb.DialectSQLite, newestMigration(), backup, nil); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	var desk string
+
+	if err := restored.QueryRow("SELECT p.name FROM queues q JOIN queues p ON p.id = q.parent_id " +
+		"WHERE q.name = 'Printer desk'").Scan(&desk); err != nil || desk != "Hardware desk" {
+		t.Errorf("the Printer desk came back under %q (%v), want the Hardware desk", desk, err)
+	}
+
+	var parent string
+
+	if err := restored.QueryRow("SELECT p.name FROM faq_categories c JOIN faq_categories p ON p.id = c.parent_id " +
+		"WHERE c.name = 'Printers'").Scan(&parent); err != nil || parent != "Hardware" {
+		t.Errorf("Printers came back under %q (%v), want Hardware", parent, err)
+	}
+
+	var next string
+
+	if err := restored.QueryRow("SELECT n.name FROM ticket_states s JOIN ticket_states n ON n.id = s.next_state_id " +
+		"WHERE s.state_type = 'pending-auto'").Scan(&next); err != nil || next != "closed by the night" {
+		t.Errorf("the waiting state came back moving tickets on to %q (%v), want the later state", next, err)
 	}
 }

@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/command"
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/command"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // These tests all guard one property: an account is recognised by the
@@ -297,7 +297,7 @@ func newSessionFixture(t *testing.T, directoryUser *service.ExternalUser) (*fixt
 	f := newFixture(t)
 	sessions := service.NewSessionService(f.userRepo, f.roleRepo, newStubSessions(),
 		f.auth, time.Hour).
-		WithExternalAuth(&fakeAuthenticator{user: directoryUser}, model.RoleUser)
+		WithExternalAuth(&fakeAuthenticator{user: directoryUser}, model.RoleAgent)
 
 	return f, sessions
 }
@@ -393,7 +393,8 @@ func TestSignInAfterARenameKeepsTheSameAccount(t *testing.T) {
 // The address found an account recording another entry's identifier, and the
 // sign-in took it over and wrote the newcomer's identifier into it: measured with
 // a probe against a real directory, the successor landed in the predecessor's
-// hours and projects. A run reads the same pair as a departure and an arrival.
+// account and everything it had done. A run reads the same pair as a departure
+// and an arrival.
 // The refusal covers anybody who can write an entry with somebody else's address
 // into the directory as well, which is the same act done on purpose.
 func TestAMailboxPassedOnDoesNotPassTheAccountOnWithIt(t *testing.T) {
@@ -507,7 +508,8 @@ func TestADirectoryEntryCannotClaimARoleEditorsAccount(t *testing.T) {
 		ID: "uuid-intruder", Email: "editor@example.com",
 	})
 
-	localUserWithRole(t, f, "editor@example.com", model.RoleUserAdmin)
+	customRole(t, f, "role-editor", model.PermRoleRead, model.PermRoleWrite)
+	localUserWithRole(t, f, "editor@example.com", "role-editor")
 
 	if _, err := sessions.Login(context.Background(), "editor@example.com", "anything", ""); err == nil {
 		t.Fatal("the directory signed in as somebody who can grant themselves the installation")
@@ -536,7 +538,7 @@ func TestAnOrdinaryLocalAccountIsStillAdoptedByTheDirectory(t *testing.T) {
 		ID: "uuid-staff", Email: "worker@example.com",
 	})
 
-	existing := localUserWithRole(t, f, "worker@example.com", model.RoleUser)
+	existing := localUserWithRole(t, f, "worker@example.com", model.RoleAgent)
 
 	if _, err := sessions.Login(context.Background(), "worker@example.com", "anything", ""); err != nil {
 		t.Fatalf("an ordinary account should migrate to the directory: %v", err)

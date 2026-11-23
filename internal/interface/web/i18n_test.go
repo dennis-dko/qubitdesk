@@ -10,7 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // The interface is written in English and every other language is a dictionary
@@ -34,9 +35,8 @@ func asset(t *testing.T, path string) string {
 
 // otherReaders are the parts of each dictionary the page does not read, each
 // held to its readers by tests of their own: the installer's, the Android
-// app's, the workbooks', the calendar feed's, the demo data's, and the i18n
-// package's own figures and days.
-var otherReaders = []string{"installer.", "mobile.", "workbook.", "calendarFeed.", "demo.", "number.", "layout."}
+// app's, the workbooks', and the i18n package's own figures and days.
+var otherReaders = []string{"installer.", "mobile.", "workbook.", "demo.", "number.", "layout."}
 
 // dictionaries are what the page says in each language but English, by
 // language: the files the binary carries and hands the page, with the keys the
@@ -58,14 +58,15 @@ func dictionaries(t *testing.T) map[string]map[string]string {
 		out[language] = words
 	}
 
-	if len(out["de"]) < 1000 {
+	if len(out["de"]) < 800 {
 		t.Fatalf("the German dictionary holds %d of the page's sentences; it is not being read", len(out["de"]))
 	}
 
 	return out
 }
 
-// codeKeys collects every translation key the script looks up through t().
+// codeKeys collects every translation key the script looks up through t(), and
+// every one it writes into an element it builds.
 //
 // The markup is only half the interface. Everything rendered from JavaScript -
 // every toast, the guided tour, the setup wizard, the status lines - names its
@@ -78,14 +79,24 @@ func dictionaries(t *testing.T) map[string]map[string]string {
 // argument values as untranslated keys.
 var codeKeyPattern = regexp.MustCompile(`(?:^|[^A-Za-z0-9_$.])t\('([^']+)'\s*,`)
 
+// scriptAttributeKeyPattern finds a key the script writes into an element it
+// builds, as the markup would: el('button', { 'data-i18n': 'wb.import' }). The
+// element is translated with the markup's own, so the key is never handed to
+// t() and codeKeyPattern cannot see it. The spreadsheet card is built this way,
+// and its keys went unchecked in both directions once the one card that also
+// named them in the markup was gone.
+var scriptAttributeKeyPattern = regexp.MustCompile(`'data-i18n(?:-placeholder|-aria)?':\s*'([^']+)'`)
+
 func codeKeys(t *testing.T) []string {
 	t.Helper()
 
 	code := asset(t, "/app.js")
 
 	seen := map[string]bool{}
-	for _, m := range codeKeyPattern.FindAllStringSubmatch(code, -1) {
-		seen[m[1]] = true
+	for _, pattern := range []*regexp.Regexp{codeKeyPattern, scriptAttributeKeyPattern} {
+		for _, m := range pattern.FindAllStringSubmatch(code, -1) {
+			seen[m[1]] = true
+		}
 	}
 
 	keys := make([]string, 0, len(seen))
@@ -223,6 +234,7 @@ func TestNoTranslationIsUnused(t *testing.T) {
 	dicts := dictionaries(t)
 	js := asset(t, "/app.js")
 	html := asset(t, "/")
+	looked := codeKeys(t)
 
 	for language, dict := range dicts {
 		if language == "en" {
@@ -238,6 +250,10 @@ func TestNoTranslationIsUnused(t *testing.T) {
 			// the message the screen is actually showing rather than the one the
 			// markup was written with.
 			if strings.Contains(html, `"`+key+`"`) || strings.Contains(js, `t('`+key+`',`) {
+				continue
+			}
+
+			if slices.Contains(looked, key) {
 				continue
 			}
 
@@ -275,11 +291,56 @@ func TestNoTranslationIsUnused(t *testing.T) {
 				}
 			}
 
-			// And the project states, looked up as t(`status.${status}`) from
-			// whatever the server sent. TestEveryProjectStateIsNamed checks these
-			// against the model.
+			// The ticket states, priorities and types, looked up as
+			// t(`status.${status}`) and the like from whatever the server sent, the
+			// types a state can have, what an answer to a closed ticket does and how
+			// far a role reaches into a queue.
+			// TestEveryShippedValueAndStateTypeIsNamedInBothLanguages holds all of
+			// them to what ships and what the server knows.
 			if state, isState := strings.CutPrefix(key, "status."); isState {
-				if _, known := projectStates(t)[state]; known {
+				if _, known := ticketStates(t)[state]; known {
+					continue
+				}
+			}
+
+			if name, isPriority := strings.CutPrefix(key, "priority."); isPriority {
+				if _, known := shippedPriorities(t)[name]; known {
+					continue
+				}
+			}
+
+			if name, isType := strings.CutPrefix(key, "tickettype."); isType {
+				if _, known := shippedTicketTypes(t)[name]; known {
+					continue
+				}
+			}
+
+			// And the general catalog's, looked up as t(`catalogvalue.${name}`) and
+			// t(`catalogclass.${class}`) from what the server sent.
+			if name, isValue := strings.CutPrefix(key, "catalogvalue."); isValue {
+				if _, known := shippedCatalogValues(t)[name]; known {
+					continue
+				}
+			}
+
+			if class, isClass := strings.CutPrefix(key, "catalogclass."); isClass {
+				if _, known := shippedCatalogClasses(t)[class]; known {
+					continue
+				}
+			}
+
+			// The rest of the families the script names from a table of its own,
+			// looked up as t(`statetype.${type}`) and the like from what the server
+			// lists - see tableWords.
+			if prefix, word, family := strings.Cut(key, "."); family && slices.Contains(tableWords()[prefix+"."], word) {
+				continue
+			}
+
+			// What an option of the system configuration does, looked up as
+			// t(`sysconfig.${option.name}`) from the listing the server sent.
+			// TestEveryConfigOptionIsDescribedInGerman holds them to the options.
+			if name, isOption := strings.CutPrefix(key, "sysconfig."); isOption {
+				if _, known := model.ConfigOptionNamed(name); known {
 					continue
 				}
 			}

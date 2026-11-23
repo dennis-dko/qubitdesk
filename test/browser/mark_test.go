@@ -52,7 +52,7 @@ func TestAnInstallationWithNoLogoStillHasAMark(t *testing.T) {
 	}
 
 	// The placeholder is not that drawing. It is a lettered chip, and the letter
-	// is TimePulse's T - see TestTheLetteredMarkIsTimePulsesT.
+	// is QubitDesk's Q - see TestTheLetteredMarkIsQubitDesksQ.
 	if strings.Contains(uses, `"initial":""`) {
 		t.Errorf("the logo slot holds no initial: %s", uses)
 	}
@@ -71,7 +71,7 @@ func TestAnInstallationWithNoLogoStillHasAMark(t *testing.T) {
 	p.run("configure a logo", chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map((c) => c.trim())
-				.find((c) => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find((c) => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const res = await fetch('/api/v1/settings/branding', {
 				method: 'PUT',
@@ -98,13 +98,13 @@ func TestAnInstallationWithNoLogoStillHasAMark(t *testing.T) {
 	}
 }
 
-// The sign-in screen shows TimePulse's mark, drawn from the figures the tab's is.
+// The sign-in screen shows QubitDesk's mark, drawn from the figures the tab's is.
 //
 // It showed the installation's logo where one had been uploaded, and a lettered
 // chip where none had. The maintainer decided the sign-in card is the
 // application's, like the tab: what an installation uploads stands at the left of
 // the bar once somebody has signed in.
-func TestTheSignInScreenShowsTimePulsesMark(t *testing.T) {
+func TestTheSignInScreenShowsQubitDesksMark(t *testing.T) {
 	t.Parallel()
 
 	p := open(t)
@@ -124,15 +124,16 @@ func TestTheSignInScreenShowsTimePulsesMark(t *testing.T) {
 	}
 }
 
-// The lettered mark carries TimePulse's T, whatever an installation adds to the
-// name.
+// The lettered mark carries QubitDesk's Q, whatever an installation adds
+// to the name.
 //
 // It carried the first letter of the configured title, which was the whole name
-// until every installation came to be called TimePulse and the title became what
-// follows it. An installation that added htp.net then wore an H beside a bar
-// reading TimePulse | htp.net: a letter of the addition standing in for the whole
-// name. The maintainer asked for the T.
-func TestTheLetteredMarkIsTimePulsesT(t *testing.T) {
+// until every installation came to be called QubitDesk and the title
+// became what follows it. An installation that added htp.net then wore an H
+// beside a bar reading QubitDesk | htp.net: a letter of the addition
+// standing in for the whole name. The name's own initial stands there instead,
+// as the time recording this was cloned from has its own.
+func TestTheLetteredMarkIsQubitDesksQ(t *testing.T) {
 	t.Parallel()
 
 	p := open(t)
@@ -143,7 +144,7 @@ func TestTheLetteredMarkIsTimePulsesT(t *testing.T) {
 	p.run("add to the name", chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map((c) => c.trim())
-				.find((c) => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find((c) => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const res = await fetch('/api/v1/settings/branding', {
 				method: 'PUT',
@@ -161,11 +162,11 @@ func TestTheLetteredMarkIsTimePulsesT(t *testing.T) {
 		t.Fatalf("the addition was not accepted (%s), so this case is about to prove nothing", saved)
 	}
 
-	if title := p.text("#app-title-text"); title != "TimePulse | htp.net" {
+	if title := p.text("#app-title-text"); title != "QubitDesk | htp.net" {
 		t.Fatalf("the bar reads %q, so the addition has not arrived and the letter proves nothing", title)
 	}
 
-	if letter := p.text("#brand-initial"); letter != "T" {
-		t.Errorf("the chip carries %q beside TimePulse | htp.net, want TimePulse's T", letter)
+	if letter := p.text("#brand-initial"); letter != "Q" {
+		t.Errorf("the chip carries %q beside QubitDesk | htp.net, want QubitDesk's Q", letter)
 	}
 }

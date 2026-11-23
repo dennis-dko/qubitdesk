@@ -33,7 +33,7 @@ func TestAFirstSignInAdoptsTheBrowsersZoneAndLanguage(t *testing.T) {
 	p.run("move the instance to another zone", chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 			await fetch('/api/v1/settings/timezone', {
 				method: 'PUT', credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
@@ -73,7 +73,7 @@ func TestAFirstSignInAdoptsTheBrowsersZoneAndLanguage(t *testing.T) {
 	p.run("follow the instance again", chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 			await fetch('/api/v1/me/timezone', {
 				method: 'PUT', credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
@@ -160,7 +160,7 @@ func TestFollowingTheInstanceZoneNamesTheInstanceZone(t *testing.T) {
 	p.run("set the instance zone", chromedp.Evaluate(fmt.Sprintf(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const r = await fetch('/api/v1/settings/timezone', {
 				method: 'PUT',
@@ -181,7 +181,7 @@ func TestFollowingTheInstanceZoneNamesTheInstanceZone(t *testing.T) {
 	p.reload()
 
 	p.run("open My account", p.click(`.tab[data-view="settings"]`),
-		p.click(`#settings-tabs [data-card-tab="work"]`),
+		p.click(`#settings-tabs [data-card-tab="general"]`),
 		chromedp.WaitVisible("#my-timezone", chromedp.ByID))
 
 	// Straight to a chosen zone rather than checking the untouched state first.

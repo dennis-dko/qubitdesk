@@ -12,7 +12,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // A configured text may carry a date that stays current and a link that works.
@@ -128,13 +128,13 @@ func (p *page) setBrandingText(t *testing.T, field, value string) {
 	p.run("store "+field, chromedp.Evaluate(fmt.Sprintf(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const r = await fetch('/api/v1/settings/branding', {
 				method: 'PUT',
 				credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-				body: JSON.stringify({ title: 'Zeiterfassung', %s: %q }),
+				body: JSON.stringify({ title: 'Ticketsystem', %s: %q }),
 			});
 
 			return String(r.status);
@@ -191,7 +191,7 @@ func TestTheConfiguredTextsFollowTheReadersLanguage(t *testing.T) {
 
 	p.chooseLanguage("de")
 
-	p.waitForText(`.tab[data-view="timesheets"]`, "Zeiteinträge")
+	p.waitForText(`.tab[data-view="settings"]`, "Mein Konto")
 
 	// And the banner follows, without asking the server again or reloading.
 	p.waitForText("#instance-banner", "Betriebsausflug")
@@ -227,7 +227,7 @@ func TestALanguageWithNoTextsFallsBackRatherThanEmptying(t *testing.T) {
 
 	p.chooseLanguage("de")
 
-	p.waitForText(`.tab[data-view="timesheets"]`, "Zeiteinträge")
+	p.waitForText(`.tab[data-view="settings"]`, "Mein Konto")
 
 	if got := p.text("#instance-banner"); !strings.Contains(got, "One banner") {
 		t.Errorf("a German reader is shown %q where nothing German was written; "+
@@ -235,7 +235,7 @@ func TestALanguageWithNoTextsFallsBackRatherThanEmptying(t *testing.T) {
 	}
 }
 
-// The wizard asks in both languages for what the installation adds to TimePulse.
+// The wizard asks in both languages for what the installation adds to QubitDesk.
 //
 // It is the first thing an administrator meets and the one step that exists to
 // name the installation - so a company working in two languages should not have
@@ -282,25 +282,25 @@ func TestTheWizardTakesTheTitleInBothLanguages(t *testing.T) {
 
 	// Stored, told apart by language, and added to the name rather than put in
 	// its place: the reader is on English here.
-	p.waitForText("#app-title", "TimePulse | Beispiel Ltd")
+	p.waitForText("#app-title", "QubitDesk | Beispiel Ltd")
 
 	p.chooseLanguage("de")
 
-	p.waitForText("#app-title", "TimePulse | Beispiel GmbH")
+	p.waitForText("#app-title", "QubitDesk | Beispiel GmbH")
 }
 
-// The tab can add something of its own to TimePulse, separately from the header.
+// The tab can add something of its own to QubitDesk, separately from the header.
 //
 // They were one field, which holds until the header's addition is too long for
 // a tab: a browser gives a tab a couple of dozen characters and somebody has
-// six of them open, so "TimePulse | Beispiel GmbH & Co. KG" reads as
-// "TimePulse | Beispie…" in every one of them.
+// six of them open, so "QubitDesk | Beispiel GmbH & Co. KG" reads as
+// "QubitDesk | Beispie…" in every one of them.
 func TestTheBrowserTabCanBeNamedSeparately(t *testing.T) {
 	t.Parallel()
 
 	const (
-		header = "TimePulse | Beispiel GmbH & Co. KG"
-		tab    = "TimePulse | Beispiel"
+		header = "QubitDesk | Beispiel GmbH & Co. KG"
+		tab    = "QubitDesk | Beispiel"
 	)
 
 	p := open(t)

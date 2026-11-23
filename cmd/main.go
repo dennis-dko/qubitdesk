@@ -16,7 +16,7 @@ import (
 	// on zoneinfo files being present on the host, which a scratch or distroless
 	// container has none of - and the binary is meant to be self-contained. The
 	// cost is a few hundred kilobytes; the alternative is every zone silently
-	// resolving to UTC and bookings landing on the wrong day.
+	// resolving to UTC and every moment shown in the wrong one.
 	_ "time/tzdata"
 
 	"gofr.dev/pkg/gofr"
@@ -25,27 +25,27 @@ import (
 	gofrmigration "gofr.dev/pkg/gofr/migration"
 	"modernc.org/sqlite"
 
-	appservice "github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	domainservice "github.com/dennis-dko/timepulse/internal/domain/service"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/announce"
-	appconfig "github.com/dennis-dko/timepulse/internal/infrastructure/config"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/directory"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/imageupdate"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/kerberos"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/logsink"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/openid"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/migration"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/selfupdate"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/tlsserver"
-	v1 "github.com/dennis-dko/timepulse/internal/interface/api/v1"
-	"github.com/dennis-dko/timepulse/internal/interface/api/v1/rest"
-	"github.com/dennis-dko/timepulse/internal/interface/installer"
-	"github.com/dennis-dko/timepulse/internal/interface/web"
-	"github.com/dennis-dko/timepulse/internal/support/backup"
-	"github.com/dennis-dko/timepulse/internal/support/hosting"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	appservice "github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	domainservice "github.com/dennis-dko/qubitdesk/internal/domain/service"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/announce"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/directory"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/imageupdate"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/kerberos"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/logsink"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/openid"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/migration"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/selfupdate"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/tlsserver"
+	v1 "github.com/dennis-dko/qubitdesk/internal/interface/api/v1"
+	"github.com/dennis-dko/qubitdesk/internal/interface/api/v1/rest"
+	"github.com/dennis-dko/qubitdesk/internal/interface/installer"
+	"github.com/dennis-dko/qubitdesk/internal/interface/web"
+	"github.com/dennis-dko/qubitdesk/internal/support/backup"
+	"github.com/dennis-dko/qubitdesk/internal/support/hosting"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=...".
@@ -273,17 +273,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// The terminal client began as this binary's track command and is gone now,
-	// and the command line that started it is answered rather than ignored: an
-	// argument this binary does not know is passed over and the server starts, so
-	// a script still following the old instructions would serve an installer and
-	// print a setup token instead of booking an hour.
-	if len(os.Args) > 1 && os.Args[1] == "track" {
-		_, _ = fmt.Fprintln(os.Stderr, "there is no terminal client any more: "+
-			"book in the web interface, or in the Android app from the release this installation runs")
-		os.Exit(2)
-	}
-
 	// The way back into an installation whose built-in administrator nobody can
 	// sign in as. Here rather than behind the interface for the rollback's reason:
 	// the case it exists for is the one where the interface is shut to everybody.
@@ -300,10 +289,6 @@ func main() {
 	// The log viewer's own polls go to the console and not into what it shows;
 	// see QuietRequestsTo. The route is the one RegisterRoutes gives the viewer.
 	logs.QuietRequestsTo("/api/v1/admin/logs")
-
-	// And no line carries a calendar feed's key, which is the whole of the address
-	// a reading of it is logged under; see Conceal.
-	logs.Conceal(appservice.CalendarFeedKeyPrefix)
 
 	if terminal {
 		// Interception makes the output a pipe, and GoFr prints JSON when its
@@ -354,6 +339,10 @@ func main() {
 	// password; see rest.SetupHandler.Claim for the conditions on that.
 	var installerToken string
 
+	// The backup that same answer uploaded to start the database from, with what
+	// came with it; restored once the migrations have made the tables.
+	var backupToRestore *restoreRequest
+
 	// Whether that same answer asked for demo data, and in which language. Asked
 	// once, of a database that has only just been chosen; a later start never
 	// asks it again.
@@ -361,10 +350,6 @@ func main() {
 		demoWanted   bool
 		demoLanguage string
 	)
-
-	// The backup that same answer uploaded to start the database from, with what
-	// came with it; restored once the migrations have made the tables.
-	var backupToRestore *restoreRequest
 
 	if !configured {
 		chosen, err := runInstaller()
@@ -540,7 +525,7 @@ func main() {
 	if misread != nil {
 		app.Logger().Warnf("database: %v", misread)
 	}
-	app.Logger().Infof("TimePulse %s starting (dialect=%s)", version, cfg.Dialect)
+	app.Logger().Infof("QubitDesk %s starting (dialect=%s)", version, cfg.Dialect)
 
 	db := app.GetSQL()
 
@@ -596,23 +581,21 @@ func main() {
 	userRepo := sqldb.NewUserRepository(db, cfg.Dialect).WithSecrets(secrets)
 	roleRepo := sqldb.NewRoleRepository(db, cfg.Dialect)
 	sessionRepo := sqldb.NewSessionRepository(db, cfg.Dialect)
-	projectRepo := sqldb.NewProjectRepository(db, cfg.Dialect)
-	timesheetRepo := sqldb.NewTimesheetRepository(db, cfg.Dialect)
 	settingsRepo := sqldb.NewSettingsRepository(db, cfg.Dialect)
-
-	timerRepo := sqldb.NewTimerRepository(db, cfg.Dialect)
-	scheduleRepo := sqldb.NewWorkScheduleRepository(db, cfg.Dialect)
-	templateRepo := sqldb.NewTemplateRepository(db, cfg.Dialect)
-	absenceRepo := sqldb.NewAbsenceRepository(db, cfg.Dialect)
-	vacationRepo := sqldb.NewVacationRepository(db, cfg.Dialect)
-	calendarFeedRepo := sqldb.NewCalendarFeedRepository(db, cfg.Dialect)
 	identityRepo := sqldb.NewOpenIDIdentityRepository(db, cfg.Dialect)
-	workDayRepo := sqldb.NewWorkDayRepository(db, cfg.Dialect)
 	tokenRepo := sqldb.NewAPITokenRepository(db, cfg.Dialect)
 	passkeyRepo := sqldb.NewPasskeyRepository(db, cfg.Dialect)
 	directoryRunRepo := sqldb.NewDirectoryRunRepository(db, cfg.Dialect)
+	// The contacts say which accounts they sign in to the portal with, and
+	// such an account is given no role that administers, from either side.
+	contactRepo := sqldb.NewContactRepository(db, cfg.Dialect)
 	adminEventRepo := sqldb.NewAdminEventRepository(db, cfg.Dialect)
-	adminLog := appservice.NewAdminLogService(adminEventRepo, userRepo, roleRepo)
+	// The general catalog names the classes a definition belongs to, there as on
+	// the Assets screen.
+	generalCatalogRepo := sqldb.NewGeneralCatalogRepository(db, cfg.Dialect)
+	classDefinitionRepo := sqldb.NewClassDefinitionRepository(db, cfg.Dialect)
+	adminLog := appservice.NewAdminLogService(adminEventRepo, userRepo, roleRepo, contactRepo).
+		WithCatalog(generalCatalogRepo)
 	recovery := appservice.NewRecoveryService(userRepo, passkeyRepo, sessionRepo, adminEventRepo)
 
 	auth := appservice.NewAuthService(userRepo, roleRepo)
@@ -660,7 +643,6 @@ func main() {
 	limits := appservice.NewLimitsProvider(settingsService, model.Limits{
 		SessionLifetimeHours:   cfg.SessionLifetime.Hours(),
 		SessionIdleMinutes:     cfg.SessionIdle.Minutes(),
-		MaxDailyHours:          cfg.MaxDailyHours,
 		RateLimit:              cfg.RateLimit,
 		RateLimitWindowSeconds: int(cfg.RateLimitWindow.Seconds()),
 		LDAPSyncMaxDeleteRatio: cfg.LDAPSyncMaxDeleteRatio,
@@ -672,57 +654,113 @@ func main() {
 	registerBusinessMetrics(app)
 
 	sessions := appservice.NewSessionService(userRepo, roleRepo, sessionRepo, auth, cfg.SessionLifetime).
-		WithExternalAuth(ldapClient, model.RoleUser).
+		WithExternalAuth(ldapClient, model.RoleAgent).
 		WithLimits(limits).
 		WithMetrics(app.Metrics())
 
-	ldapSync := appservice.NewLDAPSyncService(ldapClient, userRepo, roleRepo, timesheetRepo,
-		userRepo, directoryRunRepo, cfg.LDAPSyncMaxDeleteRatio, model.RoleUser).
+	// The account repository answers what an account would leave behind and
+	// removes it, so the two cannot disagree about which tickets are its own.
+	ldapSync := appservice.NewLDAPSyncService(ldapClient, userRepo, roleRepo, userRepo,
+		userRepo, directoryRunRepo, cfg.LDAPSyncMaxDeleteRatio, model.RoleAgent).
 		WithLimits(limits).
 		WithMetrics(app.Metrics())
 
-	users := appservice.NewUserApplicationService(userRepo, roleRepo, timesheetRepo, userRepo).
+	users := appservice.NewUserApplicationService(userRepo, roleRepo, userRepo, userRepo, contactRepo).
 		WithPasskeys(passkeyRepo)
-	roles := appservice.NewRoleApplicationService(roleRepo)
-	projects := appservice.NewProjectApplicationService(projectRepo, timesheetRepo, timerRepo)
-	timesheets := appservice.NewTimesheetApplicationService(
-		timesheetRepo, userRepo, projectRepo, cfg.MaxDailyHours).
-		WithLimits(limits).
-		WithMetrics(app.Metrics())
-	// The installation's public holidays, read per call like its zone, so a place
-	// chosen on the Settings screen holds from the next answer on.
-	holidayPlaces := appservice.PlaceSource(settingsService.HolidayPlace)
+	roles := appservice.NewRoleApplicationService(roleRepo, contactRepo)
+	queueRepo := sqldb.NewQueueRepository(db, cfg.Dialect)
+	catalogRepos := appservice.TicketCatalogRepositories{
+		States:     sqldb.NewTicketStateRepository(db, cfg.Dialect),
+		Priorities: sqldb.NewTicketPriorityRepository(db, cfg.Dialect),
+		Types:      sqldb.NewTicketTypeRepository(db, cfg.Dialect),
 
-	// Which day it is for somebody, in their own zone: a working day nobody booked
-	// counts once it has been, and for somebody in Auckland that is a day earlier
-	// than for the server. The installation's zone where they have none, and its
-	// default where it cannot be read, as every page decides it.
-	today := appservice.Today(func(ctx context.Context, user *model.User) time.Time {
-		zone, err := settingsService.Timezone(ctx)
+		UnlockTypes: sqldb.NewUnlockStateTypeRepository(db, cfg.Dialect),
+	}
+	levelRepo := sqldb.NewServiceLevelRepository(db, cfg.Dialect)
+	templateRepo := sqldb.NewResponseTemplateRepository(db, cfg.Dialect)
+	queues := appservice.NewQueueApplicationService(queueRepo, roleRepo, levelRepo).WithTemplates(templateRepo)
+	customerRepos := appservice.TicketCustomerRepositories{
+		Contacts:      contactRepo,
+		Organisations: sqldb.NewOrganisationRepository(db, cfg.Dialect),
+	}
+	customers := appservice.NewCustomerApplicationService(customerRepos.Organisations, customerRepos.Contacts).
+		WithPortalAccounts(appservice.PortalAccounts{Users: userRepo, Roles: roleRepo, Purger: userRepo})
+	ticketCatalog := appservice.NewTicketCatalogApplicationService(catalogRepos)
+	sysConfig := appservice.NewSysConfigService(settingsRepo)
+	calendarRepo := sqldb.NewCalendarRepository(db, cfg.Dialect)
+	calendars := appservice.NewCalendarApplicationService(calendarRepo).WithConfig(sysConfig)
+	macroRepo := sqldb.NewMacroRepository(db, cfg.Dialect)
+	planRepo := sqldb.NewExecPlanRepository(db, cfg.Dialect)
+	automationRefs := appservice.MacroReferences{
+		Catalog: catalogRepos, Customers: customerRepos, Queues: queueRepo, Users: userRepo, Roles: roleRepo,
+	}
+	sysConfig.WithCheck(model.ConfigTimeWorkingHours, calendars.CanBeTheInstallations)
+	jobRepo := sqldb.NewJobRepository(db, cfg.Dialect)
+	ticketRepo := sqldb.NewTicketRepository(db, cfg.Dialect)
+	tickets := appservice.NewTicketApplicationService(ticketRepo, queueRepo,
+		catalogRepos, customerRepos, userRepo, roleRepo, func(ctx context.Context) string {
+			name, err := settingsService.Timezone(ctx)
+			if err != nil {
+				return model.DefaultTimezone
+			}
+
+			return name
+		}).WithMetrics(app.Metrics()).WithConfig(sysConfig).
+		WithServiceLevels(levelRepo, calendarRepo, func(ctx context.Context) string {
+			place, err := settingsService.HolidayPlace(ctx)
+			if err != nil {
+				return ""
+			}
+
+			return place
+		})
+	automation := appservice.NewAutomationService(appservice.AutomationRepositories{
+		Jobs: jobRepo, Macros: macroRepo, Plans: planRepo, Runs: sqldb.NewJobRunRepository(db, cfg.Dialect),
+	}, ticketRepo, tickets, func(ctx context.Context) string {
+		name, err := settingsService.Timezone(ctx)
 		if err != nil {
-			zone = model.DefaultTimezone
+			return model.DefaultTimezone
 		}
 
-		return time.Now().In(user.TimezoneOf(zone))
+		return name
 	})
 
-	overtime := appservice.NewOvertimeService(timesheetRepo, userRepo, scheduleRepo, absenceRepo, holidayPlaces, today)
-	workWeeks := appservice.NewWorkScheduleService(scheduleRepo, userRepo)
-	templates := appservice.NewTemplateService(templateRepo, projectRepo)
-	absences := appservice.NewAbsenceService(absenceRepo, userRepo, scheduleRepo, holidayPlaces)
-	leave := appservice.NewVacationService(vacationRepo, absenceRepo, userRepo, scheduleRepo, holidayPlaces, today)
-	workDays := appservice.NewWorkDayService(workDayRepo, timesheetRepo)
-	demo := appservice.NewDemoService(userRepo, projectRepo, users, projects, timesheets, workWeeks, leave,
-		absences, templates, today)
+	// The jobs whose event-based plans wait for what a person's change did run
+	// once the change is written - to the end, though the request that made the
+	// change may be gone by then, and without failing that change: the run keeps
+	// what it could not do, and anything else goes to the log.
+	tickets.WithEvents(func(ctx context.Context, ticketID uint, events []model.TicketEvent) {
+		if err := automation.OnEvents(context.WithoutCancel(ctx), ticketID, events); err != nil {
+			app.Logger().Errorf("automation on ticket %d: %v", ticketID, err)
+		}
+	})
+
+	// What any change did to a ticket is sent to the agents around it once the
+	// change is written, the same way and for the same reasons as the jobs run:
+	// to the end, and without failing the change.
+	notifications := appservice.NewNotificationService(appservice.NotificationSources{
+		Definitions: sqldb.NewNotificationDefinitionRepository(db, cfg.Dialect),
+		Sent:        sqldb.NewNotificationRepository(db, cfg.Dialect),
+		Tickets:     ticketRepo, Roles: roleRepo, Refs: automationRefs,
+	}, func(ctx context.Context) string {
+		name, err := settingsService.Timezone(ctx)
+		if err != nil {
+			return model.DefaultTimezone
+		}
+
+		return name
+	})
+	tickets.WithNotifications(func(ctx context.Context, ticketID uint, events []model.TicketEvent, by uint) {
+		if err := notifications.OnTicketEvents(context.WithoutCancel(ctx), ticketID, events, by); err != nil {
+			app.Logger().Errorf("notifications on ticket %d: %v", ticketID, err)
+		}
+	})
 
 	// What this installation is called in a language, wherever the server names
-	// it itself: the prompt a passkey device shows, an authenticator's entry, the
-	// foot of an exported document, and the calendar somebody subscribes to.
+	// it itself: the prompt a passkey device shows and an authenticator's entry.
 	//
-	// One function rather than one per caller - it was written inline for the
-	// first of them, and the second would have been the same six lines again.
-	// Without the settings it is still TimePulse, which is what it is called
-	// whatever they say.
+	// Without the settings it is still QubitDesk, which is what it is
+	// called whatever they say.
 	instanceNameIn := func(ctx context.Context, language string) string {
 		branding, err := settingsService.Branding(ctx)
 		if err != nil {
@@ -732,9 +770,6 @@ func main() {
 		return branding.NameIn(language)
 	}
 
-	calendarFeeds := appservice.NewCalendarFeedService(calendarFeedRepo, userRepo, timesheetRepo,
-		absenceRepo, projectRepo, auth, today, instanceNameIn)
-
 	// Signing in through the provider configured under Settings, read per sign-in
 	// so a change there holds from the next one. Ten seconds for every request to
 	// the provider: a sign-in waits on them, and one that has stopped answering
@@ -742,22 +777,39 @@ func main() {
 	openIDSignIn := appservice.NewOpenIDService(identityRepo, userRepo, settingsService.OpenID,
 		openid.New(10*time.Second))
 
-	// Through the timesheet service rather than the repository, so a timer
-	// booking meets exactly the rules a typed one meets.
-	timers := appservice.NewTimerService(timerRepo, timesheets)
-	statistics := appservice.NewStatisticsService(timesheetRepo, projectRepo)
-
-	// The timesheet service is passed in rather than reimplemented: the import has
-	// to enforce the rules the API enforces, and the only way to be sure of that is
-	// to call them.
-	workbook := appservice.NewWorkbookService(timesheetRepo, userRepo, projectRepo, timesheets)
-	projectSheets := appservice.NewProjectWorkbookService(projects)
 	userSheets := appservice.NewUserWorkbookService(userRepo, roleRepo, users)
 	roleSheets := appservice.NewRoleWorkbookService(roleRepo, roles)
 
-	userDomain := domainservice.NewUserDomainService(userRepo, roleRepo)
-	projectDomain := domainservice.NewProjectDomainService(projectRepo)
-	timesheetDomain := domainservice.NewTimesheetDomainService(timesheetRepo, projectRepo)
+	userDomain := domainservice.NewUserDomainService(userRepo, roleRepo, contactRepo)
+
+	// The services the demo writes through, which the routes below are handed
+	// as well: one of each, so the demo is held to exactly what a request is.
+	levels := appservice.NewSLAApplicationService(levelRepo, calendarRepo)
+	templates := appservice.NewResponseTemplateApplicationService(templateRepo, tickets, automationRefs)
+	faq := appservice.NewFAQApplicationService(sqldb.NewFAQCategoryRepository(db, cfg.Dialect),
+		sqldb.NewFAQArticleRepository(db, cfg.Dialect), userRepo)
+	configItems := appservice.NewConfigItemApplicationService(sqldb.NewConfigItemRepository(db, cfg.Dialect),
+		appservice.ConfigItemSources{
+			Definitions: classDefinitionRepo, Catalog: generalCatalogRepo, Contacts: contactRepo,
+			Organisations: customerRepos.Organisations, Users: userRepo,
+		})
+	changeRepo := sqldb.NewChangeRepository(db, cfg.Dialect)
+	changes := appservice.NewChangeApplicationService(changeRepo, generalCatalogRepo,
+		userRepo, roleRepo, func(ctx context.Context) string {
+			name, err := settingsService.Timezone(ctx)
+			if err != nil {
+				return model.DefaultTimezone
+			}
+
+			return name
+		})
+	workOrders := appservice.NewWorkOrderApplicationService(sqldb.NewWorkOrderRepository(db, cfg.Dialect),
+		changeRepo, generalCatalogRepo, userRepo, roleRepo)
+	links := appservice.NewLinkApplicationService(sqldb.NewLinkRepository(db, cfg.Dialect), tickets, configItems).
+		WithChanges(changes)
+	demo := appservice.NewDemoService(userRepo, auth, tickets, catalogRepos, queues, levels, customers, faq,
+		templates).WithInventory(configItems, generalCatalogRepo, links).
+		WithChanges(changes, workOrders, generalCatalogRepo, links)
 
 	// The built-in administrator is created after the migrations have run, so
 	// there is always a way in even on a brand new database.
@@ -830,9 +882,9 @@ func main() {
 		}
 
 		// The demo, where whoever answered this process's installer asked for it:
-		// after the built-in administrator exists, because it goes into that
-		// account, and never a reason to stop - an installation without its demo
-		// is an installation that works.
+		// after the built-in administrator exists, because it is written in that
+		// account's name, and never a reason to stop - an installation without its
+		// demo is an installation that works.
 		if demoWanted {
 			summary, err := demo.Seed(ctx, demoLanguage)
 
@@ -842,10 +894,14 @@ func main() {
 			case summary.Skipped != "":
 				ctx.Logger.Warnf("no demo data was added: %s", summary.Skipped)
 			default:
-				ctx.Logger.Infof("added demo data to the built-in administrator's account: %d projects, "+
-					"%d entries, %d days away and %d templates", summary.Projects, summary.Entries,
-					summary.Absences, summary.Templates)
+				ctx.Logger.Infof("added demo data in the built-in administrator's name: %d organisations, "+
+					"%d contacts, %d configuration items, %d tickets with %d articles, %d knowledge base articles, "+
+					"%d templates and %d changes with %d work orders", summary.Organisations, summary.Contacts,
+					summary.ConfigItems, summary.Tickets, summary.Articles, summary.FAQArticles, summary.Templates,
+					summary.Changes, summary.WorkOrders)
 			}
+
+			demoWanted = false
 		}
 
 		// Load the directory settings now that the database is up. A failure
@@ -912,19 +968,13 @@ func main() {
 				"Set AUTH_ENABLED=true to enforce sign-in and role permissions")
 	}
 
-	// Who may act for whom. One instance for the authorizer and the handlers, so
-	// the switch and the assignments are read the same way by both.
-	team := appservice.NewTeamService(sqldb.NewManagedAccountRepository(db, cfg.Dialect),
-		settingsRepo, userRepo, roleRepo, projectRepo)
+	authorizer := rest.NewAuthorizer(cfg.AuthEnabled())
 
-	authorizer := rest.NewAuthorizer(cfg.AuthEnabled()).WithTeam(team)
-
-	statements := appservice.NewStatementService(timesheetRepo, projectRepo)
-
-	// Reminders pushed to the browsers people subscribe, where the installation
-	// allows it at all - which it ships not doing.
-	push := appservice.NewPushService(settingsRepo, sqldb.NewPushSubscriptionRepository(db, cfg.Dialect),
-		auth, timers, overtime).WithSecrets(secrets)
+	// Notifications pushed to the browsers people subscribe, where the
+	// installation allows it at all - which it ships not doing.
+	push := appservice.NewPushService(settingsRepo, sqldb.NewPushSubscriptionRepository(db, cfg.Dialect)).
+		WithSecrets(secrets)
+	notifications.WithPush(push)
 
 	// Built here rather than inline, because both the middleware that reads it and
 	// the handler that clears it need the same instance - two would mean the
@@ -1083,9 +1133,9 @@ func main() {
 			return zone
 		})
 
-	// In the language that asked, where there is one. An installation that has
-	// named itself in German and is read in German should not be signed off in
-	// English at the foot of its own evaluation.
+	// In the language that asked, where there is one: an installation that has
+	// named itself in German and is read in German is named so on the prompt of
+	// the device a passkey is made on.
 	instanceName := func(ctx *gofr.Context) string {
 		return instanceNameIn(ctx, strings.TrimSpace(ctx.Param("lang")))
 	}
@@ -1099,6 +1149,14 @@ func main() {
 		setupHandler = setupHandler.FromInstaller(installerToken, sessions)
 	}
 
+	// A password reset has to reach the sessions as well as the password: a
+	// cookie is not re-checked against the password that opened it, so without
+	// this the account somebody was locked out of stays open wherever it already
+	// was. An account's own and a contact's portal account alike.
+	resetEnds := rest.NewSessionEnder(func(ctx context.Context, userID uint) error {
+		return sessions.LogoutOthers(ctx, userID, "")
+	})
+
 	v1.RegisterRoutes(app, v1.Handlers{
 		Auth: rest.NewAuthHandler(sessions, authorizer, instanceName, instanceTimezone).
 			WithMaintenance(maintenanceState).
@@ -1109,26 +1167,19 @@ func main() {
 			// where that name becomes an account.
 			WithKerberos(func() bool { return kerberosAcceptor != nil && ldapClient.Enabled() }),
 		Users: rest.NewUserHandler(users, userDomain, authorizer, auth, instanceTimezone).
-			// A password reset has to reach the sessions as well as the password:
-			// a cookie is not re-checked against the password that opened it, so
-			// without this the account somebody was locked out of stays open
-			// wherever it already was.
-			WithSessionEnder(rest.NewSessionEnder(
-				func(ctx context.Context, userID uint) error {
-					return sessions.LogoutOthers(ctx, userID, "")
-				})).
+			WithSessionEnder(resetEnds).
 			WithRecovery(recovery),
-		Roles:      rest.NewRoleHandler(roles, authorizer),
-		Projects:   rest.NewProjectHandler(projects, projectDomain, authorizer).WithTimezone(instanceTimezone),
-		Timesheets: rest.NewTimesheetHandler(timesheets, timesheetDomain, authorizer, instanceTimezone),
-		Me:         rest.NewMeHandler(auth, sessions, overtime, authorizer, instanceTimezone).WithTeam(team),
-		Team:       rest.NewTeamHandler(team, authorizer),
-		Push:       rest.NewPushHandler(push, authorizer),
-		Statements: rest.NewStatementHandler(statements, authorizer, instanceTimezone),
-		Tokens:     rest.NewAPITokenHandler(apiTokens, authorizer),
-		LDAPSync:   rest.NewLDAPSyncHandler(ldapSync, authorizer),
-		Setup:      setupHandler,
-		Logs:       rest.NewLogHandler(logs, authorizer),
+		Roles:    rest.NewRoleHandler(roles, authorizer),
+		Catalog:  rest.NewTicketCatalogHandler(ticketCatalog, authorizer),
+		Queues:   rest.NewQueueHandler(queues, authorizer),
+		Tickets:  rest.NewTicketHandler(tickets, authorizer),
+		Customer: rest.NewCustomerHandler(customers, authorizer).WithSessionEnder(resetEnds),
+		Me:       rest.NewMeHandler(auth, sessions, authorizer, instanceTimezone),
+		Push:     rest.NewPushHandler(push, authorizer),
+		Tokens:   rest.NewAPITokenHandler(apiTokens, authorizer),
+		LDAPSync: rest.NewLDAPSyncHandler(ldapSync, authorizer),
+		Setup:    setupHandler,
+		Logs:     rest.NewLogHandler(logs, authorizer),
 		Restart: rest.NewRestartHandler(settingsService, authorizer, cfg, ds, applyLogLevel != nil, fileTelemetry).
 			WithFileSchedule(fileSchedule),
 		Update: rest.NewUpdateHandler(authorizer,
@@ -1136,29 +1187,19 @@ func main() {
 			// Present only where the deployment added the overlay that runs it;
 			// see deploy/compose.update.yaml for what that grants and why the
 			// application is not the thing granted it.
-			WithImageUpdater(imageupdate.New(os.Getenv("TIMEPULSE_UPDATE_REQUESTS"))).
+			WithImageUpdater(imageupdate.New(os.Getenv("QUBITDESK_UPDATE_REQUESTS"))).
 			WithConnection(ds),
-		Backups:    rest.NewBackupHandler(backups, authorizer),
-		Timers:     rest.NewTimerHandler(timers, authorizer, instanceTimezone),
-		Schedules:  rest.NewScheduleHandler(workWeeks, authorizer),
-		Templates:  rest.NewTemplateHandler(templates, authorizer),
-		Absences:   rest.NewAbsenceHandler(absences, authorizer, instanceTimezone),
-		Holidays:   rest.NewHolidayHandler(sessions, settingsService, authorizer),
-		Vacation:   rest.NewVacationHandler(leave, authorizer, instanceTimezone),
-		Calendar:   rest.NewCalendarFeedHandler(calendarFeeds, authorizer),
-		WorkDays:   rest.NewWorkDayHandler(workDays, authorizer, instanceTimezone),
-		Statistics: rest.NewStatisticsHandler(statistics, authorizer, instanceTimezone),
-		Workbook:   rest.NewWorkbookHandler(workbook, authorizer),
-		Sheets:     rest.NewSheetHandler(projectSheets, userSheets, roleSheets, authorizer).WithTimezone(instanceTimezone),
+		Backups:  rest.NewBackupHandler(backups, authorizer),
+		Holidays: rest.NewHolidayHandler(settingsService, authorizer),
+		Sheets:   rest.NewSheetHandler(userSheets, roleSheets, authorizer),
 		Passkeys: rest.NewPasskeyHandler(passkeys, sessions, authorizer, instanceName).
 			WithMaintenance(maintenanceState).
 			WithTimezone(instanceTimezone),
 		OpenID: rest.NewOpenIDHandler(openIDSignIn, sessions, authorizer).
 			WithMaintenance(maintenanceState).
 			WithTimezone(instanceTimezone),
-		Documents: rest.NewDocumentHandler(authorizer, instanceName).WithTimezone(instanceTimezone),
-		Exports:   rest.NewExportHandler(appservice.NewAccountExportService(userRepo), authorizer),
-		AdminLog:  rest.NewAdminLogHandler(adminLog, authorizer),
+		Exports:  rest.NewExportHandler(appservice.NewAccountExportService(userRepo), authorizer),
+		AdminLog: rest.NewAdminLogHandler(adminLog, authorizer),
 		Settings: rest.NewSettingsHandler(settingsService, authorizer, limits,
 			cfg.Dialect, cfg.Telemetry, version,
 			ldapClient.Configure,
@@ -1170,6 +1211,91 @@ func main() {
 			WithRunningConnection(ds).
 			WithFileTelemetry(fileTelemetry).
 			WithOpenIDCheck(openIDSignIn.Check),
+
+		SysConfig: rest.NewSysConfigHandler(sysConfig, authorizer),
+		Calendars: rest.NewCalendarHandler(calendars, authorizer),
+		Levels:    rest.NewServiceLevelHandler(levels, authorizer),
+		Macros:    rest.NewMacroHandler(appservice.NewMacroApplicationService(macroRepo, automationRefs), authorizer),
+		Plans:     rest.NewExecPlanHandler(appservice.NewExecPlanApplicationService(planRepo), authorizer),
+		Jobs: rest.NewJobHandler(
+			appservice.NewJobApplicationService(jobRepo, macroRepo, planRepo, automationRefs), automation, authorizer),
+
+		Notifications: rest.NewNotificationDefinitionHandler(appservice.NewNotificationDefinitionApplicationService(
+			sqldb.NewNotificationDefinitionRepository(db, cfg.Dialect), automationRefs), authorizer),
+		Told:      rest.NewNotificationHandler(notifications, authorizer),
+		Templates: rest.NewResponseTemplateHandler(templates, authorizer),
+		TicketSearches: rest.NewTicketSearchHandler(
+			appservice.NewTicketSearchApplicationService(sqldb.NewTicketSearchRepository(db, cfg.Dialect)), authorizer),
+		FAQ:    rest.NewFAQHandler(faq, authorizer),
+		Portal: rest.NewPortalHandler(tickets, authorizer),
+		GeneralCatalog: rest.NewGeneralCatalogHandler(
+			appservice.NewGeneralCatalogApplicationService(generalCatalogRepo), authorizer),
+		ClassDefinitions: rest.NewClassDefinitionHandler(appservice.NewClassDefinitionApplicationService(
+			generalCatalogRepo, classDefinitionRepo), authorizer),
+		ConfigItems: rest.NewConfigItemHandler(configItems, authorizer),
+		Links:       rest.NewLinkHandler(links, authorizer),
+		Changes:     rest.NewChangeHandler(changes, workOrders, authorizer),
+	})
+
+	// What a ticket is owed without anybody asking: a wait that is over moves
+	// the ticket on, and a lock that has run its time is freed. Every minute, as
+	// KIX18's daemon looks.
+	app.AddCronJob("* * * * *", "ticket-housekeeping", func(ctx *gofr.Context) {
+		moved, freed, err := tickets.Housekeep(ctx, time.Now())
+		if err != nil {
+			ctx.Logger.Errorf("ticket housekeeping: %v", err)
+
+			return
+		}
+
+		if moved > 0 || freed > 0 {
+			ctx.Logger.Infof("ticket housekeeping moved %d ticket(s) whose wait was over and freed %d lock(s)",
+				moved, freed)
+		}
+	})
+
+	// The jobs whose time-based plans owe them a run. Every minute, as KIX18's
+	// daemon looks.
+	app.AddCronJob("* * * * *", "automation-time-plans", func(ctx *gofr.Context) {
+		ran, err := automation.RunDue(ctx, time.Now())
+		if err != nil {
+			ctx.Logger.Errorf("automation: %v", err)
+
+			return
+		}
+
+		if ran > 0 {
+			ctx.Logger.Infof("automation ran %d job(s) whose time had come", ran)
+		}
+	})
+
+	// What the agents were told, pushed to the browsers they subscribed. Every
+	// minute, as KIX18 sends its notifications in the background rather than in
+	// the request that raised them: a push service that answers slowly holds up
+	// nobody's save.
+	app.AddCronJob("* * * * *", "send-notifications", func(ctx *gofr.Context) {
+		sent, err := notifications.SendUnsent(ctx)
+		if err != nil {
+			ctx.Logger.Errorf("sending notifications: %v", err)
+		}
+
+		if sent > 0 {
+			ctx.Logger.Debugf("sent %d notification(s)", sent)
+		}
+	})
+
+	// A month of what the automation did, and no more.
+	app.AddCronJob("10 3 * * *", "prune-job-runs", func(ctx *gofr.Context) {
+		removed, err := automation.Prune(ctx)
+		if err != nil {
+			ctx.Logger.Errorf("pruning job runs: %v", err)
+
+			return
+		}
+
+		if removed > 0 {
+			ctx.Logger.Infof("pruned %d job run(s)", removed)
+		}
 	})
 
 	// Expired sessions would otherwise accumulate forever.
@@ -1183,15 +1309,6 @@ func main() {
 
 		if removed > 0 {
 			ctx.Logger.Infof("pruned %d expired session(s)", removed)
-		}
-	})
-
-	// Reminders pushed to browsers a minute at a time: each run pushes what fell
-	// due in the minute that has just ended, so a reminder goes once however early
-	// or late in its minute the run comes. Nothing goes while push is off.
-	app.AddCronJob("* * * * *", "web-push", func(ctx *gofr.Context) {
-		if err := push.PushDue(ctx, time.Now()); err != nil {
-			ctx.Logger.Errorf("pushing reminders: %v", err)
 		}
 	})
 
@@ -1210,17 +1327,12 @@ func main() {
 	})
 
 	// Directory reconciliation. Off unless a schedule is configured, because a
-	// run deletes accounts the directory no longer holds together with their
-	// recorded hours.
+	// run deletes the accounts the directory no longer holds.
 	if cfg.LDAPSyncSchedule != "" {
 		app.Logger().Infof("directory reconciliation scheduled at %q", cfg.LDAPSyncSchedule)
 
 		app.AddCronJob(cfg.LDAPSyncSchedule, "ldap-sync", scheduledSync(stopping, ldapSync, app.Metrics()))
 	}
-
-	// The nightly sweep that moved stale open entries to submitted is gone with the
-	// review path it fed: an entry has no state any more, and there is nobody to
-	// submit it to.
 
 	if stop := startTLS(app, cfg); stop != nil {
 		httpsFrontEnd.Store(true)
@@ -1281,7 +1393,7 @@ func sayingWhy(all map[int64]gofrmigration.Migrate, console io.Writer) map[int64
 // Declaring is not publishing, which is worth knowing before writing an alert
 // against one of these. The registration creates the instrument; the exporter
 // emits a series only once it has a value, so a fresh installation that has had
-// no refused sign-in publishes no timepulse_signin_failures_total at all rather than
+// no refused sign-in publishes no qubitdesk_signin_failures_total at all rather than
 // publishing it as zero.
 //
 // So "nothing has gone wrong yet" and "this metric does not exist" are the same
@@ -1291,18 +1403,14 @@ func sayingWhy(all map[int64]gofrmigration.Migrate, console io.Writer) map[int64
 func registerBusinessMetrics(app *gofr.App) {
 	m := app.Metrics()
 
-	// Buckets in hours, over the range a single entry can hold: the quarter and
-	// half hours people actually book, then the working day, then the rest.
-	m.NewHistogram(appservice.MetricHoursBooked,
-		"Hours recorded per time entry.",
-		0.25, 0.5, 1, 2, 4, 6, 8, 10, 12, 24)
-
 	m.NewCounter(appservice.MetricSignInFailures,
 		"Refused sign-ins, by reason.")
 	m.NewCounter(appservice.MetricDirectoryAccounts,
 		"Accounts the directory synchronisation created or deleted.")
 	m.NewCounter(appservice.MetricDirectoryRuns,
 		"Scheduled directory synchronisations, by what each came to.")
+	m.NewCounter(appservice.MetricTicketsOpened,
+		"Tickets opened, by how they arrived.")
 }
 
 // tlsShutdownGrace bounds how long the HTTPS listener is given to drain.

@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
-	"github.com/dennis-dko/timepulse/internal/support/imaging"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/support/imaging"
 )
 
 // manifestPath is where a browser reads what the installed app is called and
@@ -43,10 +43,11 @@ type appShortcut struct {
 	key, english, view string
 }
 
+// appShortcuts lead only to screens every account can open: a shortcut is the
+// same for everybody who installs the app, and one to a screen the role does
+// not reach would open the page on the screen it falls back to instead.
 var appShortcuts = []appShortcut{
-	{key: "nav.timesheets", english: "Time entries", view: "timesheets"},
-	{key: "nav.calendar", english: "Calendar", view: "calendar"},
-	{key: "nav.overtime", english: "Overtime", view: "overtime"},
+	{key: "nav.settings", english: "My account", view: "settings"},
 }
 
 // installable serves what makes the page installable as an app.
@@ -58,7 +59,7 @@ type installable struct {
 	words map[string]i18n.Translator
 
 	// icons is the mark at each of appIconSizes. The installed app shows
-	// TimePulse's mark whatever logo an installation uploads, so there is one
+	// QubitDesk's mark whatever logo an installation uploads, so there is one
 	// picture per size for the life of the process.
 	icons map[int][]byte
 }

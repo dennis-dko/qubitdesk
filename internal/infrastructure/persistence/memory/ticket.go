@@ -1,0 +1,481 @@
+package memory
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+)
+
+// TicketRepository keeps tickets, their articles, the time noted on them, their
+// history and who watches them in memory, for the service tests.
+type TicketRepository struct {
+	mu sync.Mutex
+
+	tickets  map[uint]model.Ticket
+	articles []model.Article
+	history  []model.HistoryEntry
+	time     []model.TimeEntry
+	watchers map[uint]map[uint]bool
+
+	attachments []model.Attachment
+
+	nextTicket, nextArticle, nextHistory, nextAttachment uint
+}
+
+// NewTicketRepository creates an empty ticket repository.
+func NewTicketRepository() *TicketRepository {
+	return &TicketRepository{
+		tickets: map[uint]model.Ticket{}, watchers: map[uint]map[uint]bool{},
+		nextTicket: 1, nextArticle: 1, nextHistory: 1, nextAttachment: 1,
+	}
+}
+
+var _ repository.TicketRepository = (*TicketRepository)(nil)
+
+func (r *TicketRepository) Create(
+	_ context.Context,
+	ticket *model.Ticket,
+	first *model.Article,
+	minutes int,
+	numberOf func(id uint) string,
+) (*model.Ticket, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	stored := *ticket
+	stored.ID = r.nextTicket
+	stored.Number = numberOf(stored.ID)
+	r.nextTicket++
+	r.tickets[stored.ID] = stored
+
+	article := *first
+	article.TicketID = stored.ID
+	r.addArticle(&article, minutes)
+
+	r.addHistory([]model.HistoryEntry{{
+		TicketID: stored.ID, At: stored.CreatedAt, Actor: first.Sender, ActorID: stored.CreatedBy,
+		Event: model.HistoryCreated, NewValue: stored.Title,
+	}})
+
+	out := stored
+
+	return &out, nil
+}
+
+func (r *TicketRepository) GetByID(_ context.Context, id uint) (*model.Ticket, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ticket, ok := r.tickets[id]
+	if !ok {
+		return nil, apperror.NotFound("ticket", strconv.FormatUint(uint64(id), 10))
+	}
+
+	return &ticket, nil
+}
+
+func (r *TicketRepository) List(_ context.Context, filter repository.TicketFilter) ([]*model.Ticket, uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// The priorities' levels live in another repository, which this one does
+	// not hold; answering in some other order would pass for the right one.
+	if filter.Sort.By == repository.SortByPriority {
+		return nil, 0, apperror.Internal(errors.New("the in-memory tickets cannot be ordered by priority"))
+	}
+
+	matching := r.matching(filter)
+
+	slices.SortFunc(matching, func(a, b *model.Ticket) int {
+		at, bt := a.UpdatedAt, b.UpdatedAt
+		if filter.Sort.By == repository.SortByCreated {
+			at, bt = a.CreatedAt, b.CreatedAt
+		}
+
+		c := at.Compare(bt)
+		if c == 0 {
+			c = cmp.Compare(a.ID, b.ID)
+		}
+
+		if filter.Sort.Ascending {
+			return c
+		}
+
+		return -c
+	})
+
+	total := uint(len(matching))
+	start := (max(filter.Page, 1) - 1) * filter.Limit
+
+	if start >= len(matching) {
+		return []*model.Ticket{}, total, nil
+	}
+
+	return matching[start:min(start+filter.Limit, len(matching))], total, nil
+}
+
+// matching is every ticket a filter allows, in no order. The caller holds the
+// lock.
+func (r *TicketRepository) matching(filter repository.TicketFilter) []*model.Ticket {
+	search := strings.ToLower(strings.TrimSpace(filter.Search))
+	matching := make([]*model.Ticket, 0)
+
+	for _, ticket := range r.tickets {
+		switch {
+		case !slices.Contains(filter.QueueIDs, ticket.QueueID):
+		case len(filter.StateIDs) > 0 && !slices.Contains(filter.StateIDs, ticket.StateID):
+		case filter.OwnerID != nil && (ticket.OwnerID == nil || *ticket.OwnerID != *filter.OwnerID):
+		case filter.ContactID != nil && (ticket.ContactID == nil || *ticket.ContactID != *filter.ContactID):
+		case filter.OrganisationID != nil &&
+			(ticket.OrganisationID == nil || *ticket.OrganisationID != *filter.OrganisationID):
+		case filter.Follower != nil && !follows(filter.Follower, &ticket):
+		case search != "" && !strings.Contains(strings.ToLower(ticket.Title), search) &&
+			!strings.Contains(ticket.Number, search):
+		case !r.narrowedFurther(filter, &ticket):
+		default:
+			found := ticket
+			matching = append(matching, &found)
+		}
+	}
+
+	return matching
+}
+
+func (r *TicketRepository) Count(_ context.Context, filter repository.TicketFilter) (uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return uint(len(r.matching(filter))), nil
+}
+
+func (r *TicketRepository) CountByQueue(_ context.Context, filter repository.TicketFilter) (map[uint]uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	counted := map[uint]uint{}
+	for _, ticket := range r.matching(filter) {
+		counted[ticket.QueueID]++
+	}
+
+	return counted, nil
+}
+
+func (r *TicketRepository) Moments(
+	_ context.Context,
+	filter repository.TicketFilter,
+	moment repository.TicketMoment,
+) ([]time.Time, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	moments := []time.Time{}
+
+	for _, ticket := range r.matching(filter) {
+		switch {
+		case moment == repository.MomentOpened:
+			moments = append(moments, ticket.CreatedAt)
+		case ticket.ClosedAt != nil:
+			moments = append(moments, *ticket.ClosedAt)
+		}
+	}
+
+	return moments, nil
+}
+
+// narrowedFurther says whether a ticket meets the conditions of a search beyond
+// the queues, states, people and words a plain listing knows. The caller holds
+// the lock.
+func (r *TicketRepository) narrowedFurther(filter repository.TicketFilter, ticket *model.Ticket) bool {
+	is := func(want, got *uint) bool { return want == nil || (got != nil && *got == *want) }
+
+	switch {
+	case len(filter.PriorityIDs) > 0 && !slices.Contains(filter.PriorityIDs, ticket.PriorityID):
+	case len(filter.TypeIDs) > 0 && !slices.Contains(filter.TypeIDs, ticket.TypeID):
+	case !is(filter.ResponsibleID, ticket.ResponsibleID), !is(filter.ServiceLevelID, ticket.ServiceLevelID):
+	case filter.WatcherID != nil && !r.watchers[ticket.ID][*filter.WatcherID]:
+	case filter.Locked != nil && ticket.Locked != *filter.Locked:
+	case !within(filter.Created, ticket.CreatedAt), !within(filter.Changed, ticket.UpdatedAt),
+		filter.Closed != nil && (ticket.ClosedAt == nil || !within(filter.Closed, *ticket.ClosedAt)):
+	case filter.Text != nil && !r.says(ticket, filter.Text):
+	case filter.OverdueAt != nil && !ticket.Escalated(*filter.OverdueAt):
+	default:
+		return true
+	}
+
+	return false
+}
+
+// within says whether a moment lies in a span; no span holds every moment.
+func within(span *repository.Span, at time.Time) bool {
+	return span == nil ||
+		(span.From == nil || !at.Before(*span.From)) && (span.Before == nil || at.Before(*span.Before))
+}
+
+// says reports whether every word of a text search is found in the ticket's
+// title or number or in an article it may be searched in. The caller holds the
+// lock.
+func (r *TicketRepository) says(ticket *model.Ticket, text *repository.TicketText) bool {
+	for _, word := range text.Words {
+		word = strings.ToLower(word)
+
+		found := strings.Contains(strings.ToLower(ticket.Title), word) || strings.Contains(ticket.Number, word)
+
+		for i := 0; !found && i < len(r.articles); i++ {
+			article := &r.articles[i]
+			found = article.TicketID == ticket.ID && (article.CustomerVisible || !text.CustomerArticlesOnly) &&
+				(strings.Contains(strings.ToLower(article.Subject), word) ||
+					strings.Contains(strings.ToLower(article.Body), word))
+		}
+
+		if !found {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (r *TicketRepository) Update(
+	_ context.Context,
+	ticket *model.Ticket,
+	history []model.HistoryEntry,
+) (*model.Ticket, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.tickets[ticket.ID]; !ok {
+		return nil, apperror.NotFound("ticket", strconv.FormatUint(uint64(ticket.ID), 10))
+	}
+
+	r.tickets[ticket.ID] = *ticket
+	r.addHistory(history)
+
+	out := *ticket
+
+	return &out, nil
+}
+
+func (r *TicketRepository) AddArticle(
+	_ context.Context,
+	article *model.Article,
+	minutes int,
+	history []model.HistoryEntry,
+	firstResponse *time.Time,
+	renewsLock bool,
+	updateDue *time.Time,
+) (*model.Article, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ticket, ok := r.tickets[article.TicketID]
+	if !ok {
+		return nil, apperror.NotFound("ticket", strconv.FormatUint(uint64(article.TicketID), 10))
+	}
+
+	ticket.UpdatedAt = article.CreatedAt
+	if ticket.FirstResponseAt == nil && firstResponse != nil {
+		answered := *firstResponse
+		ticket.FirstResponseAt = &answered
+	}
+
+	if renewsLock && ticket.Locked {
+		renewed := article.CreatedAt
+		ticket.LockedAt = &renewed
+	}
+
+	ticket.UpdateDue = updateDue
+	r.tickets[ticket.ID] = ticket
+
+	stored := *article
+	r.addArticle(&stored, minutes)
+	r.addHistory(history)
+
+	return &stored, nil
+}
+
+// follows says whether the ticket is one the follower is shown: for them, or
+// for the organisation they follow.
+func follows(follower *repository.Follower, ticket *model.Ticket) bool {
+	if ticket.ContactID != nil && *ticket.ContactID == follower.ContactID {
+		return true
+	}
+
+	return follower.OrganisationID != nil && ticket.OrganisationID != nil &&
+		*ticket.OrganisationID == *follower.OrganisationID
+}
+
+func (r *TicketRepository) AddFollowUp(
+	_ context.Context,
+	article *model.Article,
+	history []model.HistoryEntry,
+	reopen *model.Reopening,
+	updateDue *time.Time,
+) (*model.Article, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ticket, ok := r.tickets[article.TicketID]
+	if !ok {
+		return nil, false, apperror.NotFound("ticket", strconv.FormatUint(uint64(article.TicketID), 10))
+	}
+
+	ticket.UpdatedAt = article.CreatedAt
+	entries := history
+	moved := reopen != nil && ticket.StateID == reopen.From
+
+	if moved {
+		ticket.StateID = reopen.To
+		ticket.PendingUntil = nil
+		ticket.ClosedAt = nil
+		entries = append(slices.Clone(history), reopen.History)
+	}
+
+	if reopen == nil || moved {
+		ticket.UpdateDue = updateDue
+	}
+
+	r.tickets[ticket.ID] = ticket
+
+	stored := *article
+	r.addArticle(&stored, 0)
+	r.addHistory(entries)
+
+	return &stored, moved, nil
+}
+
+func (r *TicketRepository) Articles(_ context.Context, ticketID uint) ([]*model.Article, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	articles := make([]*model.Article, 0)
+
+	for _, article := range r.articles {
+		if article.TicketID == ticketID {
+			found := article
+			articles = append(articles, &found)
+		}
+	}
+
+	return articles, nil
+}
+
+func (r *TicketRepository) History(_ context.Context, ticketID uint) ([]model.HistoryEntry, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	history := make([]model.HistoryEntry, 0)
+
+	for _, entry := range r.history {
+		if entry.TicketID == ticketID {
+			history = append(history, entry)
+		}
+	}
+
+	return history, nil
+}
+
+func (r *TicketRepository) AccountedMinutes(_ context.Context, ticketID uint) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	minutes := 0
+
+	for _, entry := range r.time {
+		if entry.TicketID == ticketID {
+			minutes += entry.Minutes
+		}
+	}
+
+	return minutes, nil
+}
+
+func (r *TicketRepository) Delete(_ context.Context, id uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.tickets[id]; !ok {
+		return apperror.NotFound("ticket", strconv.FormatUint(uint64(id), 10))
+	}
+
+	delete(r.tickets, id)
+	delete(r.watchers, id)
+
+	r.articles = slices.DeleteFunc(r.articles, func(a model.Article) bool { return a.TicketID == id })
+	r.history = slices.DeleteFunc(r.history, func(h model.HistoryEntry) bool { return h.TicketID == id })
+	r.time = slices.DeleteFunc(r.time, func(e model.TimeEntry) bool { return e.TicketID == id })
+	r.attachments = slices.DeleteFunc(r.attachments, func(a model.Attachment) bool { return a.TicketID == id })
+
+	return nil
+}
+
+func (r *TicketRepository) SetWatching(_ context.Context, ticketID, userID uint, watching bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.watchers[ticketID] == nil {
+		r.watchers[ticketID] = map[uint]bool{}
+	}
+
+	if watching {
+		r.watchers[ticketID][userID] = true
+	} else {
+		delete(r.watchers[ticketID], userID)
+	}
+
+	return nil
+}
+
+func (r *TicketRepository) Watching(_ context.Context, ticketID, userID uint) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.watchers[ticketID][userID], nil
+}
+
+func (r *TicketRepository) Watchers(_ context.Context, ticketID uint) ([]uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	watchers := make([]uint, 0, len(r.watchers[ticketID]))
+	for id := range r.watchers[ticketID] {
+		watchers = append(watchers, id)
+	}
+
+	slices.Sort(watchers)
+
+	return watchers, nil
+}
+
+// addArticle stores an article and the time noted with it; the caller holds the
+// lock.
+func (r *TicketRepository) addArticle(article *model.Article, minutes int) {
+	article.ID = r.nextArticle
+	r.nextArticle++
+	r.articles = append(r.articles, *article)
+
+	if minutes > 0 {
+		id := article.ID
+		r.time = append(r.time, model.TimeEntry{
+			TicketID: article.TicketID, ArticleID: &id, Minutes: minutes,
+			CreatedBy: article.AuthorID, CreatedAt: article.CreatedAt,
+		})
+	}
+}
+
+// addHistory stores history lines; the caller holds the lock.
+func (r *TicketRepository) addHistory(history []model.HistoryEntry) {
+	for _, entry := range history {
+		entry.ID = r.nextHistory
+		r.nextHistory++
+		r.history = append(r.history, entry)
+	}
+}

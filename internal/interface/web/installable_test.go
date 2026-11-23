@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/interface/web"
-	"github.com/dennis-dko/timepulse/internal/support/imaging"
+	"github.com/dennis-dko/qubitdesk/internal/interface/web"
+	"github.com/dennis-dko/qubitdesk/internal/support/imaging"
 )
 
 // The installed app: what a telephone's home screen or a desktop's start menu is
@@ -75,12 +75,12 @@ func readManifest(t *testing.T, server http.Handler, language string) manifest {
 
 // The installed app is called what the installation calls itself, opens on the
 // page, and stands on its own rather than inside a browser frame. Under its icon,
-// where a dozen characters fit, it is called TimePulse.
+// where a dozen characters fit, it is called QubitDesk.
 func TestTheManifestNamesTheInstallation(t *testing.T) {
-	m := readManifest(t, brandedServer(web.Branding{Title: "TimePulse | htp.net"}), "en")
+	m := readManifest(t, brandedServer(web.Branding{Title: "QubitDesk | htp.net"}), "en")
 
-	if m.Name != "TimePulse | htp.net" || m.ShortName != "TimePulse" {
-		t.Errorf("the app is called %q (%q), want the installation's own name and TimePulse", m.Name, m.ShortName)
+	if m.Name != "QubitDesk | htp.net" || m.ShortName != "QubitDesk" {
+		t.Errorf("the app is called %q (%q), want the installation's own name and QubitDesk", m.Name, m.ShortName)
 	}
 
 	if m.StartURL != "/" || m.Scope != "/" || m.ID != "/" {
@@ -117,8 +117,8 @@ func TestTheManifestNamesTheInstallation(t *testing.T) {
 
 // An installation without a name of its own is the application's name.
 func TestAnUnnamedInstallationIsTheApplicationsName(t *testing.T) {
-	if m := readManifest(t, brandedServer(web.Branding{}), "en"); m.Name != "TimePulse" {
-		t.Errorf("an unnamed installation is called %q, want TimePulse", m.Name)
+	if m := readManifest(t, brandedServer(web.Branding{}), "en"); m.Name != "QubitDesk" {
+		t.Errorf("an unnamed installation is called %q, want QubitDesk", m.Name)
 	}
 }
 
@@ -140,11 +140,11 @@ func TestTheManifestSpeaksTheDevicesLanguage(t *testing.T) {
 		return strings.Join(all, ", ")
 	}
 
-	if !strings.Contains(names(german), "Zeiteinträge") || german.Lang != "de" {
+	if !strings.Contains(names(german), "Mein Konto") || german.Lang != "de" {
 		t.Errorf("a German device is offered %q (lang %q)", names(german), german.Lang)
 	}
 
-	if !strings.Contains(names(english), "Time entries") || english.Lang != "en" {
+	if !strings.Contains(names(english), "My account") || english.Lang != "en" {
 		t.Errorf("an English device is offered %q (lang %q)", names(english), english.Lang)
 	}
 
@@ -155,7 +155,7 @@ func TestTheManifestSpeaksTheDevicesLanguage(t *testing.T) {
 	}
 }
 
-// The icons are TimePulse's mark, drawn at the sizes they are announced at - a
+// The icons are QubitDesk's mark, drawn at the sizes they are announced at - a
 // 192 scaled up to 512 by the device is the blur this exists to avoid.
 func TestTheAppIconsAreDrawnAtTheirSizes(t *testing.T) {
 	server := brandedServer(web.Branding{})

@@ -4,9 +4,9 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 const openIDColumns = "id, user_id, issuer, subject, created_at"
@@ -50,7 +50,7 @@ func (r *OpenIDIdentityRepository) BySubject(ctx context.Context, issuer, subjec
 }
 
 // Link stores the identity over the one its account had - one statement in each
-// engine's own words, as a calendar feed is replaced.
+// engine's own words.
 //
 // The subject being linked to another account already is the caller's to have
 // refused before this: the unique constraint on the pair is the backstop, and on

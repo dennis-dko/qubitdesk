@@ -197,7 +197,7 @@ func TestAKeptLineIsBoundedWhateverTheLineWas(t *testing.T) {
 func TestALineCutForItsLengthKeepsItsLevel(t *testing.T) {
 	t.Parallel()
 
-	line := `{"level":"ERROR","time":"2026-10-05T00:00:00Z","message":{"method":"GET","uri":"/api/v1/projects?q=` +
+	line := `{"level":"ERROR","time":"2026-10-05T00:00:00Z","message":{"method":"GET","uri":"/api/v1/tickets?q=` +
 		strings.Repeat("x", maxLineBytes) + `","response":500,"response_time":1200}}`
 
 	read, err := readLine(bufio.NewReader(strings.NewReader(line+"\n")), maxLineBytes)

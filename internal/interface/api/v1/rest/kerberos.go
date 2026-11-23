@@ -7,9 +7,9 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/kerberos"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/kerberos"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // kerberosSignIn is the one path a Kerberos ticket is presented on.

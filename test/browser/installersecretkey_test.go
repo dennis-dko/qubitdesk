@@ -15,11 +15,11 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/timepulse/internal/support/backup"
-	"github.com/dennis-dko/timepulse/internal/support/security"
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/support/backup"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // backupSealedWith writes a backup whose installation had key, holding only that
@@ -32,7 +32,7 @@ func backupSealedWith(t *testing.T, key, passphrase string) string {
 		t.Fatalf("build a sealer: %v", err)
 	}
 
-	check, err := sealer.Seal("timepulse")
+	check, err := sealer.Seal("qubitdesk")
 	if err != nil {
 		t.Fatalf("seal the key check: %v", err)
 	}
@@ -41,7 +41,7 @@ func backupSealedWith(t *testing.T, key, passphrase string) string {
 		encoder := json.NewEncoder(w)
 
 		for _, line := range []any{
-			sqldb.BackupHeader{Format: "timepulse-backup", Version: 1, Application: "TimePulse",
+			sqldb.BackupHeader{Format: "qubitdesk-backup", Version: 1, Application: "QubitDesk",
 				Dialect: "sqlite", Schema: 20260730120000, CreatedAt: time.Now().UTC()},
 			map[string]any{"table": "settings", "columns": []string{"key_name", "value", "updated_at"},
 				"kinds": []string{"text", "text", "time"}},
@@ -59,7 +59,7 @@ func backupSealedWith(t *testing.T, key, passphrase string) string {
 		t.Fatalf("seal the backup: %v", err)
 	}
 
-	path := filepath.Join(t.TempDir(), "timepulse-20261120-001922.tpbak")
+	path := filepath.Join(t.TempDir(), "qubitdesk-20261120-001922.qdbak")
 	if err := os.WriteFile(path, file, 0o600); err != nil {
 		t.Fatalf("write the backup: %v", err)
 	}

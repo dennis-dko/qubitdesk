@@ -12,7 +12,7 @@ import (
 // Settings and My account are each sorted into tabs, and only the cards of the
 // chosen tab are on screen.
 //
-// Both had grown to sixteen cards in one column - Settings to well over six
+// Both had grown into one long column of cards - Settings to well over six
 // thousand pixels - which is a screen somebody scrolls through rather than reads.
 // The tabs are a tab strip in every sense a keyboard and a screen reader know:
 // the chosen one is selected, and the arrow keys walk along them.
@@ -61,10 +61,10 @@ func TestTheLongScreensAreSortedIntoTabs(t *testing.T) {
 		t.Errorf("My account did not come back on the tab it was left on: Sign-in says aria-selected=%q", selected)
 	}
 
-	p.run("choose the working time", p.click(`#settings-tabs [data-card-tab="work"]`))
+	p.run("choose the general tab", p.click(`#settings-tabs [data-card-tab="general"]`))
 
 	if p.visible("#form-password") || !p.visible("#form-my-timezone") {
-		t.Error("the working-time tab of My account does not show the timezone alone without the password")
+		t.Error("the general tab of My account does not show the timezone alone without the password")
 	}
 
 	p.run("choose the sign-in tab", p.click(`#settings-tabs [data-card-tab="signin"]`))

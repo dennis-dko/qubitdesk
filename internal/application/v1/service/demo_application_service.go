@@ -3,312 +3,419 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/command"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/command"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // DemoService fills a new installation with demo data, where whoever answered
 // the installer asked for it, so that every screen has something to show from
-// the first sign-in.
+// the first sign-in: customers and their tickets, conversations with time noted
+// on them, a service level some of them have already missed, a knowledge base
+// and answer templates.
 //
 // Everything goes through the services the interface uses, so the demo obeys
-// every rule somebody's own bookings do - a day's cap, a project that has to be
-// active, leave that takes a working day off - and it cannot make a state the
-// application could not have made itself.
+// every rule somebody's own work does and cannot make a state the application
+// could not have made itself. In the built-in administrator's name, because that
+// is the account the browser which answered the installer is signed into, and as
+// shipped it may do everything on the staff side, tickets included.
 //
-// Into the built-in administrator's account, because that is the account the
-// browser which answered the installer is signed into: the demo is on screen the
-// moment the installation is. As shipped that account administers and records no
-// time, so it is given the role that does both, which is what an installation
-// gives somebody who has both jobs. No second account is made for it, because an
-// account with a password somebody could read would outlive the demo.
+// No second account is made for it, because an account with a password somebody
+// could read would outlive the demo. That also decides whose words the tickets
+// hold: what an agent records of a conversation - a call taken down, a call
+// returned, an answer the customer reads in the portal, a note for colleagues.
+// A customer's own words come through the portal or by mail, and both need the
+// customer to have an account.
+//
+// The tickets are opened over the last five days rather than in the second the
+// demo runs, because a list of tickets all opened just now shows neither the
+// order a help desk works in nor a promise it has missed. Each moment is written
+// through a copy of the ticket service reading the demo's clock, and every one
+// of them has passed: nothing is dated in the future but the moment a waiting
+// ticket waits for.
 type DemoService struct {
-	users      repository.UserRepository
-	projects   repository.ProjectRepository
-	accounts   *UserApplicationService
-	projectApp *ProjectApplicationService
-	entries    *TimesheetApplicationService
-	weeks      *WorkScheduleService
-	leave      *VacationService
-	absences   *AbsenceService
-	templates  *TemplateService
-	today      Today
+	users     repository.UserRepository
+	auth      *AuthService
+	tickets   *TicketApplicationService
+	catalog   TicketCatalogRepositories
+	queues    *QueueApplicationService
+	levels    *SLAApplicationService
+	customers *CustomerApplicationService
+	faq       *FAQApplicationService
+	templates *ResponseTemplateApplicationService
+	inventory *demoInventory
+	changes   *demoChangeServices
+	now       func() time.Time
 }
 
-// NewDemoService is handed the services the interface books through, so the demo
-// is held to what they hold anybody to.
+// NewDemoService is handed the services the interface works through, so the
+// demo is held to what they hold anybody to.
 func NewDemoService(
 	users repository.UserRepository,
-	projects repository.ProjectRepository,
-	accounts *UserApplicationService,
-	projectApp *ProjectApplicationService,
-	entries *TimesheetApplicationService,
-	weeks *WorkScheduleService,
-	leave *VacationService,
-	absences *AbsenceService,
-	templates *TemplateService,
-	today Today,
+	auth *AuthService,
+	tickets *TicketApplicationService,
+	catalog TicketCatalogRepositories,
+	queues *QueueApplicationService,
+	levels *SLAApplicationService,
+	customers *CustomerApplicationService,
+	faq *FAQApplicationService,
+	templates *ResponseTemplateApplicationService,
 ) *DemoService {
 	return &DemoService{
-		users: users, projects: projects, accounts: accounts, projectApp: projectApp,
-		entries: entries, weeks: weeks, leave: leave, absences: absences, templates: templates,
-		today: today,
+		users: users, auth: auth, tickets: tickets, catalog: catalog, queues: queues, levels: levels,
+		customers: customers, faq: faq, templates: templates, now: time.Now,
 	}
+}
+
+// WithInventory attaches what the demo's configuration items are written
+// through and linked with. Optional: without it the demo adds none.
+func (s *DemoService) WithInventory(
+	items *ConfigItemApplicationService,
+	catalog repository.GeneralCatalogRepository,
+	links *LinkApplicationService,
+) *DemoService {
+	s.inventory = &demoInventory{items: items, catalog: catalog, links: links}
+
+	return s
+}
+
+// WithChanges attaches what the demo's changes and their work orders are
+// written through and linked with. Optional: without it the demo adds none.
+func (s *DemoService) WithChanges(
+	changes *ChangeApplicationService,
+	workOrders *WorkOrderApplicationService,
+	catalog repository.GeneralCatalogRepository,
+	links *LinkApplicationService,
+) *DemoService {
+	s.changes = &demoChangeServices{changes: changes, workOrders: workOrders, catalog: catalog, links: links}
+
+	return s
+}
+
+// WithClock reads the time from now instead of the wall.
+func (s *DemoService) WithClock(now func() time.Time) *DemoService {
+	s.now = now
+
+	return s
 }
 
 // DemoSummary is what a seed added, for the log.
 type DemoSummary struct {
-	Projects, Entries, Absences, Templates int
+	Organisations, Contacts, Tickets, Articles, FAQArticles, Templates, ConfigItems, Changes, WorkOrders int
 
 	// Skipped says why nothing was added, and is empty when the demo went in.
 	Skipped string
 }
 
-// demoWeeks is how far back the bookings reach: long enough for the week, the
-// month and the overtime to have something to show, short enough to read.
-const demoWeeks = 8
-
-// demoProject is one of the demo's projects: what it is called and is about,
-// what an hour of it is charged at and how many hours it is planned with - zero
-// for neither - and the work booked on it. Each text is in the dictionaries
-// under demo.<key>, with its English here.
-type demoProject struct {
-	key, name, description string
-	rate, budget           float64
-	work                   []string
-}
-
-// demoProjects are the demo's four, in the order demoDay refers to them by.
-var demoProjects = []demoProject{
-	{key: "website", name: "Website relaunch", description: "A new website with a shop", rate: 95, budget: 400,
-		work: []string{"Home page concept", "Build components", "Client check-in #meeting", "Accessibility review",
-			"Move the content over"}},
-	{key: "mobile", name: "Mobile app", description: "An app for the field team", rate: 110, budget: 300,
-		work: []string{"Sign-in flow", "Offline mode", "Android bug hunt", "Sprint planning #meeting",
-			"Prepare the release"}},
-	{key: "support", name: "Customer support", description: "Requests and tickets", rate: 70,
-		work: []string{"Work through tickets", "Call a customer back", "Extend the knowledge base"}},
-	{key: "internal", name: "Internal tooling", description: "Our own tools and routines",
-		work: []string{"Look after the build pipeline", "Code review", "Documentation"}},
-}
-
-const (
-	demoWebsite = iota
-	demoMobile
-	demoSupport
-	demoInternal
-)
-
-// demoStandup is the day's first booking, every day, on the internal project.
-const demoStandup = "Stand-up #meeting"
-
-// demoBooking is one entry of a demo day.
-type demoBooking struct {
-	project     int
-	hours       float64
-	description string
-}
-
-// Seed fills the database with demo data written in language, around the built-
-// in administrator's today, and says what it added.
+// Seed fills the database with demo data written in language, and says what it
+// added.
 //
-// Only into a database that holds no projects: one that does is being worked
-// in, and demo hours mixed into somebody's real ones could never be told apart
-// again.
+// Only into a database that holds no tickets: one that does is being worked in,
+// and demo tickets among somebody's real ones could never be told apart again.
 func (s *DemoService) Seed(ctx context.Context, language string) (DemoSummary, error) {
-	existing, err := s.projects.GetAll(ctx)
-	if err != nil {
-		return DemoSummary{}, fmt.Errorf("asking whether the database is empty: %w", err)
-	}
-
-	if len(existing) > 0 {
-		return DemoSummary{Skipped: "the database already holds projects"}, nil
-	}
-
 	admin, err := s.users.GetByEmail(ctx, SystemUserEmail)
 	if err != nil {
 		return DemoSummary{}, fmt.Errorf("finding the built-in administrator: %w", err)
 	}
 
-	role := model.RoleUserAdmin
-	if _, err := s.accounts.UpdateUser(ctx, command.UpdateUserCommand{ID: admin.ID, Role: &role}); err != nil {
-		return DemoSummary{}, fmt.Errorf("giving the built-in administrator the role that records time: %w", err)
+	caller, err := s.auth.PrincipalByID(ctx, admin.ID)
+	if err != nil {
+		return DemoSummary{}, fmt.Errorf("reading what the built-in administrator may do: %w", err)
 	}
 
-	words := i18n.For(language)
-	now := s.today(ctx, admin)
-	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	monday := day.AddDate(0, 0, -((int(day.Weekday()) + 6) % 7))
-	start := monday.AddDate(0, 0, -7*demoWeeks)
-
-	if _, err := s.weeks.Plan(ctx, admin.ID, start, model.WeekHours{8, 8, 8, 8, 8, 0, 0}); err != nil {
-		return DemoSummary{}, fmt.Errorf("planning the week: %w", err)
+	_, held, err := s.tickets.ListTickets(ctx, caller, TicketListFilter{Limit: 1})
+	if err != nil {
+		return DemoSummary{}, fmt.Errorf("asking whether the database holds tickets: %w", err)
 	}
 
-	if err := s.leave.Entitle(ctx, admin.ID, day.Year(), 30); err != nil {
-		return DemoSummary{}, fmt.Errorf("granting the year's leave: %w", err)
+	if held > 0 {
+		return DemoSummary{Skipped: "the database already holds tickets"}, nil
 	}
+
+	t := i18n.For(language)
 
 	var summary DemoSummary
 
-	ids := make([]uint, len(demoProjects))
-
-	for i, p := range demoProjects {
-		created, err := s.projectApp.CreateProject(ctx, demoProjectCommand(p, words, admin.ID, start, day))
-		if err != nil {
-			return summary, fmt.Errorf("creating the project %q: %w", p.name, err)
-		}
-
-		ids[i] = created.Result.ID
-		summary.Projects++
+	desk, err := s.desk(ctx, caller)
+	if err != nil {
+		return summary, err
 	}
 
-	away := map[time.Time]bool{}
+	level, err := s.levels.Create(ctx, command.ServiceLevelCommand{
+		Name: ptr(demoLevel.name.in(t)), Description: ptr(demoLevel.description.in(t)),
+		FirstResponseMinutes: ptr(demoLevel.first), UpdateMinutes: ptr(demoLevel.update),
+		SolutionMinutes: ptr(demoLevel.solution),
+	})
+	if err != nil {
+		return summary, fmt.Errorf("adding the service level: %w", err)
+	}
 
-	for _, absence := range []struct {
-		from, to time.Time
-		kind     string
-	}{
-		{from: monday.AddDate(0, 0, -21), to: monday.AddDate(0, 0, -17), kind: model.AbsenceVacation},
-		{from: monday.AddDate(0, 0, -40), to: monday.AddDate(0, 0, -40), kind: model.AbsenceSick},
-	} {
-		recorded, err := s.absences.Record(ctx, admin.ID, absence.from, absence.to, absence.kind)
-		if err != nil {
-			return summary, fmt.Errorf("recording the %s: %w", absence.kind, err)
-		}
+	if _, err := s.queues.UpdateQueue(ctx, desk.ID, command.QueueCommand{ServiceLevelID: &level.ID}); err != nil {
+		return summary, fmt.Errorf("giving %s the service level: %w", desk.Name, err)
+	}
 
-		for _, a := range recorded {
-			away[a.Day] = true
-			summary.Absences++
+	contacts, organisations, err := s.seedCustomers(ctx, &summary)
+	if err != nil {
+		return summary, err
+	}
+
+	items, err := s.seedInventory(ctx, caller, t, contacts, organisations, &summary)
+	if err != nil {
+		return summary, err
+	}
+
+	if err := s.seedKnowledge(ctx, caller, t, language, &summary); err != nil {
+		return summary, err
+	}
+
+	if err := s.seedTemplates(ctx, t, &summary); err != nil {
+		return summary, err
+	}
+
+	tickets, err := s.seedTickets(ctx, caller, t, desk, contacts, items, &summary)
+	if err != nil {
+		return summary, err
+	}
+
+	return summary, s.seedChanges(ctx, caller, t, tickets, items, &summary)
+}
+
+// desk is the queue the migration ships, which every demo ticket is opened in.
+func (s *DemoService) desk(ctx context.Context, caller *Principal) (*model.Queue, error) {
+	queues, err := s.queues.ListQueues(ctx, caller)
+	if err != nil {
+		return nil, fmt.Errorf("listing the queues: %w", err)
+	}
+
+	for _, queue := range queues {
+		if queue.Name == "Service Desk" {
+			return queue, nil
 		}
 	}
 
-	booked := 0
+	return nil, fmt.Errorf("the shipped queue Service Desk is not there")
+}
 
-	for d := start; d.Before(day); d = d.AddDate(0, 0, 1) {
-		if d.Weekday() == time.Saturday || d.Weekday() == time.Sunday || away[d] {
-			continue
+// seedCustomers adds the organisations and their contacts, and answers both by
+// name.
+func (s *DemoService) seedCustomers(
+	ctx context.Context,
+	summary *DemoSummary,
+) (map[string]*model.Contact, map[string]uint, error) {
+	contacts := map[string]*model.Contact{}
+	organisations := map[string]uint{}
+
+	for _, o := range demoOrganisations {
+		website := "https://www." + o.domain
+
+		organisation, err := s.customers.CreateOrganisation(ctx, command.OrganisationCommand{
+			Name: ptr(o.name), Number: ptr(o.number), URL: &website,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("adding the organisation %s: %w", o.name, err)
 		}
 
-		for _, b := range demoDay(booked, int(d.Sub(start).Hours()/24/7)) {
-			description := demoText(words, b.project, b.description)
+		organisations[o.name] = organisation.ID
+		summary.Organisations++
 
-			if _, err := s.entries.CreateTimesheet(ctx, command.CreateTimesheetCommand{
-				UserID: admin.ID, ProjectID: ids[b.project], Date: d,
-				DurationHours: b.hours, Description: &description,
-			}); err != nil {
-				return summary, fmt.Errorf("booking %s on %s: %w", description, d.Format(time.DateOnly), err)
+		for _, name := range o.contacts {
+			email := strings.ToLower(strings.ReplaceAll(name, " ", ".")) + "@" + o.domain
+
+			contact, err := s.customers.CreateContact(ctx, command.ContactCommand{
+				Name: ptr(name), Email: &email, OrganisationID: &organisation.ID,
+			})
+			if err != nil {
+				return nil, nil, fmt.Errorf("adding the contact %s: %w", name, err)
 			}
 
-			summary.Entries++
+			contacts[name] = contact
+			summary.Contacts++
 		}
-
-		booked++
 	}
 
-	for _, template := range []demoBooking{
-		{project: demoInternal, hours: 0.25, description: demoStandup},
-		{project: demoSupport, hours: 2, description: demoProjects[demoSupport].work[0]},
-	} {
-		description := demoText(words, template.project, template.description)
-		hours := template.hours
+	return contacts, organisations, nil
+}
 
-		if _, err := s.templates.Keep(ctx, model.EntryTemplate{
-			UserID: admin.ID, ProjectID: &ids[template.project], DurationHours: &hours, Description: &description,
+// seedKnowledge adds the knowledge base's categories and articles, the articles
+// marked as written in language.
+func (s *DemoService) seedKnowledge(
+	ctx context.Context,
+	caller *Principal,
+	t i18n.Translator,
+	language string,
+	summary *DemoSummary,
+) error {
+	categories := make([]*model.FAQCategory, 0, len(demoCategories))
+
+	for _, c := range demoCategories {
+		category, err := s.faq.CreateCategory(ctx, command.FAQCategoryCommand{
+			Name: ptr(c.name.in(t)), Description: ptr(c.description.in(t)),
+		})
+		if err != nil {
+			return fmt.Errorf("adding the category %s: %w", c.name.key, err)
+		}
+
+		categories = append(categories, category)
+	}
+
+	for _, a := range demoArticles {
+		visibility := string(a.visibility)
+
+		if _, err := s.faq.CreateArticle(ctx, caller, command.FAQArticleCommand{
+			CategoryID: &categories[a.category].ID, Title: ptr(a.title.in(t)), Body: ptr(a.body.in(t)),
+			Keywords: ptr(a.keywords.in(t)), Visibility: &visibility, Language: &language,
 		}); err != nil {
-			return summary, fmt.Errorf("keeping the template %q: %w", description, err)
+			return fmt.Errorf("adding the article %s: %w", a.title.key, err)
+		}
+
+		summary.FAQArticles++
+	}
+
+	return nil
+}
+
+// seedTemplates adds the answer templates.
+func (s *DemoService) seedTemplates(ctx context.Context, t i18n.Translator, summary *DemoSummary) error {
+	for _, template := range demoTemplates {
+		if _, err := s.templates.Create(ctx, command.ResponseTemplateCommand{
+			Name: ptr(template.name.in(t)), Subject: ptr(template.subject.in(t)), Body: ptr(template.body.in(t)),
+		}); err != nil {
+			return fmt.Errorf("adding the template %s: %w", template.name.key, err)
 		}
 
 		summary.Templates++
 	}
 
-	return summary, nil
+	return nil
 }
 
-// demoProjectCommand is one of the demo's projects as the form would create it,
-// begun four weeks before the first booking so that every booking falls inside it.
-func demoProjectCommand(p demoProject, words i18n.Translator, owner uint, start, today time.Time) command.CreateProjectCommand {
-	description := words.Text("demo."+p.key+".description", p.description)
+// seedTickets opens the tickets and writes what happened to them, each at its
+// moment before now.
+func (s *DemoService) seedTickets(
+	ctx context.Context,
+	caller *Principal,
+	t i18n.Translator,
+	desk *model.Queue,
+	contacts map[string]*model.Contact,
+	items map[string]uint,
+	summary *DemoSummary,
+) (map[string]uint, error) {
+	now := s.now()
+	moment := now
+	back := s.tickets.At(func() time.Time { return moment })
+	opened := map[string]uint{}
 
-	cmd := command.CreateProjectCommand{
-		Name:        words.Text("demo."+p.key+".name", p.name),
-		Description: &description,
-		StartDate:   start.AddDate(0, 0, -28),
-		Status:      model.ProjectStatusActive,
-		OwnerID:     &owner,
-		Today:       today,
-		Billable:    p.rate > 0,
-	}
+	for _, ticket := range demoTickets {
+		kind, err := s.catalog.Types.GetByName(ctx, ticket.kind)
+		if err != nil {
+			return nil, fmt.Errorf("finding the shipped type %s: %w", ticket.kind, err)
+		}
 
-	if p.rate > 0 {
-		rate := p.rate
-		cmd.HourlyRate = &rate
-	}
+		priority, err := s.catalog.Priorities.GetByName(ctx, ticket.priority)
+		if err != nil {
+			return nil, fmt.Errorf("finding the shipped priority %s: %w", ticket.priority, err)
+		}
 
-	if p.budget > 0 {
-		budget := p.budget
-		cmd.BudgetHours = &budget
-	}
+		state, err := s.catalog.States.GetByName(ctx, ticket.state)
+		if err != nil {
+			return nil, fmt.Errorf("finding the shipped state %s: %w", ticket.state, err)
+		}
 
-	return cmd
-}
+		title := ticket.title.in(t)
+		phone := string(model.ChannelPhone)
+		open := command.CreateTicketCommand{
+			Title: &title, QueueID: &desk.ID, StateID: &state.ID, PriorityID: &priority.ID, TypeID: &kind.ID,
+			ContactID: &contacts[ticket.contact].ID, Channel: &phone, CustomerVisible: true, Subject: &title,
+			Body: ptr(ticket.opening.in(t)), Minutes: ticket.minutes,
+		}
 
-// demoDay is the n-th booked day of the demo, in week w of it: a stand-up, a
-// block on the week's main project, one on support and the rest of the day
-// elsewhere, adding up to between seven and a half and eight and a half hours.
-//
-// Worked out from n rather than drawn at random, so two installations seeded on
-// the same day hold the same demo, and a test can say what it is. The bounds are
-// chosen so that the rest is never less than three quarters of an hour.
-func demoDay(n, w int) []demoBooking {
-	target := []float64{8, 7.5, 8.5, 8, 7.75, 8.25, 8}[n%7]
-	main, other := demoWebsite, demoMobile
+		if ticket.owned {
+			open.OwnerID = &caller.User.ID
+		}
 
-	if w%2 == 1 {
-		main, other = demoMobile, demoWebsite
-	}
+		moment = now.Add(-ticket.opened)
 
-	mainHours := []float64{3.5, 4, 4.5}[n%3]
-	supportHours := []float64{1, 1.5, 2}[(n/3)%3]
-	rest := target - 0.25 - mainHours - supportHours
+		made, err := back.CreateTicket(ctx, caller, open)
+		if err != nil {
+			return nil, fmt.Errorf("opening the ticket %s: %w", ticket.title.key, err)
+		}
 
-	last := other
-	if n%2 == 1 {
-		last = demoInternal
-	}
+		opened[ticket.title.key] = made.ID
 
-	pick := func(project, offset int) string {
-		work := demoProjects[project].work
+		summary.Tickets++
+		summary.Articles++
 
-		return work[(n+offset)%len(work)]
-	}
+		for _, step := range ticket.steps {
+			moment = now.Add(-step.ago)
 
-	return []demoBooking{
-		{project: demoInternal, hours: 0.25, description: demoStandup},
-		{project: main, hours: mainHours, description: pick(main, 0)},
-		{project: demoSupport, hours: supportHours, description: pick(demoSupport, 0)},
-		{project: last, hours: rest, description: pick(last, 1)},
-	}
-}
+			if err := s.takeStep(ctx, back, caller, t, made.ID, step, now, summary); err != nil {
+				return nil, fmt.Errorf("writing what happened to the ticket %s: %w", ticket.title.key, err)
+			}
+		}
 
-// demoText is one of the demo's English texts in the language being written: the
-// stand-up under demo.standup, a project's work under demo.<project>.<n>.
-func demoText(words i18n.Translator, project int, english string) string {
-	if english == demoStandup {
-		return words.Text("demo.standup", english)
-	}
+		if err := s.linkAbout(ctx, caller, made.ID, items[ticket.about]); err != nil {
+			return nil, fmt.Errorf("linking the ticket %s to what it is about: %w", ticket.title.key, err)
+		}
 
-	p := demoProjects[project]
-
-	for i, work := range p.work {
-		if work == english {
-			return words.Text(fmt.Sprintf("demo.%s.%d", p.key, i+1), english)
+		if ticket.watched {
+			if err := s.tickets.SetWatching(ctx, caller, made.ID, true); err != nil {
+				return nil, fmt.Errorf("watching the ticket %s: %w", ticket.title.key, err)
+			}
 		}
 	}
 
-	return english
+	return opened, nil
 }
+
+// takeStep writes one step's article and puts the ticket into its state, through
+// the service reading the step's moment.
+func (s *DemoService) takeStep(
+	ctx context.Context,
+	back *TicketApplicationService,
+	caller *Principal,
+	t i18n.Translator,
+	ticketID uint,
+	step demoStep,
+	now time.Time,
+	summary *DemoSummary,
+) error {
+	if step.body.key != "" {
+		channel := string(step.channel)
+
+		if _, err := back.AddArticle(ctx, caller, ticketID, command.AddArticleCommand{
+			Channel: &channel, CustomerVisible: step.visible, Subject: ptr(step.subject.in(t)),
+			Body: ptr(step.body.in(t)), Minutes: step.minutes,
+		}); err != nil {
+			return err
+		}
+
+		summary.Articles++
+	}
+
+	if step.state == "" {
+		return nil
+	}
+
+	state, err := s.catalog.States.GetByName(ctx, step.state)
+	if err != nil {
+		return fmt.Errorf("finding the shipped state %s: %w", step.state, err)
+	}
+
+	change := command.UpdateTicketCommand{StateID: &state.ID}
+
+	if step.waitFor > 0 {
+		until := now.Add(step.waitFor)
+		change.PendingUntil = &until
+	}
+
+	_, err = back.UpdateTicket(ctx, caller, ticketID, change)
+
+	return err
+}
+
+// ptr is a pointer to a copy of v, for a command's optional fields.
+func ptr[T any](v T) *T { return &v }

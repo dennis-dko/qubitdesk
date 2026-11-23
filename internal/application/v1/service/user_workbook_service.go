@@ -5,12 +5,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/command"
-	"github.com/dennis-dko/timepulse/internal/application/v1/query"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/internal/support/spreadsheet"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/command"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/query"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/spreadsheet"
 )
 
 // UserWorkbookService moves accounts in and out as a spreadsheet.
@@ -183,7 +183,7 @@ func (s *UserWorkbookService) ApplyUsers(ctx context.Context, plan *UserPlan) (i
 
 		// Only the cells that were filled in. An empty cell means "leave this as
 		// it is": a spreadsheet with a column somebody deleted must not blank out
-		// forty people's working times.
+		// forty people's names.
 		if name := strings.TrimSpace(planned.row.Name); name != "" {
 			cmd.Name = &name
 		}

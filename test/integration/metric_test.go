@@ -12,9 +12,9 @@ import (
 // The framework measures the machinery: a histogram per HTTP request, one per
 // SQL query, a gauge of goroutines. None of it says whether the application is
 // doing its job - a deployment can serve every request in milliseconds while
-// nobody has been able to book time since the directory changed.
+// nobody has been able to sign in since the directory changed.
 //
-// So these check the four this application records itself, on the endpoint an
+// So these check the three this application records itself, on the endpoint an
 // operator actually scrapes. Reading them back from there rather than asserting
 // on the call is the point: a metric that is recorded but never registered, or
 // registered under a name nothing exports, is indistinguishable from a working
@@ -52,7 +52,7 @@ func TestAMetricIsPublishedOnlyOnceItHasAValue(t *testing.T) {
 
 	a := start(t)
 
-	if scraped := scrape(t, a); declares(scraped, "timepulse_signin_failures_total") {
+	if scraped := scrape(t, a); declares(scraped, "qubitdesk_signin_failures_total") {
 		t.Error("a counter with no value is published after all - which would be better, " +
 			"and means the comment in registerBusinessMetrics is now wrong")
 	}
@@ -63,35 +63,10 @@ func TestAMetricIsPublishedOnlyOnceItHasAValue(t *testing.T) {
 	})
 
 	if !eventually(func() bool {
-		return declares(scrape(t, a), "timepulse_signin_failures_total")
+		return declares(scrape(t, a), "qubitdesk_signin_failures_total")
 	}) {
 		t.Error("the counter is still absent after the event it counts")
 	}
-}
-
-// The one the installation exists to record.
-func TestBookingTimeIsCounted(t *testing.T) {
-	t.Parallel()
-
-	a, _, worker := startWithWorker(t)
-
-	worker.must(worker.api(http.MethodPost, "/timesheets", map[string]any{
-		"date": "2026-08-03", "durationHours": 6,
-	}), http.StatusCreated, http.StatusOK)
-
-	scraped := scrape(t, a)
-
-	// The histogram's sum carries the hours and its count carries the entries,
-	// so both questions - how much was recorded, and in how many pieces - are
-	// answered by the one metric.
-	if !declares(scraped, "timepulse_timesheet_hours_booked_sum") {
-		t.Fatalf("the hours histogram has no sum:\n%s", metricLines(scraped, "timepulse_timesheet"))
-	}
-
-	if !declares(scraped, "timepulse_timesheet_hours_booked_count") {
-		t.Errorf("the hours histogram has no count:\n%s", metricLines(scraped, "timepulse_timesheet"))
-	}
-
 }
 
 // Either somebody is working through a password list, or the directory has
@@ -113,7 +88,7 @@ func TestARefusedSignInIsCountedWithItsReason(t *testing.T) {
 		return strings.Contains(scrape(t, a), `reason="credentials"`)
 	}) {
 		t.Errorf("a refused sign-in was not counted under its reason:\n%s",
-			metricLines(scrape(t, a), "timepulse_signin"))
+			metricLines(scrape(t, a), "qubitdesk_signin"))
 	}
 }
 

@@ -13,7 +13,7 @@ func TestTheAndroidAppNamesTheReleaseItBelongsTo(t *testing.T) {
 	t.Parallel()
 
 	if answer := androidAnswer("v0.4.23"); answer.Version != "v0.4.23" ||
-		!strings.HasSuffix(answer.Download, "/v0.4.23/timepulse-mobile_v0.4.23.apk") {
+		!strings.HasSuffix(answer.Download, "/v0.4.23/qubitdesk-mobile_v0.4.23.apk") {
 		t.Errorf("the app of v0.4.23 is named %q and downloaded from %q", answer.Version, answer.Download)
 	}
 

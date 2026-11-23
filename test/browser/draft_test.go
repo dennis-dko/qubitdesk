@@ -37,7 +37,7 @@ func TestWhatWasTypedIsStillThereAfterAReload(t *testing.T) {
 			chromedp.ByQuery))
 
 	typed := map[string]string{
-		"host": "db.example.invalid", "name": "timepulse_live", "user": "timepulse_admin",
+		"host": "db.example.invalid", "name": "qubitdesk_live", "user": "qubitdesk_admin",
 	}
 
 	// Emptied first, the way a person empties a box - with the input event that
@@ -92,7 +92,7 @@ func TestWhatWasTypedIsStillThereAfterAReload(t *testing.T) {
 
 	p.run("read what was written down", chromedp.Evaluate(`
 		JSON.stringify(Object.keys(sessionStorage)
-			.filter((key) => key.startsWith('timepulse.draft.'))
+			.filter((key) => key.startsWith('qubitdesk.draft.'))
 			.map((key) => sessionStorage.getItem(key)))`, &kept))
 
 	if strings.Contains(kept, secret) {
@@ -107,7 +107,7 @@ func TestWhatWasTypedIsStillThereAfterAReload(t *testing.T) {
 	var after string
 
 	p.run("read them again", chromedp.Evaluate(`
-		JSON.stringify(Object.keys(sessionStorage).filter((key) => key.startsWith('timepulse.draft.')))`,
+		JSON.stringify(Object.keys(sessionStorage).filter((key) => key.startsWith('qubitdesk.draft.')))`,
 		&after))
 
 	if after != "[]" {
@@ -152,7 +152,7 @@ func TestADraftFromAnotherVersionIsNotPutBack(t *testing.T) {
 			// Under this account's own prefix: a draft belongs to whoever wrote
 			// it, and one filed under anybody else is not found at all - which
 			// would make this case pass without proving anything.
-			sessionStorage.setItem('timepulse.draft.' + me.user.id + '.form-datasource',
+			sessionStorage.setItem('qubitdesk.draft.' + me.user.id + '.form-datasource',
 				JSON.stringify({
 				version: 'v0.0.1-before',
 				values: { dialect: '', name: '', host: '', port: '', user: '', sslMode: '' },
@@ -180,7 +180,7 @@ func TestADraftFromAnotherVersionIsNotPutBack(t *testing.T) {
 	var left string
 
 	p.run("look for the draft", chromedp.Evaluate(
-		`String(sessionStorage.getItem('timepulse.draft.' + me.user.id + '.form-datasource') ?? '')`,
+		`String(sessionStorage.getItem('qubitdesk.draft.' + me.user.id + '.form-datasource') ?? '')`,
 		&left))
 
 	if left != "" {
@@ -189,56 +189,15 @@ func TestADraftFromAnotherVersionIsNotPutBack(t *testing.T) {
 
 	// What this version writes is stamped, or the next update repeats all of it.
 	p.run("type something", chromedp.SendKeys(
-		`#form-datasource [name="name"]`, "timepulse_live", chromedp.ByQuery))
+		`#form-datasource [name="name"]`, "qubitdesk_live", chromedp.ByQuery))
 
 	var stamped string
 
 	p.run("read what was written down", chromedp.Evaluate(
-		`String(sessionStorage.getItem('timepulse.draft.' + me.user.id + '.form-datasource') ?? '')`,
+		`String(sessionStorage.getItem('qubitdesk.draft.' + me.user.id + '.form-datasource') ?? '')`,
 		&stamped))
 
 	if !strings.Contains(stamped, `"version":"`) || strings.Contains(stamped, `"version":""`) {
 		t.Errorf("a draft written now carries no version: %s", stamped)
-	}
-}
-
-// What was typed beside the clock is still there after a reload.
-//
-// Almost everything somebody fills in here is in a form, and a form is what a
-// draft is filed under. The timer is not: its project and its description sit
-// beside the clock rather than in one, because starting a timer is a button
-// rather than a submission - so until it is started, the box is the only copy of
-// what somebody has typed, and a reload took it.
-//
-// Once the timer runs the server holds both and gives them back on its own,
-// which is why this is about the window before it is started.
-func TestWhatWasTypedBesideTheClockSurvivesAReload(t *testing.T) {
-	t.Parallel()
-
-	p := open(t)
-	p.readyAdmin()
-
-	// Somebody who records time: the built-in administrator has no timer.
-	p.becomeWorker()
-
-	p.run("open the time view", p.click(`.tab[data-view="timesheets"]`),
-		chromedp.WaitVisible("#timer-description", chromedp.ByID))
-	p.settled()
-
-	const doing = "Rechnungslauf vorbereitet"
-
-	p.run("say what is being worked on", chromedp.SendKeys(
-		"#timer-description", doing, chromedp.ByID))
-
-	p.run("reload", chromedp.Reload(), chromedp.WaitVisible("#tabs", chromedp.ByID))
-	p.waitGone("#login-screen")
-	p.settled()
-
-	p.run("open the time view again", p.click(`.tab[data-view="timesheets"]`),
-		chromedp.WaitVisible("#timer-description", chromedp.ByID))
-
-	if got := p.value("#timer-description"); got != doing {
-		t.Errorf("the description beside the clock reads %q after a reload; %q was typed",
-			got, doing)
 	}
 }

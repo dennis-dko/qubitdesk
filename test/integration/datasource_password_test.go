@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	appconfig "github.com/dennis-dko/timepulse/internal/infrastructure/config"
-	"github.com/dennis-dko/timepulse/test/harness"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // A password left out of the form stands for the one belonging to the connection
@@ -38,16 +38,16 @@ func TestTheKeptPasswordGoesOnlyToItsOwnServer(t *testing.T) {
 
 	connection := func(user, password string) map[string]any {
 		return map[string]any{
-			"dialect": "postgres", "name": "timepulse", "host": "127.0.0.1", "port": port,
+			"dialect": "postgres", "name": "qubitdesk", "host": "127.0.0.1", "port": port,
 			"user": user, "password": password, "sslMode": "disable",
 		}
 	}
 
 	admin.must(admin.api(http.MethodPut, "/settings/datasource",
-		connection("timepulse", "the-stored-secret")), http.StatusOK)
+		connection("qubitdesk", "the-stored-secret")), http.StatusOK)
 
 	// Its own server and user: the kept password is what an untouched field means.
-	admin.must(admin.api(http.MethodPost, "/settings/datasource/test", connection("timepulse", "")),
+	admin.must(admin.api(http.MethodPost, "/settings/datasource/test", connection("qubitdesk", "")),
 		http.StatusOK, http.StatusCreated)
 
 	if got := caught(t, passwords); got != "the-stored-secret" {
@@ -93,7 +93,7 @@ func TestTheKeptPasswordGoesOnlyToItsOwnServer(t *testing.T) {
 // takes precedence over the environment at the next start, and that start could
 // no longer sign in to its own database.
 //
-// Only a server has a password, so this runs where TIMEPULSE_TEST_DSN names one - the
+// Only a server has a password, so this runs where QUBITDESK_TEST_DSN names one - the
 // PostgreSQL and MySQL legs.
 func TestAnUntouchedPasswordKeepsTheOneTheEnvironmentGave(t *testing.T) {
 	t.Parallel()

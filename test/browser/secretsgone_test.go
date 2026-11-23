@@ -11,25 +11,23 @@ import (
 
 // Nothing marked as a secret is still on screen when the session ends.
 //
-// The markup names them: four elements carry class="secret" - the enrolment's
-// shared key, the otpauth URI that carries it with the account's address, a
-// token's value, and a calendar feed's address, which is its key. The first three
-// were found separately, and each was left behind by a sign-out for its own
-// reason.
+// The markup names them: three elements carry class="secret" - the enrolment's
+// shared key, the otpauth URI that carries it with the account's address, and a
+// token's value. Each was found separately, and each was left behind by a
+// sign-out for its own reason.
 //
-// This checks the class rather than the ids, so the fourth was covered by being
+// This checks the class rather than the ids, so a fourth is covered by being
 // marked rather than by somebody remembering this case exists. That is the whole
 // reason the class is worth having: it is the markup saying which text on the
 // page must not be handed on. A QR code carries its secret in its picture rather
 // than as text, so every img.qr is asked for its address the same way - the
-// enrolment's, the one a new token is shown with for an app to scan, and the
-// calendar address's.
+// enrolment's and the one a new token is shown with for an app to scan.
 //
-// In two rounds, because the enrolment and the other two are on different tabs of
+// In two rounds, because the enrolment and the token are on different tabs of
 // My account, and changing tabs takes a secret off the screen as leaving the
-// screen does: a token and a calendar address, signed out; then an enrolment,
-// signed out. Between them every marked element has to have held something, or
-// the case is not covering what it means to.
+// screen does: a token, signed out; then an enrolment, signed out. Between them
+// every marked element has to have held something, or the case is not covering
+// what it means to.
 func TestNothingMarkedSecretSurvivesTheSignOut(t *testing.T) {
 	t.Parallel()
 
@@ -84,16 +82,14 @@ func TestNothingMarkedSecretSurvivesTheSignOut(t *testing.T) {
 		return before
 	}
 
-	p.run("make a token and a calendar address",
+	p.run("make a token",
 		p.click(`.tab[data-view="settings"]`),
 		p.click(`#settings-tabs [data-card-tab="apps"]`),
 		chromedp.SendKeys(`#form-token input[name="name"]`, "Reader", chromedp.ByQuery),
 		p.click(`#form-token button[type="submit"]`),
-		chromedp.WaitVisible("#token-secret", chromedp.ByID),
-		p.click("#feed-create"),
-		chromedp.WaitVisible("#feed-address", chromedp.ByID))
+		chromedp.WaitVisible("#token-secret", chromedp.ByID))
 
-	marked := signOutAndLook("with a token and a calendar address")
+	marked := signOutAndLook("with a token")
 
 	if len(marked) == 0 {
 		t.Fatal("nothing on the page is marked as a secret, so this case checks nothing")
@@ -111,7 +107,7 @@ func TestNothingMarkedSecretSurvivesTheSignOut(t *testing.T) {
 
 	signOutAndLook("in the middle of an enrolment")
 
-	if len(held) < len(marked) || len(held) < 8 {
+	if len(held) < len(marked) || len(held) < 5 {
 		t.Fatalf("only %d of %d marked elements held anything in either round, so this case "+
 			"is not covering what it means to: %v", len(held), len(marked), held)
 	}

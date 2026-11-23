@@ -9,10 +9,10 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/internal/support/qrcode"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/qrcode"
 )
 
 // APITokenHeader is the alternative to "Authorization: Bearer <token>", for
@@ -92,7 +92,7 @@ type APITokenResponse struct {
 	Prefix string `json:"prefix"`
 
 	// Moments rather than this package's Date, which formats a day and throws the
-	// rest away. Right for the day a booking belongs to, wrong for a credential:
+	// rest away. Right for a calendar day, wrong for a credential:
 	// "last used" is the field somebody reads when they think a token has been
 	// taken, and a day tells them nothing they did not already know. A token used
 	// at three in the morning read exactly like one used at three in the
@@ -109,7 +109,7 @@ type APITokenResponse struct {
 	Secret  *string `json:"secret,omitempty"`
 
 	// ConnectURI is what an app reaches this installation with as the token's
-	// owner: timepulse://connect?url=...&token=..., carrying the
+	// owner: qubitdesk://connect?url=...&token=..., carrying the
 	// installation's address and the token. QR is the same address as a code
 	// to scan, an SVG data URI. Both carry the secret, so both exist where it
 	// does - in the answer that created the token - and nowhere else.
@@ -119,7 +119,7 @@ type APITokenResponse struct {
 
 // connectScheme is the scheme of a connection address, which an app registers
 // so that scanning the code with the camera opens it.
-const connectScheme = "timepulse"
+const connectScheme = "qubitdesk"
 
 // connectURI is the connection address of an installation reached at address,
 // as the owner of token.

@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/test/tempdir"
+	"github.com/dennis-dko/qubitdesk/test/tempdir"
 )
 
 // A published checksum that is not one is refused, before anything is fetched
@@ -49,7 +49,7 @@ func TestAPublishedChecksumThatIsNotOneIsRefusedBeforeAnythingIsFetched(t *testi
 			}))
 			defer server.Close()
 
-			self := filepath.Join(tempdir.New(t), "timepulse"+exeSuffix())
+			self := filepath.Join(tempdir.New(t), "qubitdesk"+exeSuffix())
 			if err := os.WriteFile(self, []byte("the version running"), 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -97,7 +97,7 @@ func TestAPublishedChecksumThatIsNotOneIsRefusedBeforeAnythingIsFetched(t *testi
 // No download can be under way while the program is starting, so the start is
 // where it goes.
 func TestADownloadTheLastProcessDidNotFinishIsRemovedAtStart(t *testing.T) {
-	self := filepath.Join(tempdir.New(t), "timepulse"+exeSuffix())
+	self := filepath.Join(tempdir.New(t), "qubitdesk"+exeSuffix())
 
 	for name, body := range map[string]string{
 		"":     "the version running",

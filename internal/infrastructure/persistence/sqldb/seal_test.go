@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 func aSealer(t *testing.T) *security.Sealer {
@@ -55,7 +55,7 @@ func TestSealStoredSecretsBringsWhatWasThereUnderTheKey(t *testing.T) {
 
 	roles := sqldb.NewRoleRepository(db, sqldb.DialectSQLite)
 
-	role, err := roles.GetByName(ctx, model.RoleUser)
+	role, err := roles.GetByName(ctx, model.RoleAgent)
 	if err != nil {
 		t.Fatalf("read seeded role: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestASecondPassMovesNothing(t *testing.T) {
 
 	roles := sqldb.NewRoleRepository(db, sqldb.DialectSQLite)
 
-	role, err := roles.GetByName(ctx, model.RoleUser)
+	role, err := roles.GetByName(ctx, model.RoleAgent)
 	if err != nil {
 		t.Fatalf("read seeded role: %v", err)
 	}

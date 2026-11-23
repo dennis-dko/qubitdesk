@@ -4,7 +4,6 @@ package browser
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -16,8 +15,9 @@ import (
 // A button that acts is a pill as high as a field, and a row lays out its
 // children as flex does by default, stretching each to the tallest of them. A
 // button beside a label whose words stand above its field came out as tall as
-// the two together: "Copy last week" beside "Add a row for", seventy-two pixels
-// of oval where forty-eight were meant, which the maintainer saw at once. So
+// the two together - in the time recording this was cloned from, "Copy last
+// week" beside "Add a row for", seventy-two pixels of oval where forty-eight
+// were meant, which the maintainer saw at once. So
 // every screen is walked, every tab of it, as the administrator and as somebody
 // who works here, and a button whose words take one line but which is taller
 // than its own minimum is reported.
@@ -69,10 +69,10 @@ func TestNoButtonIsStretchedPastAControlsHeight(t *testing.T) {
 // A row's pills stand at its foot, so that one beside a label whose words stand
 // above its field is not stretched to the height of both. A link is a button
 // too, but no taller than its words, and put at the foot as well its words sank
-// below those of the pills beside it: "stopped earlier?" stood under "Discard"
-// for as long as a clock ran. So every screen is walked again, with the
-// stopwatch running for whoever works here because that is when that link is
-// shown, and a link whose middle is not the middle of a control on its line is
+// below those of the pills beside it - in the time recording this was cloned
+// from, "stopped earlier?" stood under "Discard" for as long as a clock ran. So
+// every screen is walked again, as the administrator and as somebody who works
+// here, and a link whose middle is not the middle of a control on its line is
 // reported.
 func TestALinkInARowStandsLevelWithTheControlsBesideIt(t *testing.T) {
 	t.Parallel()
@@ -117,11 +117,7 @@ func TestALinkInARowStandsLevelWithTheControlsBesideIt(t *testing.T) {
 	p.everyScreen("administrator", measure)
 
 	p.becomeWorker()
-	p.run("start the stopwatch", p.click(`.tab[data-view="timesheets"]`),
-		chromedp.WaitVisible("#timer-start", chromedp.ByID),
-		p.click("#timer-start"),
-		chromedp.WaitVisible("#timer-end-open", chromedp.ByID))
-	p.everyScreen("worker with the clock running", measure)
+	p.everyScreen("worker", measure)
 
 	if len(found) > 0 {
 		t.Errorf("these links do not stand level with the controls beside them:\n\t%s",
@@ -204,73 +200,5 @@ func TestTheSignInTickFollowsTheButtonsRoundEnd(t *testing.T) {
 	if d := shape.Left - shape.Top; d > 1 || d < -1 || shape.Top-shape.Below > 1 || shape.Below-shape.Top > 1 {
 		t.Errorf("the tick is %.1fpx from the button's left, %.1fpx from its top and %.1fpx from its bottom; "+
 			"a tick that follows the round end is as far from it on every side", shape.Left, shape.Top, shape.Below)
-	}
-}
-
-// A week's cell shows the hours in it whole.
-//
-// The cells are fields, and a field's room on either side of its words is a
-// pill's: twenty pixels a side left a cell of five and a half ems too little for
-// "2.75", whose last figure was cut by the cell's edge. Asked of the widest
-// figure a day is likely to hold.
-func TestAWeeksCellShowsItsHoursWhole(t *testing.T) {
-	t.Parallel()
-
-	p := open(t)
-	p.readyWorker()
-
-	var projectID int
-
-	p.awaitJSON(`(async () => {
-		const made = await api('/projects', {
-			method: 'POST', body: JSON.stringify({ name: 'Portal', startDate: '2026-01-01' }),
-		});
-		await loadProjects();
-		return made.id;
-	})()`, &projectID)
-
-	p.run("open the week", p.click(`.tab[data-view="week"]`),
-		chromedp.WaitVisible("#table-week", chromedp.ByID))
-
-	// A row to have cells in, added as the select adds one.
-	p.waitForNode(`#week-add-project option[value="` + strconv.Itoa(projectID) + `"]`)
-	p.run("add a row for the project", chromedp.Evaluate(`(() => {
-		const select = document.querySelector('#week-add-project');
-		select.value = '`+strconv.Itoa(projectID)+`';
-		select.dispatchEvent(new Event('change', { bubbles: true }));
-	})()`, nil))
-	p.waitForNode(`#week-card input.week-cell`)
-
-	var cell struct {
-		Room    float64 `json:"room"`
-		Needed  float64 `json:"needed"`
-		Spinner bool    `json:"spinner"`
-	}
-
-	// The room is the cell's width less its borders and padding; the arrows of a
-	// number field are drawn inside that room, so a cell that keeps them is asked
-	// about separately rather than measured, which no script can do.
-	p.evalJSON(`JSON.stringify((() => {
-		const cell = document.querySelector('#week-card input.week-cell');
-		const style = getComputedStyle(cell);
-		const box = cell.getBoundingClientRect();
-		const words = document.createElement('canvas').getContext('2d');
-		words.font = style.font;
-
-		return {
-			room: box.width - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth) -
-				parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
-			needed: words.measureText('12.75').width,
-			spinner: !['textfield', 'none'].includes(style.appearance),
-		};
-	})())`, &cell)
-
-	if cell.Spinner {
-		t.Error("a week's cell keeps the browser's arrows for stepping a number, which take the room of the " +
-			"figures beside them")
-	}
-
-	if cell.Room+0.5 < cell.Needed {
-		t.Errorf("a week's cell cuts 12.75: room for %.1fpx of the %.1f it needs", cell.Room, cell.Needed)
 	}
 }

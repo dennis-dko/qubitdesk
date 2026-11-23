@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // SettingsRepository stores the instance settings as key/value pairs.
@@ -25,19 +25,37 @@ var _ repository.SettingsRepository = (*SettingsRepository)(nil)
 // Get returns the stored value, or an empty string when the key is unset.
 // A missing setting is a normal state, not an error.
 func (r *SettingsRepository) Get(ctx context.Context, key string) (string, error) {
+	value, _, err := r.Lookup(ctx, key)
+
+	return value, err
+}
+
+// Lookup returns the stored value and whether there is one, which an option of
+// the system configuration needs: its default may itself be empty, and an empty
+// value somebody chose is not the default.
+func (r *SettingsRepository) Lookup(ctx context.Context, key string) (string, bool, error) {
 	var value string
 
 	err := r.db.QueryRowContext(ctx,
 		r.rebind("SELECT value FROM settings WHERE key_name = ?"), key).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+		return "", false, nil
 	}
 
 	if err != nil {
-		return "", apperror.Internal(err)
+		return "", false, apperror.Internal(err)
 	}
 
-	return value, nil
+	return value, true, nil
+}
+
+// Delete removes the key; a key that is not there is not an error.
+func (r *SettingsRepository) Delete(ctx context.Context, key string) error {
+	if _, err := r.exec(ctx, "DELETE FROM settings WHERE key_name = ?", key); err != nil {
+		return apperror.Internal(err)
+	}
+
+	return nil
 }
 
 // Set writes the value, replacing any previous one.

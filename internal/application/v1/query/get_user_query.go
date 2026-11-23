@@ -1,6 +1,6 @@
 package query
 
-import "github.com/dennis-dko/timepulse/internal/application/v1/common"
+import "github.com/dennis-dko/qubitdesk/internal/application/v1/common"
 
 // GetUserQuery query to get existing user
 type GetUserQuery struct {

@@ -16,7 +16,7 @@ import (
 // own, the installer - which loads none of the page - carries its own copy, and
 // the tab shows favicon.svg. The hourglass that stood in two of those places
 // before was written out by hand in each, and copies nothing compares are how one
-// of them comes to show an old picture - so each copy's figures, hub, tile and
+// of them comes to show an old picture - so each copy's figures, tile and
 // colours are read and held to the file's.
 func TestTheMarkBesideTheTitleIsTheTabIcon(t *testing.T) {
 	icon := asset(t, "/favicon.svg")
@@ -48,7 +48,6 @@ func TestTheMarkBesideTheTitleIsTheTabIcon(t *testing.T) {
 
 		for _, pattern := range []string{
 			`<path d="[^"]+"`,
-			`<circle [^>]+>`,
 			`<stop [^>]+>`,
 			`viewBox="[^"]+"`,
 			`<rect width="[^"]+" height="[^"]+" rx="[^"]+"`,

@@ -9,8 +9,8 @@ import (
 	cdppage "github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/internal/infrastructure/selfupdate"
-	"github.com/dennis-dko/timepulse/internal/support/qrcode"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/selfupdate"
+	"github.com/dennis-dko/qubitdesk/internal/support/qrcode"
 )
 
 // The card on My account offers the Android app and nothing else: a code for a
@@ -58,7 +58,7 @@ func TestTheInstallCardIsNotInTheAndroidApp(t *testing.T) {
 	p.readyWorker()
 
 	p.run("load the page as the app shows it", chromedp.ActionFunc(func(ctx context.Context) error {
-		_, err := cdppage.AddScriptToEvaluateOnNewDocument(`window.TimePulseFiles = {};`).Do(ctx)
+		_, err := cdppage.AddScriptToEvaluateOnNewDocument(`window.QubitDeskFiles = {};`).Do(ctx)
 
 		return err
 	}), chromedp.Reload())

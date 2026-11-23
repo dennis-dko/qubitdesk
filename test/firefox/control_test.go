@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 func TestMain(m *testing.M) {
@@ -119,10 +119,7 @@ func TestNoControlIsOnScreenAtNoSize(t *testing.T) {
 	b.goTo(app.BaseURL())
 	b.settle()
 
-	views := []string{
-		"timesheets", "calendar", "overtime", "projects",
-		"users", "roles", "report", "settings", "admin",
-	}
+	views := []string{"users", "roles", "settings", "admin"}
 
 	for _, view := range views {
 		b.eval(fmt.Sprintf(`(() => {
@@ -242,7 +239,7 @@ func createAccount(t *testing.T, b *browser, email string) {
 	t.Helper()
 
 	post(t, b, "/api/v1/users", fmt.Sprintf(
-		`{"name":"Sven","email":%q,"role":"user","password":"sven-password-1"}`, email))
+		`{"name":"Sven","email":%q,"role":"agent","password":"sven-password-1"}`, email))
 }
 
 // post sends one request from the page, so it carries the session and the token
@@ -257,7 +254,7 @@ func post(t *testing.T, b *browser, path, body string, method ...string) {
 
 	answer := b.evalString(fmt.Sprintf(`(async () => {
 		const csrf = document.cookie.split(';').map(c => c.trim())
-			.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+			.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 		const r = await fetch(%q, {
 			method: %q,

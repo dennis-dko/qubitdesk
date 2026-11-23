@@ -9,7 +9,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // This pins a decision rather than checking a rule, which is why it is worth
@@ -121,7 +121,7 @@ func (p *page) enableTOTP(t *testing.T) string {
 	p.run("begin two-factor enrolment", chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const r = await fetch('/api/v1/me/totp', {
 				method: 'POST',
@@ -154,7 +154,7 @@ func (p *page) enableTOTP(t *testing.T) string {
 	p.run("confirm two-factor enrolment", chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const r = await fetch('/api/v1/me/totp', {
 				method: 'PUT',

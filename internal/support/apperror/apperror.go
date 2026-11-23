@@ -23,7 +23,7 @@ const (
 // a useful message without re-parsing prose.
 type Error struct {
 	Kind   Kind
-	Entity string   // e.g. "timesheet"
+	Entity string   // e.g. "role"
 	ID     string   // identifier that was looked up, when relevant
 	Fields []string // offending field names, for KindInvalid
 	Msg    string
@@ -34,8 +34,8 @@ type Error struct {
 	//
 	// Msg is written in English at the point the rule is enforced, which is right
 	// for a log and wrong for the person who tripped over it. The rule that made
-	// this obvious is long gone - back when timesheets were submitted and approved,
-	// the interface showed a German reader "an approved timesheet can no longer be
+	// this obvious is long gone - back when the time recording this was cloned
+	// from had timesheets submitted and approved, the interface showed a German reader "an approved timesheet can no longer be
 	// edited" whatever language they had chosen - but every rule since has the same
 	// problem. Translating the prose is not possible - by the time it exists the
 	// numbers are already in it - so the reason travels as a code with its values
@@ -53,8 +53,8 @@ type Error struct {
 //
 // Returns the same error so it can be attached where the error is built:
 //
-//	apperror.Conflictf("cannot delete a project that still has %d time entries", n).
-//		WithCode("projectHasEntries", n)
+//	apperror.Conflictf("%q owns %d tickets that are not finished", email, n).
+//		WithCode("deletionNeedsConfirming", email, n)
 func (e *Error) WithCode(code string, values ...any) *Error {
 	e.Code, e.Values = code, values
 

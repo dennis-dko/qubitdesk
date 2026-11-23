@@ -49,23 +49,23 @@ const (
 	// StorageZoneService for what a start in another one did to every day.
 	SettingStorageZone = "instance.storageZone"
 
-	// SettingTimezone is the instance-wide zone that decides which calendar day
-	// a booking belongs to, for everyone who has not set their own.
+	// SettingTimezone is the instance-wide zone: the one a ticket's number takes
+	// its day from and the service hours are read in, and the one a moment is
+	// written in for everyone who has not set their own.
 	SettingTimezone = "instance.timezone"
 
 	// SettingHolidayPlace is the installation's choice of public holidays, which
-	// everybody keeps who has not made their own: a place, NoHolidays, or empty
-	// where nobody has chosen. The key is older than countries and keeps its name,
-	// because installations already store it under that one.
-	SettingHolidayPlace = "instance.holidayRegion"
+	// the service hours leave out: a place, NoHolidays, or empty where nobody has
+	// chosen.
+	SettingHolidayPlace = "instance.holidayPlace"
 
 	// SettingOperational holds the limits an administrator may change from the
 	// Settings screen, layered over what the environment configured.
 	SettingOperational = "instance.operational"
 
 	// SettingMaintenance takes the installation out of service without stopping
-	// the process, so people cannot record time against a database that is about
-	// to be restored or moved.
+	// the process, so nobody writes into a database that is about to be restored
+	// or moved.
 	SettingMaintenance = "instance.maintenance"
 
 	// SettingTelemetry holds the metrics and tracing settings. Read before
@@ -77,12 +77,7 @@ const (
 	// Only that: which steps are done is worked out from what is configured.
 	SettingSetupCompleted = "instance.setupCompleted"
 
-	// SettingManagers is whether this installation has managers: "true" turns the
-	// team rights on, and anything else - nothing stored, which is how it ships -
-	// leaves them granting nothing.
-	SettingManagers = "instance.managers"
-
-	// SettingWebPush is whether this installation pushes the reminders to the
+	// SettingWebPush is whether this installation pushes its notifications to the
 	// browsers people subscribe: "true" turns it on. It ships off, because every
 	// push leaves through the push service of the browser's maker.
 	SettingWebPush = "instance.push"
@@ -100,11 +95,11 @@ const (
 
 // Branding is the instance's own labelling, editable by the administrator.
 type Branding struct {
-	// Title is what the installation adds to TimePulse in the header, and in the
-	// browser tab where TabTitle is empty. See Named.
+	// Title is what the installation adds to QubitDesk in the header, and
+	// in the browser tab where TabTitle is empty. See Named.
 	Title string
 
-	// TabTitle is what the browser tab adds to TimePulse instead, where an
+	// TabTitle is what the browser tab adds to QubitDesk instead, where an
 	// installation wants the tab to say something shorter.
 	//
 	// The two were one field, which is the right answer until the header's
@@ -129,7 +124,7 @@ type Branding struct {
 	// again.
 	//
 	// The logo is drawn at the left of the bar and nowhere else: the sign-in
-	// screen, the browser tab and the installed app show TimePulse's mark.
+	// screen, the browser tab and the installed app show QubitDesk's mark.
 	LogoDataURI string
 
 	// LogoBanner is the copy the bar draws. LogoHeader is the smaller one it drew
@@ -162,13 +157,13 @@ type Branding struct {
 	Translations map[string]BrandingText
 }
 
-// NameIn is what this installation calls itself in one language: TimePulse, and
-// the addition written for that language or else the untranslated one.
+// NameIn is what this installation calls itself in one language:
+// QubitDesk, and the addition written for that language or else the
+// untranslated one.
 //
 // What the server writes itself asks this - the prompt a passkey device shows,
-// an authenticator's entry, the foot of an exported document, the calendar
-// somebody subscribes to - and the footer is why it takes a language: a German
-// evaluation used to be signed off in English.
+// an authenticator's entry - and it takes a language because an installation
+// that has named itself in German and is read in German is named so there too.
 func (b Branding) NameIn(language string) string {
 	if text, ok := b.Translations[language]; ok {
 		if title := strings.TrimSpace(text.Title); title != "" {
@@ -179,8 +174,8 @@ func (b Branding) NameIn(language string) string {
 	return Named(b.Title)
 }
 
-// TabName is what the browser tab is called: TimePulse, and the tab's own
-// addition or else the title's.
+// TabName is what the browser tab is called: QubitDesk, and the tab's
+// own addition or else the title's.
 //
 // The one place that asks this question rather than reading either field, so
 // nothing has to remember which of the two wins. The tab's own is empty on
@@ -194,9 +189,10 @@ func (b Branding) TabName() string {
 }
 
 // Brand is the name of every installation. What an administrator writes under
-// Settings is added to it after a bar - "TimePulse | htp.net" - and never takes
-// its place, decided by the maintainer on 2026-11-18.
-const Brand = "TimePulse"
+// Settings is added to it after a bar - "QubitDesk | htp.net" - and
+// never takes its place, as in the time recording this was cloned from since
+// 2026-11-18.
+const Brand = "QubitDesk"
 
 // Named is what an installation is called with addition written beside the
 // brand.
@@ -281,7 +277,7 @@ type LDAPConfig struct {
 	// IDAttribute holds an identifier that never changes for the life of an
 	// account. Matching on the mail address instead would read a renamed
 	// mailbox as "this person left and a new one arrived", and the
-	// synchronisation would delete their recorded hours.
+	// synchronisation would remove their account and make another.
 	//
 	// OpenLDAP and most others: entryUUID. Active Directory: objectGUID,
 	// which is binary and is stored hex-encoded.
@@ -296,7 +292,7 @@ type LDAPConfig struct {
 	// SyncSchedule is when the reconciliation runs on its own, as a five-field
 	// cron expression. Empty means it only runs when somebody presses the button,
 	// which is the default: a run deletes the accounts the directory no longer
-	// holds, together with every hour recorded against them.
+	// holds, and the tickets they owned are left without an owner.
 	//
 	// Unlike the rest of this struct it takes effect at the next start, not at
 	// once - cron jobs are registered while the application starts and cannot be
@@ -314,7 +310,7 @@ func DefaultLDAPConfig() LDAPConfig {
 		NameAttribute:  "cn",
 		EmailAttribute: "mail",
 		IDAttribute:    "entryUUID",
-		DefaultRole:    RoleUser,
+		DefaultRole:    RoleAgent,
 	}
 }
 

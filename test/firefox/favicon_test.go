@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
-// Firefox adopts TimePulse's mark as the tab's icon, whatever logo is saved.
+// Firefox adopts QubitDesk's mark as the tab's icon, whatever logo is saved.
 //
 // Asked of what Firefox decided rather than of the document alone: what a tab
 // draws is not in the document and not in the response, and Firefox writes its
@@ -20,7 +20,7 @@ import (
 // .ico where Chrome took the logo. The logo stands at the left of the bar now and
 // nowhere else, so with one saved the page still declares the shipped pair, and
 // the mark is what Firefox keeps.
-func TestFirefoxAdoptsTimePulsesMarkWhateverTheLogo(t *testing.T) {
+func TestFirefoxAdoptsQubitDesksMarkWhateverTheLogo(t *testing.T) {
 	app := harness.Start(t)
 	b := openBrowser(t)
 
@@ -31,7 +31,7 @@ func TestFirefoxAdoptsTimePulsesMarkWhateverTheLogo(t *testing.T) {
 	const logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 
 	post(t, b, "/api/v1/settings/branding",
-		fmt.Sprintf(`{"title":"Zeiterfassung","logo":%q}`, logo), "PUT")
+		fmt.Sprintf(`{"title":"Ticketsystem","logo":%q}`, logo), "PUT")
 
 	b.goTo(app.BaseURL())
 	b.settle()
@@ -61,7 +61,7 @@ func TestFirefoxAdoptsTimePulsesMarkWhateverTheLogo(t *testing.T) {
 		}
 
 		if !strings.Contains(row, "/favicon.") && !strings.Contains(row, "/app-icon/") {
-			t.Errorf("Firefox adopted %s, which is not TimePulse's mark", row)
+			t.Errorf("Firefox adopted %s, which is not QubitDesk's mark", row)
 		}
 	}
 

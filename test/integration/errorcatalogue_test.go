@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // Every refusal this API can give names itself.
@@ -58,7 +58,7 @@ func TestEveryErrorTheAPICanGiveIsNamed(t *testing.T) {
 			want:   "missingPermission",
 			status: http.StatusForbidden,
 			do: func() response {
-				worker := a.signInAsUser(admin, "Wera", "wera@example.com")
+				worker := a.signInAsAgent(admin, "Wera", "wera@example.com")
 
 				return worker.api(http.MethodGet, "/users", nil)
 			},
@@ -76,9 +76,9 @@ func TestEveryErrorTheAPICanGiveIsNamed(t *testing.T) {
 			want:   "bodyNotJSON",
 			status: http.StatusBadRequest,
 			do: func() response {
-				// An endpoint this account may actually post to: the built-in
-				// administrator records no time and owns no projects, so a
-				// malformed body sent there is refused for the wrong reason.
+				// An endpoint this account may actually post to, so that the
+				// malformed body is refused for being malformed and for nothing
+				// else.
 				return admin.raw(http.MethodPost, "/api/v1/users", []byte("{not json"))
 			},
 		},
@@ -88,7 +88,7 @@ func TestEveryErrorTheAPICanGiveIsNamed(t *testing.T) {
 			status: http.StatusBadRequest,
 			do: func() response {
 				return admin.api(http.MethodPost, "/users",
-					map[string]any{"name": "", "email": "", "role": "user"})
+					map[string]any{"name": "", "email": "", "role": "agent"})
 			},
 		},
 		{
@@ -174,9 +174,9 @@ func TestAFailureFromUnderneathIsGenericAndKeepsItsDetail(t *testing.T) {
 		"dialect":  "postgres",
 		"host":     "127.0.0.1",
 		"port":     "1",
-		"name":     "timepulse",
-		"user":     "timepulse",
-		"password": "timepulse",
+		"name":     "qubitdesk",
+		"user":     "qubitdesk",
+		"password": "qubitdesk",
 	})
 
 	// A probe answers successfully with the reason inside it: a database that
@@ -241,8 +241,8 @@ func errorCode(t *testing.T, res response) string {
 }
 
 // shippedRoles is how many roles a fresh installation is given: the administrator,
-// the user, the one combining the two, and the manager.
-const shippedRoles = 4
+// the agent and the customer.
+const shippedRoles = 3
 
 // The roles a fresh installation ships with cannot be deleted.
 //
@@ -273,7 +273,7 @@ func TestTheShippedRolesCannotBeDeleted(t *testing.T) {
 	admin.must(admin.api(http.MethodGet, "/roles", nil), http.StatusOK).Data(t, &roles)
 
 	if len(roles.Items) < shippedRoles {
-		t.Fatalf("a fresh installation has %d role(s), want the four it ships with",
+		t.Fatalf("a fresh installation has %d role(s), want the three it ships with",
 			len(roles.Items))
 	}
 
@@ -312,7 +312,7 @@ func TestTheShippedRolesCannotBeDeleted(t *testing.T) {
 	// A role somebody made is still deletable, which is the half that must not
 	// have been broken by the half above.
 	created := admin.api(http.MethodPost, "/roles", map[string]any{
-		"name": "Aushilfe", "description": "Temporary", "permissions": []string{"timesheets:read:own"},
+		"name": "Aushilfe", "description": "Temporary", "permissions": []string{"tickets:read"},
 	})
 
 	var made struct {
@@ -373,7 +373,7 @@ func TestTheShippedRolesCannotBeEdited(t *testing.T) {
 		}
 
 		stripped := admin.api(http.MethodPut, fmt.Sprintf("/roles/%d", role.ID),
-			map[string]any{"permissions": []string{"timesheets:read:own"}})
+			map[string]any{"permissions": []string{"tickets:read"}})
 
 		if stripped.Status != http.StatusConflict {
 			t.Errorf("changing the rights of the shipped role %q answered %d, want %d\n%s",
@@ -431,7 +431,7 @@ func TestAnAccountFromTheDirectoryIsEditedInTheDirectory(t *testing.T) {
 
 	created := admin.api(http.MethodPost, "/users", map[string]any{
 		"name": "Dirk", "email": "dirk@example.com",
-		"role": "user", "password": "dirk-password-1",
+		"role": "agent", "password": "dirk-password-1",
 	})
 
 	var made struct {
@@ -468,8 +468,8 @@ func TestAnAccountFromTheDirectoryIsEditedInTheDirectory(t *testing.T) {
 			moved.Status, http.StatusConflict)
 	}
 
-	// Deleting is refused whether or not the hours go with it.
-	for _, path := range []string{"", "?purge=true"} {
+	// Deleting is refused whether or not it is confirmed.
+	for _, path := range []string{"", "?confirm=true"} {
 		removed := admin.api(http.MethodDelete,
 			fmt.Sprintf("/users/%d%s", made.ID, path), nil)
 
@@ -485,7 +485,7 @@ func TestAnAccountFromTheDirectoryIsEditedInTheDirectory(t *testing.T) {
 
 	// The role is still this installation's to decide.
 	role := admin.api(http.MethodPut, fmt.Sprintf("/users/%d/role", made.ID),
-		map[string]any{"role": "user-admin"})
+		map[string]any{"role": "admin"})
 
 	if role.Status != http.StatusOK {
 		t.Errorf("changing a directory account's role answered %d\n%s",
@@ -561,7 +561,7 @@ func TestALogoMustBeARasterImage(t *testing.T) {
 	admin := a.signInAsAdmin("a-much-better-password")
 
 	refused := admin.api(http.MethodPut, "/settings/branding", map[string]any{
-		"title": "Zeiterfassung",
+		"title": "Ticketsystem",
 		"logo": "data:image/svg+xml;base64," +
 			base64.StdEncoding.EncodeToString([]byte(
 				`<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>`)),
@@ -582,7 +582,7 @@ func TestALogoMustBeARasterImage(t *testing.T) {
 		"a JPEG": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==",
 	} {
 		accepted := admin.api(http.MethodPut, "/settings/branding", map[string]any{
-			"title": "Zeiterfassung", "logo": logo,
+			"title": "Ticketsystem", "logo": logo,
 		})
 
 		if accepted.Status != http.StatusOK {
@@ -609,7 +609,7 @@ func TestSavingTheSameSettingsTwiceIsFine(t *testing.T) {
 	admin := a.signInAsAdmin("a-much-better-password")
 
 	body := map[string]any{
-		"title":       "Zeiterfassung",
+		"title":       "Ticketsystem",
 		"banner":      "",
 		"footerText":  "Gemacht in Osnabrück",
 		"legalNotice": "",
@@ -650,7 +650,7 @@ func TestTheChosenPartOfTheLogoIsStored(t *testing.T) {
 	admin := a.signInAsAdmin("a-much-better-password")
 
 	saved := admin.api(http.MethodPut, "/settings/branding", map[string]any{
-		"title": "Zeiterfassung",
+		"title": "Ticketsystem",
 		"logo":  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
 		"crops": map[string]any{
 			"banner": map[string]float64{"x": 0, "y": 0, "w": 0.2, "h": 1},

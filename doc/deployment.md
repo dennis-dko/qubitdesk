@@ -96,7 +96,7 @@ listens on `127.0.0.1:8000`, for a reverse proxy in front of it. PostgreSQL
 publishes **no port at all**: it is reachable from the application container by
 name, and from nowhere else.
 
-Pin `TIMEPULSE_VERSION` to a release in your own `.env`. A container restarted at 3am
+Pin `QUBITDESK_VERSION` to a release in your own `.env`. A container restarted at 3am
 otherwise comes back as a different version than the one that went down.
 
 `deploy/.env.example` deliberately leaves it on `latest`, which is the opposite
@@ -197,8 +197,8 @@ administered under *Settings*, and the header of
 including why the id attribute must be `entryUUID` and not the mail address.
 
 It comes up empty on purpose: a suffix, an `ou=people` to put staff in, and the
-read-only account the application binds as. Invented people would arrive in
-TimePulse on the first synchronisation, named after nobody. The header
+read-only account the application binds as. Invented people would arrive in the
+ticket system on the first synchronisation, named after nobody. The header
 shows the `ldapadd` for a real one.
 
 Unlike the other three files this one needs the source beside it: it builds its
@@ -235,7 +235,7 @@ docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | gzip > backup
 `.env` carries only what a deployment must decide: the database password, the
 image version, the instance name, the TLS settings, and — only with the
 directory overlay — the two passwords that directory comes up on. Everything
-operational — session lifetime, rate limits, the daily booking cap, the
+operational — session lifetime, rate limits, the
 directory *connection*, the timezone — is administered in the running
 application under *Settings*, and takes effect without a restart. See
 [Configuration](configuration.md) for which settings live where and why.
@@ -245,7 +245,7 @@ application under *Settings*, and takes effect without a restart. See
 The binary is self-contained; the image is a convenience, not a requirement.
 
 ```bash
-DB_DIALECT=postgres DB_NAME=… DB_HOST=… DB_USER=… DB_PASSWORD=… ./timepulse-web
+DB_DIALECT=postgres DB_NAME=… DB_HOST=… DB_USER=… DB_PASSWORD=… ./qubitdesk-web
 ```
 
 `DB_NAME` is not optional and this line used to leave it out, which does not

@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
 )
 
 // AdminEventRepository is an in-memory repository.AdminEventRepository.

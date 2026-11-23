@@ -164,7 +164,7 @@ func TestAReplyFromAnotherInstanceIsRecognised(t *testing.T) {
 	// waits. A page names nobody, so it cannot be asked either.
 	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = fmt.Fprint(w, "<!doctype html><title>Set up TimePulse</title>")
+		_, _ = fmt.Fprint(w, "<!doctype html><title>Set up QubitDesk</title>")
 	}))
 	defer page.Close()
 

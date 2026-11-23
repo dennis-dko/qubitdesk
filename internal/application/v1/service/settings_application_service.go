@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/internal/support/imaging"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/imaging"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // maxLogoBytes caps the inline logo. It is stored as a data URI in the
@@ -58,7 +58,7 @@ func NewSettingsService(
 
 // Branding returns the instance labelling as it is stored.
 //
-// Nothing is filled in for a title nobody wrote: the name is TimePulse whatever
+// Nothing is filled in for a title nobody wrote: the name is QubitDesk whatever
 // is stored, and an empty title is an installation that adds nothing to it. It
 // used to be APP_NAME, which named installations after the process they ran in.
 func (s *SettingsService) Branding(ctx context.Context) (model.Branding, error) {
@@ -340,8 +340,9 @@ func (s *SettingsService) SaveTimezone(ctx context.Context, name string) error {
 	name = strings.TrimSpace(name)
 
 	// Rejected rather than quietly corrected: a name that does not resolve
-	// would move everyone's bookings to a different day than the administrator
-	// intended, and they would have no way to tell from the screen.
+	// would move every moment shown, and the day each ticket's number is taken
+	// from, to another zone than the administrator intended, and they would have
+	// no way to tell from the screen.
 	if !model.IsSupportedTimezone(name) {
 		return apperror.InvalidFields("timezone")
 	}
@@ -349,12 +350,12 @@ func (s *SettingsService) SaveTimezone(ctx context.Context, name string) error {
 	return s.settings.Set(ctx, model.SettingTimezone, name)
 }
 
-// HolidayPlace returns the installation's choice of public holidays, which
-// everybody keeps who has not made their own: a place, model.NoHolidays, or
-// empty where nobody has chosen - and both of those keep none.
+// HolidayPlace returns the installation's choice of public holidays, which its
+// service hours leave out: a place, model.NoHolidays, or empty where nobody has
+// chosen - and both of those keep none.
 //
 // A stored value this build does not know reads as nobody having chosen rather
-// than failing, for the reason Timezone gives: it is read under every balance.
+// than failing, for the reason Timezone gives: it is read under every deadline.
 func (s *SettingsService) HolidayPlace(ctx context.Context) (string, error) {
 	stored, err := s.settings.Get(ctx, model.SettingHolidayPlace)
 	if err != nil {
@@ -407,7 +408,7 @@ func (s *SettingsService) LDAP(ctx context.Context) (model.LDAPConfig, error) {
 	// those installations come right without anybody knowing there was anything
 	// to repair.
 	if strings.TrimSpace(config.DefaultRole) == "" {
-		config.DefaultRole = model.RoleUser
+		config.DefaultRole = model.RoleAgent
 	}
 
 	password, err := s.secrets.Open(config.BindPassword)
@@ -442,7 +443,7 @@ func (s *SettingsService) SaveLDAP(ctx context.Context, config model.LDAPConfig)
 	// checked after it has already been stored wrong.
 	config.DefaultRole = strings.TrimSpace(config.DefaultRole)
 	if config.DefaultRole == "" {
-		config.DefaultRole = model.RoleUser
+		config.DefaultRole = model.RoleAgent
 	}
 
 	// An unknown default role could be given to nobody: the accounts would start
@@ -456,7 +457,7 @@ func (s *SettingsService) SaveLDAP(ctx context.Context, config model.LDAPConfig)
 	// arrive holding the installation. roleForArrival would hand out the everyday
 	// role instead, and refusing here is what keeps the screen from saying one
 	// role while the accounts get another.
-	if roleAdministers(role) {
+	if role.Administers() {
 		return apperror.Invalidf("%q administers this installation and cannot be the "+
 			"role every account from the directory starts with", role.Name).
 			WithCode("directoryRoleAdministers", role.Name)
@@ -504,7 +505,7 @@ func (s *SettingsService) SaveLDAP(ctx context.Context, config model.LDAPConfig)
 	// The identifiers already recorded were read from the attribute stored now,
 	// and another attribute gives the same people other values - an entryUUID is
 	// not an objectGUID. Kept, every account read to a run as somebody who had
-	// left, and was proposed for deletion with their hours. Forgotten, each is
+	// left, and was proposed for deletion. Forgotten, each is
 	// matched by its address until its owner signs in again.
 	//
 	// Any change of the name counts, case included, because the directory client

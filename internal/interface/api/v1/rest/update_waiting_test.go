@@ -3,8 +3,8 @@ package rest
 import (
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/infrastructure/announce"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/selfupdate"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/announce"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/selfupdate"
 )
 
 // A press for a version already downloaded is told so, and everybody else goes on

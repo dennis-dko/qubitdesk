@@ -3,10 +3,10 @@ package model_test
 import (
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
-// The tab carries TimePulse and an addition of its own where an installation
+// The tab carries QubitDesk and an addition of its own where an installation
 // wrote one, and the title's addition where it did not.
 //
 // The fallback is what every installation that has never opened this setting
@@ -20,21 +20,21 @@ func TestTheTabAddsItsOwnWordsOrTheTitles(t *testing.T) {
 	}{
 		"nothing added": {
 			branding: model.Branding{},
-			want:     "TimePulse",
+			want:     "QubitDesk",
 		},
 		"the title's addition": {
 			branding: model.Branding{Title: "Beispiel GmbH & Co. KG"},
-			want:     "TimePulse | Beispiel GmbH & Co. KG",
+			want:     "QubitDesk | Beispiel GmbH & Co. KG",
 		},
 		"its own addition": {
 			branding: model.Branding{Title: "Beispiel GmbH & Co. KG", TabTitle: "Beispiel"},
-			want:     "TimePulse | Beispiel",
+			want:     "QubitDesk | Beispiel",
 		},
 		// Spaces are not an addition. Somebody clearing the field leaves whatever
 		// the keyboard left behind, and a tab with " " added has nothing added.
 		"blank": {
 			branding: model.Branding{Title: "htp.net", TabTitle: "   "},
-			want:     "TimePulse | htp.net",
+			want:     "QubitDesk | htp.net",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

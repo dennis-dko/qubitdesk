@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 func aKey(t *testing.T) string {

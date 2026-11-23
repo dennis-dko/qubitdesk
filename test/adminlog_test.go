@@ -18,7 +18,6 @@ var changesNothing = map[string]string{
 	"POST /api/v1/settings/datasource/test":   "tries a connection and keeps nothing",
 	"POST /api/v1/settings/update/check":      "asks whether a newer release exists",
 	"POST /api/v1/setup/claim":                "signs in the browser that answered the installer, which is a sign-in",
-	"PUT /api/v1/users/{id}/working-times":    "a person's own figures, which only their owner sets",
 }
 
 // recordedWithoutARoute are the changes the administration log records that no
@@ -32,7 +31,9 @@ var recordedWithoutARoute = map[string]struct{ file, why string }{
 }
 
 // Every route that changes accounts, roles or settings is in the administration
-// log, or named above as one that changes nothing.
+// log, or named above as one that changes nothing. A contact's portal access is
+// read beside them, because giving it makes an account and taking it away
+// erases one, while the rest of a contact is the customers' and not logged.
 //
 // The log is a middleware with a table of routes, so a handler cannot forget to
 // record its change - and the table is what can be forgotten instead. A route
@@ -45,7 +46,8 @@ func TestEveryAdministrativeChangeIsInTheAdministrationLog(t *testing.T) {
 
 	var served []string
 
-	for _, match := range regexp.MustCompile(`app\.(POST|PUT|DELETE)\(base\+"(/(?:users|roles|settings|setup)[^"]*)"`).
+	for _, match := range regexp.MustCompile(
+		`app\.(POST|PUT|DELETE)\(base\+"(/(?:users|roles|settings|setup|queues|ticket-states|ticket-priorities|ticket-types|calendars|service-levels|unlock-state-types|macros|exec-plans|jobs|notification-definitions|response-templates|general-catalog|cmdb/classes)[^"]*|/contacts/\{id\}/portal-access)"`).
 		FindAllStringSubmatch(router, -1) {
 		served = append(served, match[1]+" /api/v1"+match[2])
 	}

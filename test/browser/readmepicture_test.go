@@ -16,12 +16,12 @@ import (
 	cdppage "github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
-	"github.com/dennis-dko/timepulse/test/oidctest"
+	"github.com/dennis-dko/qubitdesk/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/oidctest"
 )
 
 // readmePictures names the directory the README's pictures are written to.
-const readmePictures = "TIMEPULSE_README_PICTURES"
+const readmePictures = "QUBITDESK_README_PICTURES"
 
 // The README's pictures are taken from the application rather than drawn.
 //
@@ -331,7 +331,7 @@ const theInstallation = `(async () => {
 	await put('/settings/holidays', {place: 'DE-BY'});
 	await put('/settings/openid', {enabled: true, issuer: %s, clientId: %s, clientSecret: %s, label: ''});
 	await api('/users', {method: 'POST', body: JSON.stringify({
-		name: 'Robin Keller', email: 'robin@example.com', role: 'user', password: 'robin-password-1'})});
+		name: 'Robin Keller', email: 'robin@example.com', role: 'agent', password: 'robin-password-1'})});
 	return true;
 })()`
 

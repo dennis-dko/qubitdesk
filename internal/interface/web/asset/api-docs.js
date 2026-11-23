@@ -214,8 +214,8 @@ function securityCard(spec) {
 
   card.append(el('h3', { text: 'Example' }));
   card.append(el('pre', { class: 'secret', text:
-    'curl -H "Authorization: Bearer timepulse_xxxxx" \\\n'
-    + '     https://your-host/api/v1/timesheets' }));
+    'curl -H "Authorization: Bearer qubitdesk_xxxxx" \\\n'
+    + '     https://your-host/api/v1/me' }));
 
   return card;
 }

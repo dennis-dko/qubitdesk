@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // provisionExternal returns the local account for a directory user, creating
@@ -84,8 +84,6 @@ func (s *SessionService) provisionExternal(ctx context.Context, directoryUser *E
 		name = email
 	}
 
-	// No working times, as a synchronisation creates the same account; see
-	// createMissing for what a pinned figure cost.
 	return s.users.Save(ctx, &model.User{
 		Name:       name,
 		Email:      email,
@@ -115,7 +113,8 @@ func (s *SessionService) reconcileExternal(
 	// installation.
 	//
 	// Matching by address is how an installation moves from local passwords to a
-	// directory without anybody losing their hours, and that is worth keeping.
+	// directory without anybody losing their account and the tickets it owns, and
+	// that is worth keeping.
 	// What it must not carry with it is the installation itself: whoever can
 	// write an entry to the directory - a helpdesk account in a company
 	// directory is enough - could name an administrator's address and sign in
@@ -178,7 +177,8 @@ func (s *SessionService) reconcileExternal(
 }
 
 // administers reports whether the account holds rights over the installation
-// rather than over a working day; roleAdministers says which rights those are.
+// rather than over the work done in it; Role.Administers says which rights
+// those are.
 //
 // A role that is not there counts as no permissions, which is the reading
 // principalFor already takes of the same condition: an account pointing at a
@@ -201,5 +201,5 @@ func (s *SessionService) administers(ctx context.Context, user *model.User) (boo
 		return false, err
 	}
 
-	return roleAdministers(role), nil
+	return role.Administers(), nil
 }

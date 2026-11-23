@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // dictionaryPath is where the page fetches a language's dictionary, followed by
@@ -82,7 +82,7 @@ func RefusalValues() map[string]map[int]string {
 }
 
 // refusalValuesIn reads REFUSAL_VALUES out of the script, a code a line:
-// `  overDailyLimit: { 2: fmtDate },`.
+// `  notFound: { 0: entityName },`.
 func refusalValuesIn(script string) map[string]map[int]string {
 	named := map[string]map[int]string{}
 

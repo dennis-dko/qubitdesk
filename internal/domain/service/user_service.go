@@ -3,27 +3,64 @@ package service
 import (
 	"context"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
-// UserDomainService holds the one rule about moving an account between roles:
-// the built-in administrator keeps a role that can still administer.
+// UserDomainService holds the rules about moving an account between roles: the
+// built-in administrator keeps a role that can still administer, and an account
+// a contact signs in to the portal with is given none that does.
 type UserDomainService struct {
-	userRepository repository.UserRepository
-	roleRepository repository.RoleRepository
+	userRepository    repository.UserRepository
+	roleRepository    repository.RoleRepository
+	contactRepository repository.ContactRepository
 }
 
 // NewUserDomainService needs the roles to see what the one an account is moved
-// to may do.
+// to may do, and the contacts to see whether the account is one of theirs.
 func NewUserDomainService(
 	userRepo repository.UserRepository,
 	roleRepo repository.RoleRepository,
+	contactRepo repository.ContactRepository,
 ) *UserDomainService {
 	return &UserDomainService{
-		userRepository: userRepo,
-		roleRepository: roleRepo,
+		userRepository:    userRepo,
+		roleRepository:    roleRepo,
+		contactRepository: contactRepo,
+	}
+}
+
+// RefuseAdministeringContact refuses a role holding rights over the
+// installation for an account a contact signs in to the portal with.
+//
+// Such an account is reached from the customers' side: whoever keeps the
+// contacts gives it its password, and so knows a password that opens it. That is
+// harmless while the account can do nothing but follow the contact's tickets,
+// and it is the installation once the account administers it. So the rights
+// that amount to the installation are never handed to a contact's account, as
+// they are never handed to the role every directory entry arrives with.
+func RefuseAdministeringContact(
+	ctx context.Context,
+	contacts repository.ContactRepository,
+	user *model.User,
+	role *model.Role,
+) error {
+	if !role.Administers() {
+		return nil
+	}
+
+	_, err := contacts.GetByUserID(ctx, user.ID)
+
+	switch {
+	case err == nil:
+		return apperror.Conflictf("%q signs in to the portal as a contact and is not given %q, which "+
+			"administers the installation", user.Email, role.Name).
+			WithCode("portalAccountAdministers", user.Email, role.Name)
+	case apperror.KindOf(err) == apperror.KindNotFound:
+		return nil
+	default:
+		return err
 	}
 }
 
@@ -50,6 +87,10 @@ func (s *UserDomainService) AssignRoleToUser(
 			"the built-in administrator cannot be moved to role %q, which lacks %q",
 			role.Name, model.PermRoleWrite).
 			WithCode("adminRoleMustAdminister", role.Name, model.PermRoleWrite)
+	}
+
+	if err := RefuseAdministeringContact(ctx, s.contactRepository, user, role); err != nil {
+		return nil, err
 	}
 
 	user.RoleID = role.ID

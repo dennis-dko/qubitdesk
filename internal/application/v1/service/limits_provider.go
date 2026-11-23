@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // limitsTTL is how stale a cached value may get.

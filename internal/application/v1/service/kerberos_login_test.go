@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // lookupDirectory holds entries by the name they are looked up with and turns
@@ -35,7 +35,7 @@ func kerberosSessions(t *testing.T, entries map[string]*service.ExternalUser) (*
 	f := newFixture(t)
 
 	return f, service.NewSessionService(f.userRepo, f.roleRepo, newStubSessions(), f.auth, time.Hour).
-		WithExternalAuth(&lookupDirectory{entries: entries}, model.RoleUser)
+		WithExternalAuth(&lookupDirectory{entries: entries}, model.RoleAgent)
 }
 
 // A Kerberos sign-in reaches the account a directory password sign-in reaches,

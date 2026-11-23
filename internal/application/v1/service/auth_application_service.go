@@ -6,10 +6,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // Credentials of the built-in administrator created on first start. The
@@ -27,6 +27,18 @@ type Principal struct {
 	User        *model.User
 	Role        *model.Role
 	Permissions []string
+
+	// System marks the application itself acting - the automation running a
+	// job - which holds every right on the staff side, reaches every queue and
+	// is written into a ticket's history and articles as the system rather than
+	// as an account. It is made in this package, by theApplication, and never
+	// from a request.
+	System bool
+}
+
+// theApplication is the principal the automation acts as.
+func theApplication() *Principal {
+	return &Principal{Permissions: model.AdminPermissions(), System: true}
 }
 
 // Can reports whether the principal holds the permission.
@@ -101,12 +113,6 @@ func (s *AuthService) EnsureSystemUser(ctx context.Context) (created bool, err e
 		return false, apperror.Internal(err)
 	}
 
-	// No daily target. It used to be seeded with the default eight, from when
-	// this account recorded time like anybody else - it does not: it cannot book
-	// an hour, read a figure or open the working-times card, which is hidden for
-	// it. So the figure was read by nothing and shown in one place, the account
-	// table, where every other row said "default" and this one said 8.0 for no
-	// reason a reader could work out.
 	_, err = s.users.Save(ctx, &model.User{
 		Name:               SystemUserName,
 		Email:              SystemUserEmail,

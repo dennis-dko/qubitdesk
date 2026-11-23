@@ -31,7 +31,7 @@ private interface, firewall it, or switch it off under *Settings*.
 | --- | --- | --- | --- |
 | **A** Compose | `docker compose up -d` | PostgreSQL, in the stack | `127.0.0.1:8000` |
 | **B** Compose + TLS | `docker compose -f compose.yaml -f compose.tls.yaml up -d` | PostgreSQL, in the stack | `:80` and `:443` |
-| **C** Single binary | `./timepulse-web` | your choice, asked on first start | `:8000` |
+| **C** Single binary | `./qubitdesk-web` | your choice, asked on first start | `:8000` |
 | **D** Bare container | `docker run …` | asked on first start | `:8000` |
 
 A is the normal answer. B if nothing else terminates TLS. C for a small
@@ -80,7 +80,7 @@ Pin the version rather than following `latest`, so a restart cannot become an
 unplanned upgrade:
 
 ```bash
-TIMEPULSE_VERSION=v1.2.3
+QUBITDESK_VERSION=v1.2.3
 ```
 
 ## B · Compose with TLS
@@ -94,7 +94,7 @@ so it **refuses to start anything** while either is missing, and `.env.example`
 ships them commented out:
 
 ```bash
-TLS_DOMAINS=time.example.com     # comma separated for several
+TLS_DOMAINS=tickets.example.com     # comma separated for several
 TLS_EMAIL=ops@example.com
 ```
 
@@ -118,16 +118,16 @@ out. Two certificates for one name means one renewal that quietly stops working.
 
 ## C · Single binary
 
-Download `timepulse-web` for your platform from the release, check it
+Download `qubitdesk-web` for your platform from the release, check it
 against `SHA256SUMS`, and run it.
 
 ```bash
-mkdir -p /opt/timepulse/configs
-cd /opt/timepulse
+mkdir -p /opt/qubitdesk/configs
+cd /opt/qubitdesk
 cp /path/to/.env.binary.example configs/.env
 $EDITOR configs/.env
 chmod 600 configs/.env
-./timepulse-web
+./qubitdesk-web
 ```
 
 **The working directory matters.** It is what `configs/` is resolved against, so
@@ -142,8 +142,8 @@ download against `SHA256SUMS`, then either press through the dialog or clear the
 download mark first:
 
 ```powershell
-Get-FileHash .\timepulse-web_v1.2.3_windows_amd64.exe -Algorithm SHA256
-Unblock-File .\timepulse-web_v1.2.3_windows_amd64.exe
+Get-FileHash .\qubitdesk-web_v1.2.3_windows_amd64.exe -Algorithm SHA256
+Unblock-File .\qubitdesk-web_v1.2.3_windows_amd64.exe
 ```
 
 Rolling this out to more than a handful of machines is the point at which a
@@ -156,16 +156,16 @@ A systemd unit that gets that right:
 
 ```ini
 [Unit]
-Description=TimePulse
+Description=QubitDesk
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=timepulse
-Group=timepulse
-WorkingDirectory=/opt/timepulse
-ExecStart=/opt/timepulse/timepulse-web
+User=qubitdesk
+Group=qubitdesk
+WorkingDirectory=/opt/qubitdesk
+ExecStart=/opt/qubitdesk/qubitdesk-web
 Restart=on-failure
 RestartSec=5s
 
@@ -178,7 +178,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/timepulse
+ReadWritePaths=/opt/qubitdesk
 
 # Only needed when this process terminates TLS itself. Without it an
 # unprivileged user cannot bind 443 or 80 - see below, because the way that
@@ -199,7 +199,7 @@ the certificate cache — all under its working directory and nowhere else.
 Two things to know before you switch `TLS_ENABLED=true` on a host.
 
 **Uncomment the two capability lines.** A container gets low ports for free; a
-host does not. As written, the unit runs as `timepulse` with `NoNewPrivileges=true`, so
+host does not. As written, the unit runs as `qubitdesk` with `NoNewPrivileges=true`, so
 binding 443 and 80 fails with "permission denied".
 
 In the unit, and not with `setcap` on the binary. An update from the interface
@@ -232,8 +232,8 @@ still the tidier arrangement and nothing here argues against it.
 ## D · Bare container
 
 ```bash
-docker run -d -p 8000:8000 -v timepulse-data:/data --stop-timeout 45 \
-  ghcr.io/dennis-dko/timepulse:v1.2.3
+docker run -d -p 8000:8000 -v qubitdesk-data:/data --stop-timeout 45 \
+  ghcr.io/dennis-dko/qubitdesk:v1.2.3
 ```
 
 With no `DB_DIALECT` this serves its **installer** and waits — that is on
@@ -250,7 +250,7 @@ the two together.
 The image bakes in exactly one variable:
 
 ```ini
-DB_NAME=/data/timepulse
+DB_NAME=/data/qubitdesk
 ```
 
 That is the path already filled in if you pick SQLite in the installer, which is
@@ -325,9 +325,9 @@ because every built-in fallback was already identical to the line that was
 removed; what changed is that there is now one place per value instead of two,
 and the file's copy was always the losing one.
 
-**`APP_NAME` names nothing on screen.** Every installation is called TimePulse.
+**`APP_NAME` names nothing on screen.** Every installation is called QubitDesk.
 What is written under *Settings → Appearance* is added to that name after a bar,
-as in *TimePulse | htp.net*. That full name appears in the header, the browser tab,
+as in *QubitDesk | htp.net*. That full name appears in the header, the browser tab,
 an authenticator app, a passkey prompt, the foot of an exported document and a
 subscribed calendar. The browser tab can be given a shorter addition of its own.
 `APP_NAME` belongs to the framework: traces are recorded under it, and
@@ -434,8 +434,8 @@ already have:
 
 ```bash
 TLS_ENABLED=true
-TLS_CERT_FILE=/etc/timepulse/fullchain.pem
-TLS_KEY_FILE=/etc/timepulse/privkey.pem
+TLS_CERT_FILE=/etc/qubitdesk/fullchain.pem
+TLS_KEY_FILE=/etc/qubitdesk/privkey.pem
 ```
 
 Nothing is requested from anybody: no domain, no challenge, no authority, so
@@ -448,7 +448,7 @@ the certificate for you, `HSTS_MAX_AGE=0` keeps one that lapses from locking
 those browsers out, and tells the ones that stored it to forget it:
 
 ```bash
-openssl req -x509 -newkey rsa:2048 -nodes -days 825   -keyout privkey.pem -out fullchain.pem   -subj "/CN=timepulse.intern"   -addext "subjectAltName=DNS:timepulse.intern"
+openssl req -x509 -newkey rsa:2048 -nodes -days 825   -keyout privkey.pem -out fullchain.pem   -subj "/CN=helpdesk.intern"   -addext "subjectAltName=DNS:helpdesk.intern"
 ```
 
 A certificate that cannot be read stops the start rather than being discovered by
@@ -482,7 +482,7 @@ proxy passes to its plain port.
 
 ### It needs a name of its own, not a path
 
-`https://firma.example.com/timepulse/` does not work, and cannot be made to
+`https://firma.example.com/helpdesk/` does not work, and cannot be made to
 work from the proxy side. The interface asks for `/app.js`, `/app.css`,
 `/theme.js` and `/favicon.ico`, and the script's API base is `/api/v1` - all
 absolute, and there is no setting that moves them. Under a sub-path the browser
@@ -518,12 +518,12 @@ Anything that reaches the port can also claim to be a proxy: set its own
 
 ### The whole configuration
 
-`/etc/apache2/sites-available/timepulse.conf`:
+`/etc/apache2/sites-available/helpdesk.conf`:
 
 ```apache
 # Port 80 exists for the redirect and for certbot's challenge.
 <VirtualHost *:80>
-    ServerName timepulse.firma.example.com
+    ServerName helpdesk.firma.example.com
 
     RewriteEngine On
     RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
@@ -531,11 +531,11 @@ Anything that reaches the port can also claim to be a proxy: set its own
 </VirtualHost>
 
 <VirtualHost *:443>
-    ServerName timepulse.firma.example.com
+    ServerName helpdesk.firma.example.com
 
     SSLEngine on
-    SSLCertificateFile    /etc/letsencrypt/live/timepulse.firma.example.com/fullchain.pem
-    SSLCertificateKeyFile /etc/letsencrypt/live/timepulse.firma.example.com/privkey.pem
+    SSLCertificateFile    /etc/letsencrypt/live/helpdesk.firma.example.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/helpdesk.firma.example.com/privkey.pem
 
     # Whatever a caller sent for itself goes, before Apache sets its own. The
     # sign-in rate limit counts per address and reads these; left alone, the
@@ -560,14 +560,14 @@ Anything that reaches the port can also claim to be a proxy: set its own
     # than delivered.
     SetEnvIfNoCase Request_URI "^/api/v1/events" no-gzip dont-vary
 
-    ErrorLog  ${APACHE_LOG_DIR}/timepulse-error.log
-    CustomLog ${APACHE_LOG_DIR}/timepulse-access.log combined
+    ErrorLog  ${APACHE_LOG_DIR}/helpdesk-error.log
+    CustomLog ${APACHE_LOG_DIR}/helpdesk-access.log combined
 </VirtualHost>
 ```
 
 ```bash
 sudo a2enmod proxy proxy_http headers ssl rewrite
-sudo a2ensite timepulse
+sudo a2ensite helpdesk
 sudo apache2ctl configtest
 sudo systemctl reload apache2
 ```
@@ -605,22 +605,22 @@ holding it for the rest of its life to use it once.
 
 ```sql
 -- PostgreSQL
-CREATE DATABASE "timepulse";
-CREATE USER timepulse WITH PASSWORD 'choose-something';
-GRANT ALL PRIVILEGES ON DATABASE "timepulse" TO timepulse;
+CREATE DATABASE "qubitdesk";
+CREATE USER qubitdesk WITH PASSWORD 'choose-something';
+GRANT ALL PRIVILEGES ON DATABASE "qubitdesk" TO qubitdesk;
 -- PostgreSQL 15 and later also need the schema itself:
-\connect "timepulse"
-GRANT ALL ON SCHEMA public TO timepulse;
+\connect "qubitdesk"
+GRANT ALL ON SCHEMA public TO qubitdesk;
 ```
 
 ```sql
 -- MySQL / MariaDB
-CREATE DATABASE `timepulse` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'timepulse'@'%' IDENTIFIED BY 'choose-something';
-GRANT ALL PRIVILEGES ON `timepulse`.* TO 'timepulse'@'%';
+CREATE DATABASE `qubitdesk` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'qubitdesk'@'%' IDENTIFIED BY 'choose-something';
+GRANT ALL PRIVILEGES ON `qubitdesk`.* TO 'qubitdesk'@'%';
 ```
 
-`utf8mb4` matters on MySQL: names, project titles and the notice on the sign-in
+`utf8mb4` matters on MySQL: names, ticket titles and the notice on the sign-in
 screen are whatever people type, and the older `utf8` is three bytes and cannot
 store all of it.
 
@@ -634,7 +634,7 @@ that fails after its first statement - a missing right, a lost connection -
 keeps what it did and loses the record that it ran, and the next start stops on
 "already exists" or "Duplicate column". On a first start the database holds
 nothing yet: drop and recreate it and start again. On an upgrade it holds
-everybody's hours, so undo only what the failed migration added - the error
+everybody's tickets, so undo only what the failed migration added - the error
 names the table or column - and start again. PostgreSQL and SQLite roll a
 failed migration back and need nothing.
 
@@ -677,16 +677,22 @@ yourself; then nothing is printed and a provisioning script can drive the page.
 
 **Demo data**, if you choose it on the installer, where a new database starts
 empty, with the demo data or from a backup - one of the three. It is filled
-with four projects, eight weeks of bookings on working days up to yesterday, a
-week of leave, a day off sick and two templates — written in the language the
-installer was read in, and all of it in the built-in administrator's account,
-which is given the *user-admin* role so that it records time as well as
-administering. That is the account the browser that answered the installer is
-signed into, so the demo is on screen at once. It goes only into a database
-that holds no projects yet: pointed at a database in use, the start says so in
-the log and adds nothing. It is meant for trying TimePulse out; for an
-installation people will work in, leave the box empty, or move the built-in
-administrator back to the *admin* role and delete the demo projects afterwards.
+with three customer organisations, their contacts and three of their
+configuration items - a shop, a laptop at it and a server - eight tickets opened
+over the last five days with what was said and noted in them, a service level
+the *Service Desk* starts its tickets with - which one of them has already
+missed - four knowledge base articles, one of them public, and two answer
+templates. All of it is written in the language the installer was read in and
+in the built-in administrator's name, which is the account the browser that
+answered the installer is signed into, so the demo is on screen at once. No
+other account is made for it. It goes only into a database that holds no
+tickets yet: pointed at a database in use, the start says so in the log and
+adds nothing. It is meant for trying QubitDesk out; for an installation people
+will work in, leave it empty, or delete the demo's tickets, customers,
+articles, templates and service level afterwards.
+
+**A backup**, if you choose it instead. *Restoring a backup* below says what it
+asks for and what it refuses.
 
 Two things about an exposed installer. `GET /install/state` needs no token and
 says the instance name and the build version; whatever database prefill the
@@ -702,11 +708,11 @@ the restart. `changeme123` is effectively full control of the installation, not 
 limited foothold. Every start says so in the log while it is still the password,
 as it says so for authentication switched off and for plain HTTP.
 
-The built-in administrator **records no time**. It sets up the installation and
-manages accounts and roles; it has no projects, no entries, no overtime balance
-and no reports, and the server refuses those to it by the same code that refuses
-them to anybody else. Somebody who both works here and administers gets the
-combined role instead of a second account.
+The built-in administrator **may do everything on the staff side**, tickets
+included: a ticket is the organisation's record rather than one person's, and
+whoever sets up queues has to be able to open one to see that it works. It does
+not reach the customer portal, which means something only for an account linked
+to a contact.
 
 ## When nobody can sign in
 
@@ -725,13 +731,13 @@ command on the server, where the application runs:
 
 ```bash
 # A · B
-docker compose exec app /app/timepulse-web recover
+docker compose exec app /app/qubitdesk-web recover
 
 # C - from the directory the service starts in, as the user it runs as
-cd /opt/timepulse && sudo -u timepulse ./timepulse-web recover
+cd /opt/qubitdesk && sudo -u qubitdesk ./qubitdesk-web recover
 
 # D
-docker exec <container> /app/timepulse-web recover
+docker exec <container> /app/qubitdesk-web recover
 ```
 
 It prints a new password for `admin@local`, once. Signing in with it asks for a
@@ -776,7 +782,7 @@ the grounds that a changed host is a change to the same connection — which
 describes what the card *says* and answers the wrong question, because the
 connection is opened once while the application starts. Moving the database to
 another host is exactly as pending as moving it to another dialect, and it now
-reads as one line: `postgres app@db:5432/timepulse` → `postgres app@db2:5432/timepulse`. A default port and an omitted one are the same connection here as they
+reads as one line: `postgres app@db:5432/qubitdesk` → `postgres app@db2:5432/qubitdesk`. A default port and an omitted one are the same connection here as they
 are in fact, so spelling out `5432` is not reported as a change.
 
 A changed password appears as *Database password* with nothing beside it. The
@@ -804,20 +810,16 @@ equivalent would leave a window with no application running. The card says so.
 
 ## If the tab icon does not appear
 
-The tab shows TimePulse's mark whatever logo is configured: the page declares
+The tab shows QubitDesk's mark whatever logo is configured: the page declares
 `/favicon.svg`, with `/favicon.ico` beside it for whatever asks for that by name.
 A configured logo is drawn at the left of the bar after signing in, and nowhere
 else.
 
-So if a tab is empty, or still shows a logo, it is one of these two:
-
-**The build is older than this.** Up to v0.4.16 the tab showed the configured
-logo, from `/favicon`. Check the footer: it names the version.
-
-**The browser is showing what it remembered.** Firefox keeps an icon against a
-page in `favicons.sqlite` and reuses it, including the memory of a page that had
-none or another. `Ctrl`+`Shift`+`R` reloads past it; *Forget About This Site*
-clears it outright.
+So if a tab is empty, or still shows a logo, **the browser is showing what it
+remembered.** Firefox keeps an icon against a page in `favicons.sqlite` and
+reuses it, including the memory of a page that had none or another.
+`Ctrl`+`Shift`+`R` reloads past it; *Forget About This Site* clears it
+outright.
 
 To take the browser out of it entirely, open `/favicon.svg` directly. What comes
 back is what any tab is given.
@@ -842,7 +844,7 @@ Two caveats that decide whether your alerting is worth anything:
   `version` field — that is the application and nothing else.
 
 A metric is published only once it has a value. An installation that has had no
-refused sign-in publishes no `timepulse_signin_failures_total` at all, rather than
+refused sign-in publishes no `qubitdesk_signin_failures_total` at all, rather than
 publishing zero. Treat an absent series as absent — `absent()` — not as a healthy
 zero.
 
@@ -899,7 +901,7 @@ plan that disk the way it plans the database's.
 
 Two deliberate omissions: the OTLP port is not published, so nothing outside the
 compose network can write spans; and Jaeger is **not** a startup dependency of
-the application, so a broken collector can never keep TimePulse from
+the application, so a broken collector can never keep the ticket system from
 starting. The price of the second is that spans exported before Jaeger is ready
 are dropped.
 
@@ -947,7 +949,7 @@ Three things differ from the other overlays:
   `LDAP_BIND_PASSWORD` is the read-only account typed into the Settings card.
   They are hashed before they reach any file inside the container.
 - **It comes up empty.** A suffix, an `ou=people`, and the bind account —
-  no people. Invented ones would arrive in TimePulse on the first
+  no people. Invented ones would arrive in the ticket system on the first
   synchronisation, named after nobody and awkward to remove once entries hang
   off them. The header has the `ldapadd` for a real one; a `mail` attribute is
   required, because that is what an account is keyed on.
@@ -1002,7 +1004,7 @@ What a ticket reaches:
 ### The service principal and the keytab
 
 A browser asks its KDC for a ticket to `HTTP/` and the name in the address bar,
-so the principal is named after the name people use — `HTTP/time.example.com`,
+so the principal is named after the name people use — `HTTP/tickets.example.com`,
 never an IP address. Give that name an A record rather than a CNAME, or
 register the principal for the name the CNAME points at as well: Chrome and
 Edge resolve a CNAME before asking, unless the `DisableAuthNegotiateCnameLookup`
@@ -1014,16 +1016,16 @@ Kerberos AES 256 bit encryption* ticked, or tickets arrive sealed with a key the
 keytab does not hold:
 
 ```powershell
-setspn -S HTTP/time.example.com EXAMPLE\svc-timerecording
-ktpass /princ HTTP/time.example.com@EXAMPLE.COM /mapuser EXAMPLE\svc-timerecording `
+setspn -S HTTP/tickets.example.com EXAMPLE\svc-ticketsystem
+ktpass /princ HTTP/tickets.example.com@EXAMPLE.COM /mapuser EXAMPLE\svc-ticketsystem `
   /crypto AES256-SHA1 /ptype KRB5_NT_PRINCIPAL /pass * /out http.keytab
 ```
 
 With MIT Kerberos or FreeIPA:
 
 ```bash
-kadmin -q "addprinc -randkey HTTP/time.example.com"
-kadmin -q "ktadd -k http.keytab HTTP/time.example.com"
+kadmin -q "addprinc -randkey HTTP/tickets.example.com"
+kadmin -q "ktadd -k http.keytab HTTP/tickets.example.com"
 ```
 
 **The keytab is the service's key.** Whoever has it can pose as this service to
@@ -1067,10 +1069,10 @@ a restart.
 - **C · single binary:** `KERBEROS_KEYTAB` in the environment file — the
   keytab's path, readable by the service's user.
 - **D · bare container:** mount it and name it:
-  `-v /etc/timepulse/http.keytab:/run/secrets/http.keytab:ro -e KERBEROS_KEYTAB=/run/secrets/http.keytab`.
+  `-v /etc/qubitdesk/http.keytab:/run/secrets/http.keytab:ro -e KERBEROS_KEYTAB=/run/secrets/http.keytab`.
 
 `KERBEROS_SERVICE_PRINCIPAL` is only needed when the keytab holds keys for more
-than one service: it names the one to use, `HTTP/time.example.com`, with or
+than one service: it names the one to use, `HTTP/tickets.example.com`, with or
 without `@EXAMPLE.COM`.
 
 ### The browsers
@@ -1143,11 +1145,11 @@ A refused round is written to the log as a warning, prefixed `signing in through
 the provider:`, with the provider's own reason - the sign-in screen says only
 that the provider did not confirm it.
 
-## Pushing reminders to browsers
+## Pushing notifications to browsers
 
 Off until somebody who administers the installation switches it on under
 **Settings → Push notifications**; nothing is configured in the environment.
-Then each person chooses, browser by browser, under **My account → Reminders**.
+Then each person chooses, browser by browser, under **My account → Notifications**.
 
 - **The server posts to the push services of the browsers' makers**, over https
   and to nothing else: `fcm.googleapis.com` for Chrome and the browsers built on
@@ -1165,9 +1167,10 @@ Then each person chooses, browser by browser, under **My account → Reminders**
   off keeps it, so the same browsers are reached when it is on again. Like the
   second factors it cannot be read once `SECRET_KEY` is lost or changed; nothing
   is pushed then, and the check says why in the log.
-- **Each reminder is pushed in the minute it falls due** by a check that runs
-  every minute while push is on. An instance that is down in that minute does not
-  push that reminder later - the banner on the page still says it.
+- **A push is held for an hour at most.** A push service keeps a message for a
+  browser that is offline for that long and then drops it, because news about a
+  ticket an hour old is better read on the page than announced. Nothing is pushed
+  again later, and nothing about what was pushed is kept.
 
 ## Updating from the interface
 
@@ -1178,7 +1181,7 @@ that difference is the whole of it.
 | | What the card offers |
 | --- | --- |
 | **C** Single binary | A button. It downloads the release's binary for this platform, checks it against the `SHA256SUMS` published beside it, and puts it where the running file is. |
-| **A/B/D** Container | No button. The card says a newer version exists, which command updates the image - `docker compose pull && docker compose up -d` - and that adding `compose.update.yaml` lets it do that from here. Under it, it names what that command does not take as it stands: overlays given with `-f`, as in B, which both commands need again unless `COMPOSE_FILE` in `.env` lists them; a version pinned in `TIMEPULSE_VERSION`, which has to be raised first; and a container started with `docker run`, as in D, which is pulled, removed and started again with the same options. |
+| **A/B/D** Container | No button. The card says a newer version exists, which command updates the image - `docker compose pull && docker compose up -d` - and that adding `compose.update.yaml` lets it do that from here. Under it, it names what that command does not take as it stands: overlays given with `-f`, as in B, which both commands need again unless `COMPOSE_FILE` in `.env` lists them; a version pinned in `QUBITDESK_VERSION`, which has to be raised first; and a container started with `docker run`, as in D, which is pulled, removed and started again with the same options. |
 | **A/B/D** Container **with `compose.update.yaml`** | A button that pulls a new image, recreates the container from it, and removes the image it replaced. Nothing is left behind. |
 
 **Why a container without the overlay gets no button.** A binary swapped inside
@@ -1254,8 +1257,8 @@ recreate failed. Either way the restart announcement is taken back on every scre
 and the card says which it was - for a failure, in the updater's own words.
 
 **Nothing newer is what a pinned version finds.** The updater pulls the tag the
-compose file names. Where `TIMEPULSE_VERSION` names a version that tag does not move,
-so every press finds the image already running: change `TIMEPULSE_VERSION` and recreate by
+compose file names. Where `QUBITDESK_VERSION` names a version that tag does not move,
+so every press finds the image already running: change `QUBITDESK_VERSION` and recreate by
 hand instead, or leave it unset to follow `latest`.
 
 **Nothing is written into place unverified.** The download is hashed while it is
@@ -1314,16 +1317,17 @@ application not coming back.
 
 ### The file keeps its name
 
-A release is published as `timepulse-web_v1.2.3_windows_amd64.exe`, so
+A release is published as `qubitdesk-web_v1.2.3_windows_amd64.exe`, so
 a manual download says which version it is in its own name. An update installed
 from the interface does not rename anything: the new version is written to the
 path the running one already occupies, whatever that path is called.
 
-A version up to v0.4.11 cannot update itself from the interface to this one:
-it asks the release for its binary under a name from before the project was
-called TimePulse, and releases no longer carry that name. Replace it by hand
-once - stop it, put the new file where the old one was, under the name the old
-one had, start it - and from then on it updates itself again.
+A version from before the binary was called `-web` cannot update itself from
+the interface to one that is: it asks the release for
+`qubitdesk_v1.2.3_windows_amd64.exe`, and releases no longer carry that
+name. Replace it by hand once - stop it, put the new file where the old one
+was, under the name the old one had, start it - and from then on it updates
+itself again.
 
 That is deliberate and not negotiable. The path is the installation - a systemd
 unit, a Windows service, a shortcut, a scheduled task and whatever scripts exist
@@ -1333,7 +1337,7 @@ application offline and leaves no obvious reason why.
 Which version a file is stays answerable three ways:
 
 ```bash
-./timepulse-web --version
+./qubitdesk-web --version
 ```
 
 On Windows, right-click → *Properties* → *Details*: the published binaries carry
@@ -1343,7 +1347,7 @@ being asked. And the footer of the interface names it beside the platform.
 ### Going back
 
 The version being replaced is kept, on both platforms, beside the binary as
-`timepulse-web.old`. It stays there until the *next* update, which removes it
+`qubitdesk-web.old`. It stays there until the *next* update, which removes it
 as its first act - so there is always exactly one version to go back to, and
 never two.
 
@@ -1353,12 +1357,12 @@ taken, or a certificate it cannot read. At that point there is no interface to
 press anything in, which is why the way back is a flag rather than a button:
 
 ```bash
-./timepulse-web --rollback
+./qubitdesk-web --rollback
 # the previous version is back in place; start it again
 ```
 
 It moves two files: the version that would not serve becomes
-`timepulse-web.failed`, kept so it can be looked at, and `.old` takes its
+`qubitdesk-web.failed`, kept so it can be looked at, and `.old` takes its
 name back. No database, no configuration, nothing else touched. Start it as you
 normally would.
 
@@ -1405,10 +1409,9 @@ underneath. Three ways out, in order of how much trouble they are:
 Nothing is broken while this lasts. The application runs on the version it has;
 only the question "is there a newer one" goes unanswered.
 
-Only an account that administers the installation and has no working day of its
-own sees the card at all - the built-in administrator, or somebody holding the
-admin role. Not the combined role: this replaces the bytes that will be executed,
-which is a different kind of decision from changing a setting.
+Only an account that administers the installation sees the card at all - the
+built-in administrator, or somebody whose role holds *Administer the
+installation*.
 
 ## Backup
 
@@ -1428,11 +1431,13 @@ changed it is refused whole.
 openssl rand -base64 24    # a passphrase, for .env
 ```
 
-**What a backup holds.** Every table: accounts, roles and permissions, projects,
-time entries and their history, running timers, absences, plans and templates,
-tokens and passkeys, the administration log, and the whole settings table -
-branding and the logo, the timezone, the directory configuration including its
-bind password. Not the sessions: after a restore everybody signs in again.
+**What a backup holds.** Every table: accounts, roles and permissions, tokens
+and passkeys, the queues and what tickets are sorted by, the calendars and
+service levels, the organisations and contacts, the tickets with their
+articles, files, noted time and history, the notifications, the automation, the
+knowledge base, the administration log, and the whole settings table -
+branding and the logo, the timezone, the system configuration, the directory
+configuration including its bind password. Not the sessions: after a restore everybody signs in again.
 Second factors, the directory password, a sign-in provider's client secret and
 the push key are sealed with `SECRET_KEY` where one is set, and stay sealed
 inside the backup, so a restore needs that `SECRET_KEY` too - or leaves those
@@ -1441,7 +1446,7 @@ together, and somewhere other than the server whose backups they open.
 
 **Where they are kept.** `BACKUP_DIR`: `backups` beside `configs/` for a binary,
 `/data/backups` on the `app-data` volume under Compose. Each file is named for
-the moment it was made, in UTC - `timepulse-20261119-030000.tpbak`. That folder
+the moment it was made, in UTC - `qubitdesk-20261119-030000.qdbak`. That folder
 is on the server the backups are of, so copy it off the server, or download the
 files: a backup that burns with the disk it describes is not one.
 
@@ -1460,7 +1465,7 @@ A backup is restored through the **installer**, into an **empty** database of
 any dialect - one made on SQLite restores into PostgreSQL, and the other way
 round:
 
-1. Start TimePulse so that it serves its installer, with the `SECRET_KEY` this
+1. Start QubitDesk so that it serves its installer, with the `SECRET_KEY` this
    installation is to keep - the one the backup's installation had, another, or
    none. A binary or a bare container serves the installer when no database is
    configured (see *First start*). Compose configures one itself, so run the
@@ -1475,7 +1480,7 @@ round:
 2. Choose the database, choose *Restore a backup into it*, choose the file and type
    its `BACKUP_PASSPHRASE`. The installer reads it whole there and then, so a
    wrong passphrase, a file that is not a backup, one cut short on its way and
-   one made by a newer version of TimePulse are said on that page - the restore
+   one made by a newer version of QubitDesk are said on that page - the restore
    itself runs after the installer has handed over, where a refusal can only end
    the process.
 
@@ -1505,23 +1510,23 @@ A server-side dump of the database is a backup too, and the one to use where
 something outside the application already takes them.
 
 **PostgreSQL or MySQL** — everything is in that server: accounts, roles and their
-permissions, projects, time entries, running timers, sessions, API tokens,
-passkeys, and the whole settings table, which includes branding and the logo, the
+permissions, tickets, contacts, sessions, API tokens, passkeys, and the whole
+settings table, which includes branding and the logo, the
 instance timezone, the directory configuration *including its bind password*,
 telemetry and the operational limits. A server-side dump is the backup.
 
 ```bash
-docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | gzip > timepulse-$(date +%F).sql.gz
+docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | gzip > qubitdesk-$(date +%F).sql.gz
 ```
 
 **SQLite** — the file is `<DB_NAME>.db`, with a trailing `.db` in `DB_NAME`
-trimmed first. In the image that is `/data/timepulse.db` on the `/data`
+trimmed first. In the image that is `/data/qubitdesk.db` on the `/data`
 volume; for a binary it is relative to the working directory. The application
 runs SQLite in write-ahead logging mode, so a copy taken while the process runs
 must include the `-wal` and `-shm` sidecars, or use SQLite's own backup:
 
 ```bash
-sqlite3 /data/timepulse.db ".backup '/backup/timepulse-$(date +%F).db'"
+sqlite3 /data/qubitdesk.db ".backup '/backup/qubitdesk-$(date +%F).db'"
 ```
 
 **Two paths matter whatever the dialect:**
@@ -1540,10 +1545,10 @@ start-up, and they run forward only.
 
 ```bash
 # A · B
-TIMEPULSE_VERSION=v1.3.0 docker compose up -d      # after a backup
+QUBITDESK_VERSION=v1.3.0 docker compose up -d      # after a backup
 
 # C
-systemctl stop timepulse && cp timepulse-web_v1.3.0_linux_amd64 /opt/timepulse/timepulse-web && systemctl start timepulse
+systemctl stop qubitdesk && cp qubitdesk-web_v1.3.0_linux_amd64 /opt/qubitdesk/qubitdesk-web && systemctl start qubitdesk
 ```
 
 The schema migrates itself on the way up. There is no separate command, and
@@ -1554,12 +1559,6 @@ start: the app asks the installation which release it runs, and a press
 downloads that release's app from GitHub and hands it to Android, which asks
 to confirm it. The phone has to reach GitHub for that; one that cannot is told
 the download failed and keeps the app it has.
-
-Releases up to v0.4.2 carried a terminal client beside this binary. None does since: booking is the web interface's and the
-Android app's. An update neither replaces nor removes a client already handed
-out, and it knows only its own release's API, so take it out of use once the
-installation runs a later version. Asked for its old `track` command, this
-binary says where to book instead and exits with 2 rather than starting.
 
 ## Directory (LDAP) synchronisation
 
@@ -1583,32 +1582,21 @@ Read its header before including it; most deployments should not.
 
 ### Who may run one
 
-Editing the directory card, testing the connection and saving it need
-`settings:manage`, like every other setting. Running a synchronisation does
-not: **the preview, the button and the schedule field belong to an account that
-administers and has no working day of its own** - the built-in administrator, or
-somebody holding the `admin` role. An account that would be refused is not shown
-the card. It is shown a sentence in its place saying whose the run is, because a
-card that is simply missing reads as a feature that has been removed.
-
-The distinction is what a run does rather than what it reads. Configuring a
-directory is configuration; deleting every account the directory no longer holds
-along with everything those people recorded is not. The schedule sits on the
-same side of that line — it is the same deletion performed later and unattended
-— and it used to sit on the other one, so the caution the buttons were given
-could be walked around by typing five numbers into the field between them.
-
-An installation whose administration has been handed to a `user-admin` account
-therefore keeps one thing out of that account's reach. That is deliberate: the
-irreversible operation stays with an account whose only job is the installation -
-the built-in one, which exists before anybody has chosen anything, or one that
-was given the `admin` role on purpose.
+Editing the directory card, testing the connection, saving it and running a
+synchronisation all need *Administer the installation* (`settings:manage`), like
+every other setting - the schedule included, which is the same deletion performed
+later and unattended. A run deletes every account the directory no longer holds,
+so that right belongs only to somebody who may remove accounts. *Create and
+change roles* (`roles:write`) amounts to the same, because whoever holds it can tick the right
+on a role and assign it.
 
 A run reads the directory and never writes to it. It creates accounts the
 directory holds and this installation lacks, and it **deletes** directory-backed
-accounts the directory no longer holds — a purge, in one transaction: running
-timers, time entries, that person's projects, API tokens, passkeys, sessions,
-then the account. It is irreversible and it takes the recorded hours with it.
+accounts the directory no longer holds — a purge, in one transaction: API
+tokens, passkeys, sessions and everything else kept for that account alone, then
+the account. The tickets they owned or were responsible for stay, with nobody in
+that place and unlocked, and a contact they signed in as stays without the
+account. It is irreversible.
 Local accounts and the built-in administrator are never touched. An account
 created here stops being local the first time its owner signs in through the
 directory: it is taken over, keeps no local password, and from then on a run
@@ -1624,7 +1612,7 @@ Three guards stand between a misconfigured filter and a mass deletion:
    check.
 
 **Preview before you run.** The dry run reports the same candidates and, for each
-one, how many time entries would be destroyed.
+one, how many unfinished tickets would be left without an owner.
 
 **A run started from the screen deletes what it asked about, or nothing.** The
 button previews, names the damage, and sends the accounts it named with the run.
@@ -1640,7 +1628,7 @@ recorded for good.** Each account is one line at WARN, whoever started the run
 and whichever way it ended:
 
 ```text
-directory sync removed "dave@example.com" with 12 time entries
+directory sync removed "dave@example.com", leaving 3 unfinished tickets without an owner
 ```
 
 The account and every row that named it are gone by then, so nothing in the
@@ -1649,8 +1637,8 @@ what the run is for. What the database does keep is that the run happened: every
 run that removed or added an account leaves a row in `directory_runs`, listed
 under *Recent runs* on the synchronisation card and at
 `GET /api/v1/settings/ldap/sync/runs` - when it ran, whether somebody confirmed
-it against a preview, and how many accounts it removed, how many time entries
-went with them and how many accounts it added. No log level switches that off,
+it against a preview, and how many accounts it removed, how many tickets were
+left without an owner and how many accounts it added. No log level switches that off,
 and it names nobody. A scheduled run leaves three more
 kinds of line, since it has no screen to show them on: one at WARN when a guard
 refused it, saying why; one at ERROR when it failed; and at INFO when it started
@@ -1664,8 +1652,21 @@ rather than letting it run on until the shutdown's deadline and closing the
 database under it - so the lines for whom it had removed are written before the
 process goes. What it had not reached yet, the next run does.
 
-Expired sessions are pruned at 03:00 daily, on the server's clock like the
-directory's schedule. That schedule is not configurable.
+Expired sessions are pruned at 03:00 daily, and the record of what the
+automation's jobs did at 03:10, keeping thirty days - both on the server's
+clock like the directory's schedule, and neither configurable.
+
+Once a minute the application pushes what the agents were told to the browsers
+they subscribed, where the installation pushes at all, runs the automation's
+jobs whose time has come and looks after its tickets: one whose wait is over
+moves on to the state its waiting state names, and a lock that has run
+as long as its queue allows is freed - counted in the calendar the system
+configuration's TimeWorkingHours names, and around the clock while it names
+none. It writes a line at INFO when it changed
+something and at ERROR when it could not, and nothing while there was nothing
+to do - so a quiet log is not a sign that it has stopped. That schedule is not
+configurable either; a queue that frees nothing has its unlock time at zero,
+which is how a queue ships.
 
 ## Special modes
 
@@ -1682,16 +1683,6 @@ mistakes it for a configured installation.
 
 ## Things that will surprise you
 
-- **`AUTH_ENABLED=false` is not reversible for the projects created under it.**
-  With enforcement off there is no "whose" to record, so a project made then has
-  no owner. That is consistent while it lasts - every caller sees everything. Turn
-  authentication on afterwards and those projects belong to nobody, which means
-  they are visible to nobody: not in the list, not to their creator, and not to an
-  administrator, because ownership *is* visibility here and there is no screen
-  that reaches a project it cannot see. The time entries booked against them
-  remain and still count. This is the concrete reason the mode is documented above
-  as suiting "a throwaway local trial and nothing else" - the trial's projects do
-  not survive the promotion.
 - Parsing is forgiving, not strict. A duration, integer or float that does not
   parse becomes the default **silently**. `LOG_LEVEL` resolves any unrecognised
   name to `INFO`. A `TRACER_RATIO` it cannot read records every trace, with an

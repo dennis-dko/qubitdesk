@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // The installer's token opens the built-in administrator only while the

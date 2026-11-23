@@ -16,7 +16,7 @@
    * account: someone who wants dark on a laptop at night wants it whoever is
    * signed in.
    */
-  var STORAGE_KEY = 'timepulse.theme';
+  var STORAGE_KEY = 'qubitdesk.theme';
 
   /**
    * Dark from dusk to dawn, in local time - that is what "evening" means to the
@@ -63,7 +63,7 @@
    *
    * It is configured, so it lives in the database, so the page cannot know it
    * until it has asked - and asking is a request that finishes after the
-   * document has been parsed and shown. Until then the tab reads "TimePulse",
+   * document has been parsed and shown. Until then the tab reads "QubitDesk",
    * whatever this installation calls itself. On a reload that is a visible
    * flicker back to a name nobody chose.
    *
@@ -76,7 +76,7 @@
     var stored;
 
     try {
-      stored = JSON.parse(localStorage.getItem('timepulse.branding') || 'null');
+      stored = JSON.parse(localStorage.getItem('qubitdesk.branding') || 'null');
     } catch (e) {
       return;
     }
@@ -89,7 +89,7 @@
   }
 
   // Exposed so app.js reuses these rules rather than restating them.
-  window.timePulseTheme = {
+  window.qubitDeskTheme = {
     STORAGE_KEY: STORAGE_KEY,
     DARK_FROM_HOUR: DARK_FROM_HOUR,
     DARK_UNTIL_HOUR: DARK_UNTIL_HOUR,

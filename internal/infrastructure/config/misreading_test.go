@@ -3,15 +3,15 @@ package config_test
 import (
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/infrastructure/config"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // A connection is read back the way the driver will read it, and refused only
 // where that differs from what was typed.
 //
 // Each misreading below was measured with the driver's own parser before this
-// existed: an empty PostgreSQL password took "dbname=timepulse" for itself and left the
+// existed: an empty PostgreSQL password took "dbname=qubitdesk" for itself and left the
 // database unnamed, a backslash vanished, a space and a leading quote were refused
 // in the parser's English, and MySQL split a user at its colon, cut a database's
 // name at a question mark and dialled "[::1:3306]:3306" for "::1".
@@ -29,23 +29,23 @@ func TestAConnectionIsReadBackTheWayTheDriverReadsIt(t *testing.T) {
 		ds   config.Datasource
 		code string
 	}{
-		{"an ordinary PostgreSQL connection", postgres("timepulse", "secret", "timepulse"), ""},
-		{"a PostgreSQL password with an equals sign", postgres("timepulse", "pa=ss", "timepulse"), ""},
-		{"a PostgreSQL password with a quote inside", postgres("timepulse", "it's", "timepulse"), ""},
-		{"no PostgreSQL password", postgres("postgres", "", "timepulse"), "passwordSwallowsName"},
-		{"a PostgreSQL password with a space", postgres("timepulse", "two words", "timepulse"), "postgresMisread"},
-		{"a PostgreSQL password with a backslash", postgres("timepulse", `back\slash`, "timepulse"), "postgresMisread"},
-		{"a PostgreSQL password opening with a quote", postgres("timepulse", "'quoted", "timepulse"), "postgresMisread"},
-		{"a PostgreSQL password carrying a setting", postgres("timepulse", "x sslmode=require", "timepulse"), "postgresMisread"},
-		{"a PostgreSQL database name with a space", postgres("timepulse", "secret", "time sheets"), "postgresMisread"},
-		{"an ordinary MySQL connection", mysql("timepulse", "secret", "db", "timepulse"), ""},
-		{"a MySQL password of every awkward kind", mysql("timepulse", `p@ss:w/rd?)\ x`, "db", "timepulse"), ""},
-		{"no MySQL password", mysql("timepulse", "", "db", "timepulse"), ""},
-		{"a bracketed IPv6 address for MySQL", mysql("timepulse", "secret", "[::1]", "timepulse"), ""},
-		{"a bare IPv6 address for MySQL", mysql("timepulse", "secret", "::1", "timepulse"), "mysqlMisread"},
-		{"a MySQL user with a colon", mysql("ti:me", "secret", "db", "timepulse"), "mysqlMisread"},
-		{"a MySQL database name with a question mark", mysql("timepulse", "secret", "db", "time?rec"), "mysqlMisread"},
-		{"SQLite", config.Datasource{Dialect: "sqlite", Name: "timepulse"}, ""},
+		{"an ordinary PostgreSQL connection", postgres("qubitdesk", "secret", "qubitdesk"), ""},
+		{"a PostgreSQL password with an equals sign", postgres("qubitdesk", "pa=ss", "qubitdesk"), ""},
+		{"a PostgreSQL password with a quote inside", postgres("qubitdesk", "it's", "qubitdesk"), ""},
+		{"no PostgreSQL password", postgres("postgres", "", "qubitdesk"), "passwordSwallowsName"},
+		{"a PostgreSQL password with a space", postgres("qubitdesk", "two words", "qubitdesk"), "postgresMisread"},
+		{"a PostgreSQL password with a backslash", postgres("qubitdesk", `back\slash`, "qubitdesk"), "postgresMisread"},
+		{"a PostgreSQL password opening with a quote", postgres("qubitdesk", "'quoted", "qubitdesk"), "postgresMisread"},
+		{"a PostgreSQL password carrying a setting", postgres("qubitdesk", "x sslmode=require", "qubitdesk"), "postgresMisread"},
+		{"a PostgreSQL database name with a space", postgres("qubitdesk", "secret", "time sheets"), "postgresMisread"},
+		{"an ordinary MySQL connection", mysql("qubitdesk", "secret", "db", "qubitdesk"), ""},
+		{"a MySQL password of every awkward kind", mysql("qubitdesk", `p@ss:w/rd?)\ x`, "db", "qubitdesk"), ""},
+		{"no MySQL password", mysql("qubitdesk", "", "db", "qubitdesk"), ""},
+		{"a bracketed IPv6 address for MySQL", mysql("qubitdesk", "secret", "[::1]", "qubitdesk"), ""},
+		{"a bare IPv6 address for MySQL", mysql("qubitdesk", "secret", "::1", "qubitdesk"), "mysqlMisread"},
+		{"a MySQL user with a colon", mysql("ti:me", "secret", "db", "qubitdesk"), "mysqlMisread"},
+		{"a MySQL database name with a question mark", mysql("qubitdesk", "secret", "db", "time?rec"), "mysqlMisread"},
+		{"SQLite", config.Datasource{Dialect: "sqlite", Name: "qubitdesk"}, ""},
 	} {
 		err := config.Misreading(c.ds)
 
@@ -69,7 +69,7 @@ func TestAConnectionIsReadBackTheWayTheDriverReadsIt(t *testing.T) {
 // with words naming the variable; a PGDATABASE supplies the name an empty password
 // swallows, so that server does open the database on the form.
 func TestTheEnvironmentIsNotBlamedOnWhatWasTyped(t *testing.T) {
-	unnamed := config.Datasource{Dialect: "postgres", Host: "db", User: "postgres", Name: "timepulse"}
+	unnamed := config.Datasource{Dialect: "postgres", Host: "db", User: "postgres", Name: "qubitdesk"}
 
 	if err := config.Misreading(unnamed); err == nil {
 		t.Fatal("this case starts from an empty password being refused, and it was not")
@@ -79,14 +79,14 @@ func TestTheEnvironmentIsNotBlamedOnWhatWasTyped(t *testing.T) {
 		t.Setenv("PGGSSENCMODE", "disable")
 
 		if err := config.Misreading(config.Datasource{
-			Dialect: "postgres", Host: "db", User: "timepulse", Password: "two words", Name: "timepulse",
+			Dialect: "postgres", Host: "db", User: "qubitdesk", Password: "two words", Name: "qubitdesk",
 		}); err != nil {
 			t.Errorf("the connection was called misread: %v", err)
 		}
 	})
 
 	t.Run("PGDATABASE naming the database", func(t *testing.T) {
-		t.Setenv("PGDATABASE", "timepulse")
+		t.Setenv("PGDATABASE", "qubitdesk")
 
 		if err := config.Misreading(unnamed); err != nil {
 			t.Errorf("an empty password was refused: %v", err)

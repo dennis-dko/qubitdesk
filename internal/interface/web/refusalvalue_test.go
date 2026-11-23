@@ -17,22 +17,27 @@ import (
 // A value a refusal carries is written the way the rest of the screen writes it.
 //
 // fillIn writes a number the way the tables do, and every string as it arrives.
-// A day arrived in the order the wire uses and a status as the word it is stored
+// A day arrived in the order the wire uses and a state as the word it is stored
 // under, so a German refusal said "am 2026-10-04" beside a form showing
 // 04.10.2026, and "ist completed" beside a badge saying "abgeschlossen".
 // REFUSAL_VALUES in app.js names, by code and position, which values are which;
 // this reads every WithCode call the server makes, and fails on one sending a day
-// or a status that the table does not name, and on a row nothing sends any more.
+// or a state that the table does not name, and on a row nothing sends any more.
 //
-// The two kinds are recognised by how they are written, which is what the scan
-// that found them saw: a day is a value formatted with time.DateOnly, a status is
-// a field called Status or a model.ProjectStatus constant. A value spelled any
-// other way is not seen, and that is the limit of what this can promise.
+// The kinds are recognised by how they are written, which is what the scans
+// that found them saw: a day is a value formatted with time.DateOnly, a state is
+// a field called State or Status, or a model.State constant, and the name of a
+// state, a priority, a ticket type or a role is the Name of a variable the
+// services call state, priority, kind or role - each ships under an identifier
+// the screen translates, so "pending-auto-close" stood in a German refusal
+// beside a badge saying something else. The name of a field a form asks for is
+// a variable the services call field, because it travels as the name the wire
+// gives it: a refused macro step said "stateId" about a box labelled Status. A
+// value spelled any other way is not seen, and that is the limit of what this
+// can promise - TestTheRefusalScanRecognisesADayAndAState holds the recognising
+// itself.
 func TestARefusalWritesItsValuesTheWayTheScreenDoes(t *testing.T) {
 	sent := refusalValueKinds(t)
-	if len(sent) == 0 {
-		t.Fatal("found no refusal that sends a day or a status; this case is reading nothing")
-	}
 
 	// The one refusal not made through WithCode: rest builds "not found" from
 	// what was looked for, and its first value is the server's word for the kind
@@ -49,6 +54,11 @@ func TestARefusalWritesItsValuesTheWayTheScreenDoes(t *testing.T) {
 					"dictionary has no entity.%s to name it by", name, name)
 			}
 		}
+	}
+
+	if len(sent) == 0 {
+		t.Fatal("found no refusal that sends a day, a state or the kind of record it " +
+			"looked for; this case is reading nothing")
 	}
 
 	block := regexp.MustCompile(`(?s)const REFUSAL_VALUES = \{(.*?)\n\};`).
@@ -95,8 +105,8 @@ func TestARefusalWritesItsValuesTheWayTheScreenDoes(t *testing.T) {
 }
 
 // refusalValueKinds reads every WithCode call under internal/ and answers, for
-// each value that is a day or a status, which function in app.js writes it:
-// "code#position" -> "fmtDate" or "statusName".
+// each value the screen writes in words of its own, which function in app.js
+// writes it: "code#position" -> "fmtDate", "statusName" and so on.
 //
 // The same files serverErrorCodes reads, for the same reasons: not the tests,
 // not apperror's own example, not the installer, which has a page of its own.
@@ -231,16 +241,65 @@ func writtenWith(value ast.Expr) string {
 				return "fmtDate"
 			}
 		}
+	case *ast.Ident:
+		if v.Name == "field" {
+			return "fieldName"
+		}
 	case *ast.SelectorExpr:
-		if v.Sel.Name == "Status" {
+		if v.Sel.Name == "State" || v.Sel.Name == "Status" {
 			return "statusName"
 		}
 
 		if pkg, ok := v.X.(*ast.Ident); ok && pkg.Name == "model" &&
-			strings.HasPrefix(v.Sel.Name, "ProjectStatus") {
+			strings.HasPrefix(v.Sel.Name, "State") {
 			return "statusName"
+		}
+
+		if record, ok := v.X.(*ast.Ident); ok && v.Sel.Name == "Name" {
+			return map[string]string{
+				"state": "statusName", "priority": "priorityName", "kind": "ticketTypeName", "role": "roleTitle",
+				"class": "catalogValueTitle", "entry": "catalogValueTitle", "standing": "catalogValueTitle",
+			}[record.Name]
 		}
 	}
 
 	return ""
+}
+
+// The scan above is held to the shapes it promises to see, because the tree
+// does not always hold one: when no refusal sends a day or a state, every
+// refusal it reads comes back empty, which is also what a scan that had stopped
+// recognising them would report.
+func TestTheRefusalScanRecognisesADayAndAState(t *testing.T) {
+	const source = `package p
+
+func f() {
+	_ = apperror.WithCode("c", day.Format(time.DateOnly), ticket.State, model.StateOpen, ticket.Title,
+		state.Name, priority.Name, kind.Name, role.Name, class.Name, entry.Name, queue.Name, field, name)
+}`
+
+	file, err := parser.ParseFile(token.NewFileSet(), "p.go", source, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+
+	ast.Inspect(file, func(node ast.Node) bool {
+		if call, ok := node.(*ast.CallExpr); ok {
+			if method, ok := call.Fun.(*ast.SelectorExpr); ok && method.Sel.Name == "WithCode" {
+				for _, value := range call.Args[1:] {
+					got = append(got, writtenWith(value))
+				}
+			}
+		}
+
+		return true
+	})
+
+	want := []string{"fmtDate", "statusName", "statusName", "", "statusName", "priorityName", "ticketTypeName",
+		"roleTitle", "catalogValueTitle", "catalogValueTitle", "", "fieldName", ""}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("the values were read as written by %q, want %q", got, want)
+	}
 }

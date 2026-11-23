@@ -10,14 +10,14 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// The sign-in screen and the tab keep TimePulse's mark whatever logo is saved.
+// The sign-in screen and the tab keep QubitDesk's mark whatever logo is saved.
 //
 // The logo was drawn on the sign-in card and became the tab's icon, until the
 // maintainer decided that both belong to the application: the logo stands at the
 // left of the bar once somebody has signed in, and nowhere else. Whether the
 // sign-in card really shows the mark is a question only a browser answers - the
 // card is filled in by the script, from the branding it fetched.
-func TestTheSignInScreenKeepsTimePulsesMarkWhateverTheLogo(t *testing.T) {
+func TestTheSignInScreenKeepsQubitDesksMarkWhateverTheLogo(t *testing.T) {
 	t.Parallel()
 
 	p := open(t)
@@ -41,7 +41,7 @@ func TestTheSignInScreenKeepsTimePulsesMarkWhateverTheLogo(t *testing.T) {
 		chromedp.WaitVisible("#form-login", chromedp.ByID))
 
 	if !p.visible("#login-mark") {
-		t.Error("the sign-in card does not show TimePulse's mark")
+		t.Error("the sign-in card does not show QubitDesk's mark")
 	}
 
 	var shown struct {
@@ -56,12 +56,12 @@ func TestTheSignInScreenKeepsTimePulsesMarkWhateverTheLogo(t *testing.T) {
 	})`, &shown)
 
 	if shown.Pictures != 0 {
-		t.Errorf("the sign-in screen draws %d uploaded pictures; it carries TimePulse's mark only",
+		t.Errorf("the sign-in screen draws %d uploaded pictures; it carries QubitDesk's mark only",
 			shown.Pictures)
 	}
 
 	if shown.Icon != "/favicon.svg" {
-		t.Errorf("the tab is pointed at %q rather than at TimePulse's mark", shown.Icon)
+		t.Errorf("the tab is pointed at %q rather than at QubitDesk's mark", shown.Icon)
 	}
 }
 
@@ -75,13 +75,13 @@ func (p *page) storeBranding(t *testing.T, logo string) {
 	p.run("store the branding", chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const r = await fetch('/api/v1/settings/branding', {
 				method: 'PUT',
 				credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-				body: JSON.stringify({ title: 'Zeiterfassung', logo: '`+logo+`' }),
+				body: JSON.stringify({ title: 'Ticketsystem', logo: '`+logo+`' }),
 			});
 
 			return String(r.status);
@@ -193,11 +193,11 @@ func TestTheLogoSlotsStayEmptyUntilALogoIsConfigured(t *testing.T) {
 	// which is how this case came to say so: it had measured there, and passed
 	// for as long as the name was allowed to lie under the account's.
 	//
-	// 1,600 was wide enough until the name became "TimePulse | Zeiterfassung",
-	// 317 pixels in those faces. The right-hand column needs 609 there, and 713
-	// from 1,800 on, where the account's name is given more room, so the name sat
-	// 3 pixels left of the middle at 1,600 and 7 at 1,800. 1,920 leaves room
-	// on both sides of that step.
+	// 1,600 was wide enough until the installation's name gained the brand and a
+	// bar before its own. Measured in the time recording this was cloned from,
+	// the name then sat a few pixels left of the middle at 1,600, and at 1,800,
+	// where the account's name is given more room. 1,920 leaves room on both
+	// sides of that step.
 	p.run("a wide window", chromedp.EmulateViewport(1920, 1080))
 
 	var placed struct {
@@ -256,7 +256,7 @@ func TestTheLogoSlotsStayEmptyUntilALogoIsConfigured(t *testing.T) {
 //
 // A save used to reload the page, because no engine takes a new tab icon from a
 // link swapped in afterwards - and the reload landed at the top of a long screen,
-// away from what had just been changed. The tab keeps TimePulse's mark now, so
+// away from what had just been changed. The tab keeps QubitDesk's mark now, so
 // there is nothing left that only a new document can show.
 func TestSavingTheLogoRedrawsTheBarWithoutAReload(t *testing.T) {
 	t.Parallel()

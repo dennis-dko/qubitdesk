@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/timepulse/internal/support/backup"
-	"github.com/dennis-dko/timepulse/internal/support/security"
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/support/backup"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 const backupPassphrase = "the installation's own passphrase"
@@ -88,7 +88,7 @@ func TestAnAdministratorMakesDownloadsAndDeletesABackup(t *testing.T) {
 
 	a := start(t, "BACKUP_PASSPHRASE="+backupPassphrase)
 	admin := a.signInAsAdmin("a-much-better-password")
-	worker := a.signInAsUser(admin, "Wera", "wera@example.com")
+	worker := a.signInAsAgent(admin, "Wera", "wera@example.com")
 
 	if card := readBackupCard(t, admin); !card.Enabled || len(card.Backups) != 0 || card.Keep < 1 {
 		t.Fatalf("a new installation's card reads %+v, want backups possible and none kept", card)
@@ -235,11 +235,9 @@ func TestABackupIsRestoredThroughTheInstallerOfANewInstallation(t *testing.T) {
 
 	source := start(t, "BACKUP_PASSPHRASE="+backupPassphrase)
 	admin := source.signInAsAdmin("a-much-better-password")
-	worker := source.signInAsUser(admin, "Wera", "wera@example.com")
+	worker := source.signInAsAgent(admin, "Wera", "wera@example.com")
 
-	worker.must(worker.api(http.MethodPost, "/timesheets", map[string]any{
-		"date": "2026-11-19", "durationHours": 2.75, "description": "Before the restore",
-	}), http.StatusCreated, http.StatusOK)
+	openTicket(t, worker, theDesk(t, worker), "Before the restore", map[string]any{"minutes": 15})
 
 	admin.must(admin.api(http.MethodPut, "/settings/backups/plan", map[string]any{"schedule": "", "keep": 3}),
 		http.StatusOK)
@@ -257,7 +255,7 @@ func TestABackupIsRestoredThroughTheInstallerOfANewInstallation(t *testing.T) {
 		t.Fatalf("the backup was not taken: %d %v", status, body)
 	}
 
-	answer := map[string]any{"restore": true, "language": "en"}
+	answer := map[string]any{"restore": true}
 	for key, value := range harness.FreshDatasource(t) {
 		answer[key] = value
 	}
@@ -273,19 +271,38 @@ func TestABackupIsRestoredThroughTheInstallerOfANewInstallation(t *testing.T) {
 	back := restored.newClient()
 	back.signIn("wera@example.com", "another-password-1")
 
-	var entries listOf[timesheetResponse]
-
-	back.must(back.api(http.MethodGet, "/timesheets", nil), http.StatusOK).Data(t, &entries)
-
-	if entries.TotalCount != 1 || entries.Items[0].DurationHours != 2.75 {
-		t.Fatalf("after the restore Wera finds %+v, want her 2.75 hours\n%s", entries, c.app.Log())
-	}
+	restoredTicketHasItsMinutes(t, back, c.app.Log)
 
 	again := restored.newClient()
 	again.signIn(adminEmail, "a-much-better-password")
 
 	if card := readBackupCard(t, again); card.Keep != 3 {
 		t.Errorf("the restored installation keeps %d backups, want the 3 its plan said", card.Keep)
+	}
+}
+
+// restoredTicketHasItsMinutes asks for the ticket Wera opened before the backup
+// was made, and the minutes she noted on it. Through the ticket itself, because
+// a listing answers no minutes: they are read with one ticket, as a reader
+// opens it.
+func restoredTicketHasItsMinutes(t *testing.T, back *client, log func() string) {
+	t.Helper()
+
+	var tickets ticketList
+
+	back.must(back.api(http.MethodGet, "/tickets", nil), http.StatusOK).Data(t, &tickets)
+
+	if tickets.TotalCount != 1 || tickets.Items[0].Title != "Before the restore" {
+		t.Fatalf("after the restore Wera finds %+v, want her ticket\n%s", tickets, log())
+	}
+
+	var ticket ticketResponse
+
+	back.must(back.api(http.MethodGet, ticketPath(tickets.Items[0].ID), nil), http.StatusOK).Data(t, &ticket)
+
+	if ticket.AccountedMinutes != 15 {
+		t.Fatalf("after the restore her ticket has %d minutes noted, want the 15 she noted before\n%s",
+			ticket.AccountedMinutes, log())
 	}
 }
 
@@ -315,7 +332,7 @@ func sealedBackup(t *testing.T, lines ...any) []byte {
 
 // The installer reads a backup whole before it takes it, so what the restore
 // would refuse is refused on the installer's own screen: a backup cut short, as
-// a download that stopped is, and one from a newer version of TimePulse than
+// a download that stopped is, and one from a newer version of QubitDesk than
 // this one. Both used to be taken - only their first line was read - and then
 // refused by the restore, which runs after the installer has handed over, where
 // a refusal can only end the process.
@@ -323,7 +340,7 @@ func TestTheInstallerRefusesWhatTheRestoreWouldRefuse(t *testing.T) {
 	t.Parallel()
 
 	header := func(schema int64) sqldb.BackupHeader {
-		return sqldb.BackupHeader{Format: "timepulse-backup", Version: 1, Application: "TimePulse",
+		return sqldb.BackupHeader{Format: "qubitdesk-backup", Version: 1, Application: "QubitDesk",
 			Dialect: "sqlite", Schema: schema, CreatedAt: time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)}
 	}
 
@@ -386,7 +403,7 @@ func TestTheInstallerAsksForTheKeyABackupWasSealedWith(t *testing.T) {
 		t.Fatalf("an installer with the same key answered %d %v", status, body)
 	}
 
-	answer := map[string]any{"restore": true, "language": "en"}
+	answer := map[string]any{"restore": true}
 	for name, value := range harness.FreshDatasource(t) {
 		answer[name] = value
 	}
@@ -431,7 +448,7 @@ func TestABackupMadeUnderAnotherKeyIsRestoredWithItOrWithoutItsSecrets(t *testin
 	restore := func(t *testing.T, c *installerClient) *app {
 		t.Helper()
 
-		answer := map[string]any{"restore": true, "language": "en"}
+		answer := map[string]any{"restore": true}
 		for name, value := range harness.FreshDatasource(t) {
 			answer[name] = value
 		}
@@ -522,11 +539,9 @@ func TestABackupMovesBetweenSQLiteAndTheSuitesDatabase(t *testing.T) {
 
 			source := start(t, append([]string{"BACKUP_PASSPHRASE=" + backupPassphrase}, direction.source...)...)
 			admin := source.signInAsAdmin("a-much-better-password")
-			worker := source.signInAsUser(admin, "Wera", "wera@example.com")
+			worker := source.signInAsAgent(admin, "Wera", "wera@example.com")
 
-			worker.must(worker.api(http.MethodPost, "/timesheets", map[string]any{
-				"date": "2026-11-19", "durationHours": 2.75, "description": "Before the restore",
-			}), http.StatusCreated, http.StatusOK)
+			openTicket(t, worker, theDesk(t, worker), "Before the restore", map[string]any{"minutes": 15})
 
 			_, file := madeBackup(t, admin)
 
@@ -553,7 +568,7 @@ func TestABackupMovesBetweenSQLiteAndTheSuitesDatabase(t *testing.T) {
 				target = harness.FreshDatasource(t)
 			}
 
-			answer := map[string]any{"restore": true, "language": "en"}
+			answer := map[string]any{"restore": true}
 			for key, value := range target {
 				answer[key] = value
 			}
@@ -567,19 +582,11 @@ func TestABackupMovesBetweenSQLiteAndTheSuitesDatabase(t *testing.T) {
 			back := (&app{App: c.app, t: t}).newClient()
 			back.signIn("wera@example.com", "another-password-1")
 
-			var entries listOf[timesheetResponse]
+			restoredTicketHasItsMinutes(t, back, c.app.Log)
 
-			back.must(back.api(http.MethodGet, "/timesheets", nil), http.StatusOK).Data(t, &entries)
-
-			if entries.TotalCount != 1 || entries.Items[0].DurationHours != 2.75 {
-				t.Fatalf("after the restore Wera finds %+v, want her 2.75 hours\n%s", entries, c.app.Log())
-			}
-
-			// And she books again: the ids a restore wrote are taken, so a database
+			// And she opens another: the ids a restore wrote are taken, so a database
 			// that counts its own - PostgreSQL's sequences - has to count on from them.
-			back.must(back.api(http.MethodPost, "/timesheets", map[string]any{
-				"date": "2026-11-20", "durationHours": 1.5, "description": "After the restore",
-			}), http.StatusCreated, http.StatusOK)
+			openTicket(t, back, theDesk(t, back), "After the restore", nil)
 		})
 	}
 }

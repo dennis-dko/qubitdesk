@@ -11,12 +11,12 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // SessionCookieName is the cookie carrying the session token.
-const SessionCookieName = "timepulse_session"
+const SessionCookieName = "qubitdesk_session"
 
 // sessionContextKey types the context value so it cannot collide with a key
 // from another package.

@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	appconfig "github.com/dennis-dko/timepulse/internal/infrastructure/config"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 //go:embed asset/install.html
@@ -96,8 +96,8 @@ type Result struct {
 
 	// Demo asks for the new database to be filled with demo data once the
 	// application has migrated it, written in Language - the language the page
-	// was read in. Whether it is, and into whose account, is the application's
-	// to decide: this screen only carries the question.
+	// was read in. Whether it is, and into whose name, is the application's to
+	// decide: this screen only carries the question.
 	Demo     bool
 	Language string
 
@@ -118,7 +118,8 @@ type Result struct {
 }
 
 // answer is the body the page sends: the connection, and with a save, whether
-// the new database is to be filled with demo data and in which language.
+// the new database is to be filled with demo data and in which language, or to
+// take the backup uploaded before.
 type answer struct {
 	appconfig.Datasource
 

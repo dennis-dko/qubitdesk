@@ -8,7 +8,7 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/timepulse/internal/infrastructure/logsink"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/logsink"
 )
 
 // LogHandler serves the process log to the built-in administrator.

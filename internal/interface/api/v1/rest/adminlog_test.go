@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/memory"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/memory"
 )
 
 // noErrors fails the case on anything the log could not keep.
@@ -26,7 +26,7 @@ func (n noErrors) Errorf(format string, args ...any) { n.t.Errorf(format, args..
 func TestAnAdministrativeChangeIsRecordedOnceItWentThrough(t *testing.T) {
 	events := memory.NewAdminEventRepository()
 	users := memory.NewUserRepository()
-	log := service.NewAdminLogService(events, users, memory.NewRoleRepository(users))
+	log := service.NewAdminLogService(events, users, memory.NewRoleRepository(users), memory.NewContactRepository())
 
 	var handled string
 
@@ -62,13 +62,13 @@ func TestAnAdministrativeChangeIsRecordedOnceItWentThrough(t *testing.T) {
 	}
 
 	ask(http.MethodPost, "/api/v1/users", `{"name":"Bea"}`, true)
-	ask(http.MethodPut, "/api/v1/users/5/role", `{"role":"user-admin"}`, true)
+	ask(http.MethodPut, "/api/v1/users/5/role", `{"role":"agent"}`, true)
 	ask(http.MethodPut, "/api/v1/roles/2", `{"name":"x"}`, true)
 	ask(http.MethodPut, "/api/v1/settings/branding", `{}`, false)
 	ask(http.MethodGet, "/api/v1/users", "", true)
 	ask(http.MethodPut, "/api/v1/me/theme", `{"theme":"dark"}`, true)
 
-	if handled != `{"role":"user-admin"}` {
+	if handled != `{"role":"agent"}` {
 		t.Errorf("the handler read %q, want the request whole", handled)
 	}
 
@@ -87,7 +87,7 @@ func TestAnAdministrativeChangeIsRecordedOnceItWentThrough(t *testing.T) {
 		t.Errorf("the creation reads %+v, want account 3 creating account 9", created)
 	}
 
-	if role.Action != "user.role" || role.TargetID != 5 || role.Detail != "user-admin" {
-		t.Errorf("the role reads %+v, want account 5 given user-admin", role)
+	if role.Action != "user.role" || role.TargetID != 5 || role.Detail != "agent" {
+		t.Errorf("the role reads %+v, want account 5 given agent", role)
 	}
 }

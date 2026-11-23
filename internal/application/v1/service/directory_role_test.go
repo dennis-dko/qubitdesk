@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // These tests guard one setting: the role an account the directory brings in
@@ -52,7 +52,7 @@ func TestAFirstSignInStartsWithTheDirectorysDefaultRole(t *testing.T) {
 	f, sessions := newSessionFixture(t, &service.ExternalUser{
 		ID: "uuid-1", Email: "new.person@example.com", Name: "New Person", Role: "contractor",
 	})
-	customRole(t, f, "contractor", model.PermTimesheetReadOwn, model.PermTimesheetWriteOwn)
+	customRole(t, f, "contractor", model.PermTicketRead, model.PermTicketWrite)
 
 	if _, err := sessions.Login(context.Background(), "new.person@example.com", "anything", ""); err != nil {
 		t.Fatalf("login: %v", err)
@@ -65,7 +65,7 @@ func TestAFirstSignInStartsWithTheDirectorysDefaultRole(t *testing.T) {
 
 func TestASynchronisationCreatesAccountsWithTheDirectorysDefaultRole(t *testing.T) {
 	f := newSyncFixture(t, 0.5)
-	customRole(t, f.fixture, "contractor", model.PermTimesheetReadOwn, model.PermTimesheetWriteOwn)
+	customRole(t, f.fixture, "contractor", model.PermTicketRead, model.PermTicketWrite)
 
 	f.directory.users = []service.ExternalUser{
 		{ID: "uuid-1", Email: "arrived@example.com", Role: "contractor"},
@@ -89,21 +89,21 @@ func TestASynchronisationCreatesAccountsWithTheDirectorysDefaultRole(t *testing.
 // every entry anybody adds would arrive holding the installation. The settings
 // refuse to store one; this is the other half, for a role given one of the rights
 // that amount to the installation after it was chosen, and the account starts as
-// an ordinary user.
+// an ordinary agent.
 func TestADefaultRoleThatAdministersIsNotHandedOut(t *testing.T) {
 	for _, right := range model.AdministeringPermissions() {
 		f, sessions := newSessionFixture(t, &service.ExternalUser{
 			ID: "uuid-1", Email: "new.person@example.com", Role: "keyholder",
 		})
-		customRole(t, f, "keyholder", model.PermTimesheetReadOwn, right)
+		customRole(t, f, "keyholder", model.PermTicketRead, right)
 
 		if _, err := sessions.Login(context.Background(), "new.person@example.com", "anything", ""); err != nil {
 			t.Fatalf("login: %v", err)
 		}
 
-		if got := roleOf(t, f, "new.person@example.com"); got != model.RoleUser {
+		if got := roleOf(t, f, "new.person@example.com"); got != model.RoleAgent {
 			t.Errorf("with %s on the default role the account starts as %q, want %q",
-				right, got, model.RoleUser)
+				right, got, model.RoleAgent)
 		}
 	}
 }
@@ -122,8 +122,8 @@ func TestADefaultRoleThatIsGoneFallsBackToTheEverydayOne(t *testing.T) {
 		t.Fatalf("sync: %v", err)
 	}
 
-	if got := roleOf(t, f.fixture, "arrived@example.com"); got != model.RoleUser {
-		t.Errorf("the account starts as %q, want %q", got, model.RoleUser)
+	if got := roleOf(t, f.fixture, "arrived@example.com"); got != model.RoleAgent {
+		t.Errorf("the account starts as %q, want %q", got, model.RoleAgent)
 	}
 }
 
@@ -132,7 +132,7 @@ func TestADefaultRoleThatIsGoneFallsBackToTheEverydayOne(t *testing.T) {
 func TestTheDirectorysDefaultRoleMayNotAdminister(t *testing.T) {
 	for _, right := range model.AdministeringPermissions() {
 		f := newFixture(t)
-		customRole(t, f, "keyholder", model.PermTimesheetReadOwn, right)
+		customRole(t, f, "keyholder", model.PermTicketRead, right)
 
 		settings := service.NewSettingsService(newStubSettings(), f.roleRepo, f.userRepo)
 
@@ -145,34 +145,5 @@ func TestTheDirectorysDefaultRoleMayNotAdminister(t *testing.T) {
 		if !ok || detail.Code != "directoryRoleAdministers" {
 			t.Errorf("storing a default role holding %s answered %v, want directoryRoleAdministers", right, err)
 		}
-	}
-}
-
-// A first sign-in leaves the daily target to the default, as every other way
-// an account is made does.
-//
-// An account created through the form, and one the synchronisation creates,
-// store zero - "follow the default" - and the synchronisation's own comment
-// says what the alternative cost: a pinned figure that no longer moves with the
-// default and shows as a number where every other row shows "default". The
-// sign-in path still wrote the default's value in, so the same person arriving
-// by signing in rather than by a synchronisation got the pinned one.
-func TestAFirstSignInLeavesTheDailyTargetToTheDefault(t *testing.T) {
-	f, sessions := newSessionFixture(t, &service.ExternalUser{
-		ID: "uuid-1", Email: "new.person@example.com", Name: "New Person",
-	})
-
-	if _, err := sessions.Login(context.Background(), "new.person@example.com", "anything", ""); err != nil {
-		t.Fatalf("login: %v", err)
-	}
-
-	user, err := f.userRepo.GetByEmail(context.Background(), "new.person@example.com")
-	if err != nil {
-		t.Fatalf("no account was created: %v", err)
-	}
-
-	if user.DailyTargetHours != 0 {
-		t.Errorf("the account starts with a daily target of %v pinned, want 0, which "+
-			"follows the default", user.DailyTargetHours)
 	}
 }

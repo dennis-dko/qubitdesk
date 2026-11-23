@@ -16,7 +16,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // Maintenance switched on under somebody who is already working.
@@ -155,7 +155,7 @@ func asAdmin(t *testing.T, client *http.Client, base, method, path string, body 
 	// And the token that came back with the session, which the jar is holding.
 	if parsed, err := url.Parse(base); err == nil {
 		for _, cookie := range client.Jar.Cookies(parsed) {
-			if cookie.Name == "timepulse_csrf" {
+			if cookie.Name == "qubitdesk_csrf" {
 				req.Header.Set("X-CSRF-Token", cookie.Value)
 			}
 		}
@@ -226,7 +226,7 @@ func TestTheConnectionCardKeepsSayingWhatIsRunningWhileBeingEdited(t *testing.T)
 	// And something reloads the screen, which happens for reasons having nothing
 	// to do with them. Choosing a language is the one that was reported.
 	p.chooseLanguage("de")
-	p.waitForText(`.tab[data-view="timesheets"]`, "Zeiteinträge")
+	p.waitForText(`.tab[data-view="settings"]`, "Mein Konto")
 
 	// Waited for rather than read, and before anything else is asked. The labels
 	// change the moment the language does, but the card is reloaded after that,

@@ -15,9 +15,9 @@ version: '3'
 vars:
   # The project's name, which the image is tagged with and a local SQLite file
   # is called by; the program carries it in a name of its own.
-  APP_NAME: timepulse
+  APP_NAME: qubitdesk
   # The installation: the server and its web interface.
-  WEB_NAME: timepulse-web
+  WEB_NAME: qubitdesk-web
   BIN_DIR: bin
   CONFIG_SRC: cmd/configs
 
@@ -102,8 +102,8 @@ tasks:
           DB_DIALECT: postgres
           DB_HOST: localhost
           DB_PORT: '55432'
-          DB_USER: timepulse
-          DB_PASSWORD: timepulse-test-password
+          DB_USER: qubitdesk
+          DB_PASSWORD: qubitdesk-test-password
           DB_SSL_MODE: disable
 
   dev:sqlite:
@@ -282,7 +282,7 @@ tasks:
       # Empty for SQLite: the harness then gives each instance its own file.
       # root on MySQL: each test creates its own database, which an ordinary
       # MySQL user is not allowed to do. A throwaway server either way.
-      TIMEPULSE_TEST_DSN: '{{if eq .DB "postgres"}}postgres://timepulse:timepulse-test-password@localhost:55432/timepulse?sslmode=disable{{else if eq .DB "mysql"}}mysql://root:timepulse-test-root@localhost:53306/timepulse{{end}}'
+      QUBITDESK_TEST_DSN: '{{if eq .DB "postgres"}}postgres://qubitdesk:qubitdesk-test-password@localhost:55432/qubitdesk?sslmode=disable{{else if eq .DB "mysql"}}mysql://root:qubitdesk-test-root@localhost:53306/qubitdesk{{end}}'
     # Starting the server it needs, rather than failing with "connection
     # refused" and leaving the reader to work out which container was missing.
     cmds:
@@ -314,7 +314,7 @@ tasks:
       at one by hand. `task env:down` stops it.
     env:
       GOTMPDIR: '{{.ROOT_DIR}}/{{.TMP_DIR}}'
-      TIMEPULSE_TEST_LDAP: 'localhost:5389'
+      QUBITDESK_TEST_LDAP: 'localhost:5389'
     cmds:
       - task: env:up
         vars: { PROFILE: ldap }
@@ -338,7 +338,7 @@ tasks:
       `task env:down` stops it.
     env:
       GOTMPDIR: '{{.ROOT_DIR}}/{{.TMP_DIR}}'
-      TIMEPULSE_TEST_JAEGER: 'localhost:54317'
+      QUBITDESK_TEST_JAEGER: 'localhost:54317'
     cmds:
       - task: env:up
         vars: { PROFILE: traces }
@@ -548,7 +548,7 @@ tasks:
       describes. So a machine needs Docker and nothing of Android's, and a build
       here uses the JDK, the Gradle and the SDK CI uses. The image is rebuilt
       from its Dockerfile every time, which costs a second while nothing in it
-      has changed; Gradle's downloads are kept in the timepulse-gradle volume.
+      has changed; Gradle's downloads are kept in the qubitdesk-gradle volume.
 
       What it runs is what CI's Android job runs: the unit tests, Android lint,
       and a release build shrunk by R8 - unsigned, because the key a release is
@@ -557,8 +557,8 @@ tasks:
       than this checkout's version, so it does not tell whoever runs it that
       their installation is another release.
     cmds:
-      - docker build -q -t timepulse-android:latest - < internal/interface/mobile/Dockerfile
-      - docker run --rm -v "{{.ROOT_DIR}}:/src" -w /src/internal/interface/mobile -v timepulse-gradle:/root/.gradle timepulse-android:latest gradle --no-daemon --console=plain testDebugUnitTest assembleRelease lintRelease
+      - docker build -q -t qubitdesk-android:latest - < internal/interface/mobile/Dockerfile
+      - docker run --rm -v "{{.ROOT_DIR}}:/src" -w /src/internal/interface/mobile -v qubitdesk-gradle:/root/.gradle qubitdesk-android:latest gradle --no-daemon --console=plain testDebugUnitTest assembleRelease lintRelease
 
   image:
     desc: 'Ship: build the deployment image, tagged with the version and "latest".'
@@ -658,7 +658,7 @@ tasks:
       so the README does not mix them.
     env:
       GOTMPDIR: '{{.ROOT_DIR}}/{{.TMP_DIR}}'
-      TIMEPULSE_README_PICTURES: '{{.ROOT_DIR}}/doc/image'
+      QUBITDESK_README_PICTURES: '{{.ROOT_DIR}}/doc/image'
     cmds:
       - mkdir -p {{.TMP_DIR}}
       - defer: rm -rf {{.TMP_DIR}}
@@ -711,7 +711,7 @@ tasks:
 
       The same run leaves its share in the system's temporary directory too,
       where nothing else ever looks: the harness's build of the application
-      (timepulse-harness-*, eighty-odd megabytes each) and the Chrome profiles
+      (qubitdesk-harness-*, eighty-odd megabytes each) and the Chrome profiles
       chromedp makes for itself (chromedp-runner*). This machine had six of the
       first and 17,745 of the second when somebody finally looked.
 
@@ -767,7 +767,7 @@ tasks:
     # is the one Go's os.TempDir resolves to - GetTempPath on Windows, TMPDIR
     # elsewhere - because that is where both were written.
     cmds:
-      - cmd: "{{if eq OS \"windows\"}}powershell -NoProfile -Command 'Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Directory | Where-Object { $_.Name -like \"timepulse-harness-*\" -or $_.Name -like \"chromedp-runner*\" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue'{{else}}rm -rf \"${TMPDIR:-/tmp}\"/timepulse-harness-* \"${TMPDIR:-/tmp}\"/chromedp-runner*{{end}}"
+      - cmd: "{{if eq OS \"windows\"}}powershell -NoProfile -Command 'Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Directory | Where-Object { $_.Name -like \"qubitdesk-harness-*\" -or $_.Name -like \"chromedp-runner*\" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue'{{else}}rm -rf \"${TMPDIR:-/tmp}\"/qubitdesk-harness-* \"${TMPDIR:-/tmp}\"/chromedp-runner*{{end}}"
         ignore_error: true
 
   clean:images:
@@ -781,7 +781,7 @@ tasks:
     cmds:
       - cmd: docker rmi {{.APP_NAME}}:{{.VERSION}} {{.APP_NAME}}:latest
         ignore_error: true
-      - cmd: docker rmi timepulse-test-app:latest timepulse-test-probe:latest timepulse-test-openldap:latest timepulse-android:latest
+      - cmd: docker rmi qubitdesk-test-app:latest qubitdesk-test-probe:latest qubitdesk-test-openldap:latest qubitdesk-android:latest
         ignore_error: true
       - docker image prune -f
       - echo "Locally built images removed."

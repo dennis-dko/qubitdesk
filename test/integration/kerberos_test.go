@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/support/security"
-	"github.com/dennis-dko/timepulse/test/kerberostest"
-	"github.com/dennis-dko/timepulse/test/tempdir"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/test/kerberostest"
+	"github.com/dennis-dko/qubitdesk/test/tempdir"
 )
 
 // kerberosState mirrors the answer to whether a ticket sign-in is on offer.

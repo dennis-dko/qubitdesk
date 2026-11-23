@@ -5,10 +5,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/domain/repository"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
-	"github.com/dennis-dko/timepulse/internal/support/spreadsheet"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/repository"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/support/spreadsheet"
 )
 
 // RoleWorkbookService moves roles in and out as a spreadsheet.
@@ -77,7 +77,8 @@ type RolePlan struct {
 
 // PlanRoles works out what a file of roles would do, without writing.
 //
-// Matched on the name, the way the projects import is: a role is its name
+// Matched on the name, the way the people import is matched on the address: a
+// role is its name
 // everywhere else in this application - accounts point at one, the directory
 // configuration names one - so the name is the only thing a person filling in a
 // spreadsheet can be expected to match on.

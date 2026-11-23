@@ -23,7 +23,7 @@ import (
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 
-	"github.com/dennis-dko/timepulse/test/tempdir"
+	"github.com/dennis-dko/qubitdesk/test/tempdir"
 )
 
 const (
@@ -38,17 +38,17 @@ const (
 	// DSNEnv points the whole suite at a database server instead of SQLite.
 	// The scheme picks the dialect:
 	//
-	//	postgres://timepulse:secret@localhost:55432/timepulse?sslmode=disable
-	//	mysql://root:secret@localhost:53306/timepulse
+	//	postgres://qubitdesk:secret@localhost:55432/qubitdesk?sslmode=disable
+	//	mysql://root:secret@localhost:53306/qubitdesk
 	//
 	// The account has to be allowed to CREATE DATABASE, because each test gets
 	// its own. On PostgreSQL the owner already can; on MySQL an ordinary user
 	// cannot, so use root there - it is a throwaway server either way.
-	DSNEnv = "TIMEPULSE_TEST_DSN"
+	DSNEnv = "QUBITDESK_TEST_DSN"
 
 	// RaceEnv asks for the application under test to be built with the race
 	// detector. See Build.
-	RaceEnv = "TIMEPULSE_TEST_RACE"
+	RaceEnv = "QUBITDESK_TEST_RACE"
 )
 
 // App is a running instance.
@@ -160,12 +160,12 @@ var binaryPath atomic.Pointer[string]
 // Build compiles the application once, for the whole test binary to share.
 // Call it from TestMain.
 func Build() (cleanup func(), err error) {
-	dir, err := os.MkdirTemp("", "timepulse-harness-*")
+	dir, err := os.MkdirTemp("", "qubitdesk-harness-*")
 	if err != nil {
 		return nil, fmt.Errorf("cannot create a temporary directory: %w", err)
 	}
 
-	path := filepath.Join(dir, "timepulse-web"+exeSuffix())
+	path := filepath.Join(dir, "qubitdesk-web"+exeSuffix())
 
 	args := []string{"build", "-o", path}
 
@@ -201,16 +201,6 @@ func Build() (cleanup func(), err error) {
 	binaryPath.Store(&path)
 
 	return func() { _ = os.RemoveAll(dir) }, nil
-}
-
-// Binary is the application Build compiled, for a case that runs it with
-// arguments of its own. Empty before Build has run.
-func Binary() string {
-	if path := binaryPath.Load(); path != nil {
-		return *path
-	}
-
-	return ""
 }
 
 func exeSuffix() string {
@@ -595,7 +585,7 @@ func createTestDatabase(t *testing.T, dialect, adminDSN string) string {
 
 	// Lower case and no punctuation: an identifier that would need quoting
 	// everywhere it appears is a poor choice for a name generated in a test.
-	name := fmt.Sprintf("timepulse_it_%d_%d", time.Now().UnixNano()%1e9, databaseCounter.Add(1))
+	name := fmt.Sprintf("qubitdesk_it_%d_%d", time.Now().UnixNano()%1e9, databaseCounter.Add(1))
 
 	if _, err := db.Exec("CREATE DATABASE " + name); err != nil {
 		t.Fatalf("cannot create the test database %s: %v", name, err)
@@ -854,7 +844,7 @@ const (
 // Every instance is started under a name nothing else is using, as APP_NAME, and
 // GoFr says that name on its health address, which is public - so this is one
 // request at a moment where no session exists yet. GoFr's word rather than the
-// branding's: what an installation shows is TimePulse and what its administrator
+// branding's: what an installation shows is QubitDesk and what its administrator
 // adds, which nothing at start-up can set.
 //
 // Three answers rather than two, and the third is the one that matters. The
@@ -1000,37 +990,6 @@ func (a *App) stop() {
 	// Before testing.T gets to it: a SQLite database in write-ahead logging is
 	// three files, and Windows lets go of them some time after the process dies.
 	tempdir.Remove(a.dir)
-}
-
-// EmptyDatabase opens a database nothing has migrated - on the server the suite is
-// pointed at, or in a SQLite file - and says which dialect it speaks.
-//
-// For a case that runs the migration chain itself, part of the way, so it can
-// put rows where an older version would have left them before running the rest.
-// An instance cannot do that: it migrates everything the moment it starts.
-func EmptyDatabase(t *testing.T) (dialect string, db *sql.DB) {
-	t.Helper()
-
-	dialect = "sqlite"
-	conn := "file:" + filepath.Join(tempdir.New(t), "empty.db")
-
-	if dsn := os.Getenv(DSNEnv); dsn != "" {
-		_, dialect, conn = serverEnv(t, dsn)
-	}
-
-	db, err := sql.Open(dialect, conn)
-	if err != nil {
-		t.Fatalf("cannot open an empty %s database: %v", dialect, err)
-	}
-
-	// Registered after the database's own removal, so it runs before it.
-	t.Cleanup(func() { _ = db.Close() })
-
-	if err := db.Ping(); err != nil {
-		t.Fatalf("cannot reach the empty %s database: %v", dialect, err)
-	}
-
-	return dialect, db
 }
 
 // SharedDatabase is a SQLite file that two instances started by one test can

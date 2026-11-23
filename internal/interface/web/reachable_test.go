@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // Every screen can be reached by somebody a fresh installation has.
@@ -256,9 +256,9 @@ func TestEveryPermissionTheInterfaceNamesExists(t *testing.T) {
 // Every role the application ships has a name and an explanation, in both languages.
 //
 // A role is chosen from a dropdown by somebody deciding what a colleague may do, and
-// what the database calls it is an identifier: lowercase, hyphenated, English. Two of
-// them differ by a suffix - "user-admin" against "user" - and the difference is whether
-// that person can administer the installation. So the screen shows a title and a
+// what the database calls it is an identifier: lowercase, hyphenated, English, and
+// "agent" against "customer" does not say that the difference is whether that person
+// works on the staff side or only reaches the portal. So the screen shows a title and a
 // description, and for the roles that ship both are translated.
 //
 // Four things have to line up for each of them. The German title and the German
@@ -267,7 +267,7 @@ func TestEveryPermissionTheInterfaceNamesExists(t *testing.T) {
 // otherwise be the identifier itself. And the English description, which is what the
 // seed writes into the database and what a custom role has instead of a translation.
 //
-// Read from the model rather than restated here, so a fourth role cannot arrive with
+// Read from the model rather than restated here, so another role cannot arrive with
 // nothing to explain it.
 func TestEverySeededRoleSaysWhatItIsFor(t *testing.T) {
 	dict, ok := dictionaries(t)["de"]
@@ -365,8 +365,9 @@ func shippedRoleTitles(t *testing.T) map[string]string {
 
 // Nothing on screen asks which person.
 //
-// Four controls used to: the booking form, the entry filter, the calendar and the
-// overtime form each offered a dropdown of colleagues. They were built when a role
+// Four controls did in the time recording this was cloned from: the booking form,
+// the entry filter, the calendar and the overtime form each offered a dropdown of
+// colleagues. They were built when a role
 // could hold timesheets:read:all, and they never worked as they read even then - the
 // account that administers colleagues does not read what they recorded, so it was
 // offered every name and every choice but its own came back 403. The filter was worse:

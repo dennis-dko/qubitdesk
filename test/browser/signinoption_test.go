@@ -9,7 +9,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/oidctest"
+	"github.com/dennis-dko/qubitdesk/test/oidctest"
 )
 
 // Every way to sign in keeps its words on one line where the card has room for

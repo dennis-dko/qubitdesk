@@ -5,12 +5,12 @@ import (
 
 	"gofr.dev/pkg/gofr"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/command"
-	"github.com/dennis-dko/timepulse/internal/application/v1/query"
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	domainservice "github.com/dennis-dko/timepulse/internal/domain/service"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/command"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/query"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	domainservice "github.com/dennis-dko/qubitdesk/internal/domain/service"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // UserHandler serves the user endpoints.
@@ -126,9 +126,6 @@ func (h *UserHandler) Create(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	// No working times. A new account starts on the instance default and its owner
-	// changes it afterwards; a daily target is a time figure, and nobody sets somebody
-	// else's.
 	result, err := h.users.CreateUser(c, command.CreateUserCommand{
 		Name:     req.Name,
 		Email:    req.Email,
@@ -158,9 +155,6 @@ func (h *UserHandler) Update(c *gofr.Context) (any, error) {
 		return nil, toHTTPError(err)
 	}
 
-	// The working times are not passed on. They belong to whoever the account is
-	// about, who sets them through their own working-times route; sending them here
-	// was one of three ways into figures a single right was meant to guard.
 	result, err := h.users.UpdateUser(c, command.UpdateUserCommand{
 		ID:    id,
 		Name:  req.Name,
@@ -204,16 +198,16 @@ func (h *UserHandler) Delete(c *gofr.Context) (any, error) {
 			WithCode("cannotDeleteSelf"))
 	}
 
-	// ?purge=true confirms that the account's recorded time goes with it. Without
-	// it an account that has booked hours is refused, and the refusal says how
-	// many - so the confirmation is asked with the number in front of whoever is
-	// about to agree to it.
+	// ?confirm=true says that whoever asked knows the tickets the account owns
+	// are left without an owner. Without it an account that owns unfinished
+	// tickets is refused, and the refusal says how many - so the confirmation is
+	// asked with the number in front of whoever is about to agree to it.
 	//
 	// A query parameter rather than a body, because DELETE with a body is
 	// awkward for clients and proxies alike, and this is one boolean.
-	purge := boolParam(c, "purge")
+	confirmed := boolParam(c, "confirm")
 
-	if err := h.users.DeleteUser(c, command.DeleteUserCommand{ID: id, Purge: purge}); err != nil {
+	if err := h.users.DeleteUser(c, command.DeleteUserCommand{ID: id, Confirmed: confirmed}); err != nil {
 		return nil, toHTTPError(err)
 	}
 
@@ -333,57 +327,19 @@ func (h *UserHandler) RemoveSecondFactor(c *gofr.Context) (any, error) {
 // exists to lock somebody out, sessions that survive it are exactly what it was
 // meant to end, and nothing further along the path says so.
 func (h *UserHandler) endSessionsOf(c *gofr.Context, id uint) {
-	if h.sessions == nil {
+	h.sessions.afterReset(c, id)
+}
+
+// afterReset ends the open sessions of the account whose password was just
+// reset, and logs rather than reports a failure to: see endSessionsOf. Nothing
+// is ended without an ender.
+func (e *SessionEnder) afterReset(c *gofr.Context, id uint) {
+	if e == nil {
 		return
 	}
 
-	if err := h.sessions.end(c.Context, id); err != nil {
+	if err := e.end(c.Context, id); err != nil {
 		c.Logger.Errorf("the password of account %d was reset, but its open sessions "+
 			"could not be ended and are still signed in: %v", id, err)
 	}
-}
-
-// UpdateWorkingTimes handles PUT /api/v1/users/{id}/working-times.
-//
-// Your own hours, and only your own.
-//
-// There was a wider permission for changing somebody else's, and it is gone: a daily
-// target is a time figure, everything to do with time is the person's own, and the
-// administrator cannot see what the number does anyway.
-func (h *UserHandler) UpdateWorkingTimes(c *gofr.Context) (any, error) {
-	id, err := pathID(c)
-	if err != nil {
-		return nil, toHTTPError(err)
-	}
-
-	if _, err := h.authz.RequireSelf(c, id, model.PermSettingsWriteOwn); err != nil {
-		return nil, err
-	}
-
-	var req WorkingTimesRequest
-	if err := bind(c, &req); err != nil {
-		return nil, toHTTPError(err)
-	}
-
-	cmd := command.UpdateWorkingTimesCommand{
-		ID:               id,
-		DailyTargetHours: req.DailyTargetHours,
-		MaxDailyHours:    req.MaxDailyHours,
-	}
-
-	if req.EveryDayCountsFrom != nil {
-		if req.EveryDayCountsFrom.IsZero() {
-			cmd.ClearEveryDayCountsFrom = true
-		} else {
-			day := req.EveryDayCountsFrom.Time
-			cmd.EveryDayCountsFrom = &day
-		}
-	}
-
-	result, err := h.users.UpdateWorkingTimes(c, cmd)
-	if err != nil {
-		return nil, toHTTPError(err)
-	}
-
-	return newUserResponse(result, h.timezone.resolve(c)), nil
 }

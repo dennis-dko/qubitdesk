@@ -10,7 +10,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // signIn fills the form and submits it, the way a person does.
@@ -45,7 +45,7 @@ func (p *page) settleWizard() {
 		(async () => {
 			const csrf = document.cookie.split(';')
 				.map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const post = (path, body) => fetch(path, {
 				method: body === undefined ? 'POST' : 'PUT',
@@ -239,7 +239,7 @@ func (p *page) markTourSeen() {
 		(async () => {
 			const csrf = document.cookie.split(';')
 				.map(c => c.trim())
-				.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			const res = await fetch('/api/v1/me/tour', {
 				method: 'PUT',
@@ -282,7 +282,7 @@ func (p *page) readyWorker() {
 // already signed in as the administrator.
 //
 // Its own step, because a case sometimes needs both in order: something set on the
-// administration screen, and then the working day it applies to.
+// administration screen, and then the account it applies to.
 func (p *page) becomeWorker() {
 	p.t.Helper()
 
@@ -468,13 +468,13 @@ func TestASessionTheServerNoLongerAcceptsTakesTheScreenWithIt(t *testing.T) {
 	p.waitForFilled("#datasource-active")
 
 	p.run("type something", chromedp.SendKeys(
-		`#form-datasource [name="name"]`, "timepulse_live", chromedp.ByQuery))
+		`#form-datasource [name="name"]`, "qubitdesk_live", chromedp.ByQuery))
 
 	// The session ends underneath the page, which the page has no way of knowing.
 	p.run("end the session behind its back", chromedp.Evaluate(`
 		(async () => {
 			const csrf = document.cookie.split(';').map((c) => c.trim())
-				.find((c) => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+				.find((c) => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 
 			await fetch('/api/v1/auth/logout', {
 				method: 'POST',
@@ -503,7 +503,7 @@ func TestASessionTheServerNoLongerAcceptsTakesTheScreenWithIt(t *testing.T) {
 
 	p.run("look behind it", chromedp.Evaluate(`
 		JSON.stringify({
-			drafts: Object.keys(sessionStorage).filter((k) => k.startsWith('timepulse.draft.')).length,
+			drafts: Object.keys(sessionStorage).filter((k) => k.startsWith('qubitdesk.draft.')).length,
 			account: Boolean(me.user),
 		})`, &left))
 

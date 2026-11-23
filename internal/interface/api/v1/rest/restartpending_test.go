@@ -3,8 +3,8 @@ package rest
 import (
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	appconfig "github.com/dennis-dko/timepulse/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
 )
 
 // waitingFor reports whether one setting is in the list.

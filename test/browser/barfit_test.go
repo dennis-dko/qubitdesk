@@ -86,7 +86,7 @@ func TestNothingOnTheBarIsDrawnOverAnythingElse(t *testing.T) {
 
 	p := open(t)
 	p.readyAdmin()
-	p.createAccount(t, "bothe@example.com", "both-jobs-password-1", "user-admin")
+	p.createAccount(t, "bothe@example.com", "both-jobs-password-1", "admin")
 
 	p.run("sign out", chromedp.Click("#logout", chromedp.ByID),
 		chromedp.WaitVisible("#form-login", chromedp.ByID))
@@ -133,7 +133,7 @@ func TestNothingOnTheBarIsDrawnOverAnythingElse(t *testing.T) {
 
 	// A title of one long word, which cannot be folded at a space. It has to
 	// give way inside the word rather than lie over what is beside it.
-	const oneWord = "Arbeitszeiterfassungsportal"
+	const oneWord = "Kundendienstanfragenportal"
 
 	retitle := func() {
 		t.Helper()
@@ -199,12 +199,12 @@ func TestTheAccountStaysOneLineOnTheBar(t *testing.T) {
 
 	p.run("create an account with a long name", chromedp.Evaluate(`(async () => {
 		const csrf = document.cookie.split(';').map(c => c.trim())
-			.find(c => c.startsWith('timepulse_csrf='))?.slice('timepulse_csrf='.length) ?? '';
+			.find(c => c.startsWith('qubitdesk_csrf='))?.slice('qubitdesk_csrf='.length) ?? '';
 		const r = await fetch('/api/v1/users', {
 			method: 'POST',
 			credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-			body: JSON.stringify({ name: '`+long+`', email: 'long@example.com', role: 'user-admin',
+			body: JSON.stringify({ name: '`+long+`', email: 'long@example.com', role: 'admin',
 				password: 'a-long-enough-password' }),
 		});
 		return String(r.status);
@@ -312,7 +312,7 @@ func TestWhereTheBarHasRoomTheAccountIsShownWhole(t *testing.T) {
 
 	p := open(t)
 	p.readyAdmin()
-	p.createAccount(t, "erika@example.com", "a-long-enough-password", "user-admin")
+	p.createAccount(t, "erika@example.com", "a-long-enough-password", "admin")
 
 	p.run("sign out", chromedp.Click("#logout", chromedp.ByID),
 		chromedp.WaitVisible("#form-login", chromedp.ByID))

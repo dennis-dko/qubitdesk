@@ -4,7 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 // A second-factor code opens one sign-in, not every sign-in in its window.
@@ -18,7 +19,7 @@ import (
 func TestASecondFactorCodeOpensOneSignInOnly(t *testing.T) {
 	f := newFixture(t)
 	email := "two.factor@example.com"
-	id := localUserWithRole(t, f, email, "user")
+	id := localUserWithRole(t, f, email, model.RoleAgent)
 
 	secret, err := security.NewTOTPSecret()
 	if err != nil {

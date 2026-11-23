@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/sqldb"
-	"github.com/dennis-dko/timepulse/internal/support/security"
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/sqldb"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // enableTOTP turns a second factor on for whoever c is signed in as.
@@ -114,7 +114,7 @@ func TestAnAdministratorRemovesTheSecondFactorSomebodyLost(t *testing.T) {
 
 	a := start(t)
 	admin := a.signInAsAdmin("a-much-better-password")
-	phone := a.signInAsUser(admin, "Wera", "wera@example.com")
+	phone := a.signInAsAgent(admin, "Wera", "wera@example.com")
 
 	enableTOTP(t, phone)
 

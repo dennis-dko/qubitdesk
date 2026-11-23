@@ -12,10 +12,10 @@ import (
 	"gofr.dev/pkg/gofr"
 	gofrHTTP "gofr.dev/pkg/gofr/http"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/persistence/memory"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/persistence/memory"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // sessionStoreAnswering answers every lookup with one error.
@@ -159,7 +159,7 @@ func TestATokenThatCannotBeLookedUpIsNotCalledInvalid(t *testing.T) {
 				}
 			}))
 
-			r := httptest.NewRequest(http.MethodGet, "/api/v1/timesheets", nil)
+			r := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
 			r.Header.Set(APITokenHeader, service.APITokenPrefix+"something")
 
 			handler.ServeHTTP(httptest.NewRecorder(), r)

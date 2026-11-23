@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/common"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/common"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // The staff list is where an administrator decides who to edit or remove, so
@@ -22,7 +22,7 @@ func TestUserResultCarriesWhatTheListNeedsToShow(t *testing.T) {
 		Name:               "Bob Builder",
 		Email:              "bob@example.com",
 		RoleID:             3,
-		RoleName:           "user",
+		RoleName:           "agent",
 		IsSystem:           false,
 		MustChangePassword: true,
 		IsExternal:         true,
@@ -30,8 +30,6 @@ func TestUserResultCarriesWhatTheListNeedsToShow(t *testing.T) {
 		TOTPEnabled:        true,
 		Language:           model.LanguageGerman,
 		Timezone:           "Pacific/Auckland",
-		DailyTargetHours:   7.5,
-		MaxDailyHours:      10,
 	}
 
 	results := common.NewUserResultFromModel(user)
@@ -50,15 +48,13 @@ func TestUserResultCarriesWhatTheListNeedsToShow(t *testing.T) {
 		{"Name", got.Name, "Bob Builder"},
 		{"Email", got.Email, "bob@example.com"},
 		{"RoleID", got.RoleID, uint(3)},
-		{"Role", got.Role, "user"},
+		{"Role", got.Role, "agent"},
 		{"IsSystem", got.IsSystem, false},
 		{"MustChangePassword", got.MustChangePassword, true},
 		{"IsExternal", got.IsExternal, true},
 		{"TOTPEnabled", got.TOTPEnabled, true},
 		{"Language", got.Language, model.LanguageGerman},
 		{"Timezone", got.Timezone, "Pacific/Auckland"},
-		{"DailyTargetHours", got.DailyTargetHours, 7.5},
-		{"MaxDailyHours", got.MaxDailyHours, 10.0},
 	}
 
 	for _, c := range checks {

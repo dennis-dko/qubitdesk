@@ -11,7 +11,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // What a finger presses on a telephone is at least 24 pixels square.
@@ -31,7 +31,7 @@ func TestWhatAFingerPressesIsBigEnough(t *testing.T) {
 
 	p := open(t)
 	p.readyAdmin()
-	p.createAccount(t, "sven@example.com", "a-long-enough-password", "user")
+	p.createAccount(t, "sven@example.com", "a-long-enough-password", "agent")
 
 	p.run("a telephone", chromedp.EmulateViewport(390, 844))
 	p.run("open the accounts", chromedp.Evaluate(`switchView('users')`, nil),

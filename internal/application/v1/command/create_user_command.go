@@ -1,6 +1,6 @@
 package command
 
-import "github.com/dennis-dko/timepulse/internal/application/v1/common"
+import "github.com/dennis-dko/qubitdesk/internal/application/v1/common"
 
 // CreateUserCommand command to create new user
 type CreateUserCommand struct {
@@ -13,8 +13,6 @@ type CreateUserCommand struct {
 	// Password may be empty, in which case the account is created with the
 	// initial password and must change it on first use.
 	Password string
-
-	// Working times; zero means "use the instance default".
 }
 
 // CreateUserCommandResult command to get create result of new user

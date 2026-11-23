@@ -3,15 +3,15 @@ package rest
 import (
 	"testing"
 
-	appconfig "github.com/dennis-dko/timepulse/internal/infrastructure/config"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
 )
 
 // A kept password follows its account, and only the parts that name the account
 // decide that - an empty port is the default port, as it is when connecting.
 func TestAKeptPasswordFollowsItsAccountAndNothingElse(t *testing.T) {
 	stored := appconfig.Datasource{
-		Dialect: "postgres", Name: "timepulse", Host: "db.example", Port: "5432",
-		User: "timepulse", Password: "secret",
+		Dialect: "postgres", Name: "qubitdesk", Host: "db.example", Port: "5432",
+		User: "qubitdesk", Password: "secret",
 	}
 
 	for _, tc := range []struct {

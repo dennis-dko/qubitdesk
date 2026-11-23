@@ -18,10 +18,7 @@ What is below was raised and is not recorded as decided anywhere.
 
 ## Decisions waiting on the maintainer
 
-None today: the last was decided on 2026-11-17. The table stays for the next.
-
-| | Question |
-| --- | --- |
+None.
 
 ## Measurements reading cannot make
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // SessionRepository stores browser sessions.

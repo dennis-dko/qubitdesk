@@ -10,10 +10,10 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/infrastructure/announce"
-	appconfig "github.com/dennis-dko/timepulse/internal/infrastructure/config"
-	"github.com/dennis-dko/timepulse/internal/infrastructure/selfupdate"
-	"github.com/dennis-dko/timepulse/internal/support/hosting"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/announce"
+	appconfig "github.com/dennis-dko/qubitdesk/internal/infrastructure/config"
+	"github.com/dennis-dko/qubitdesk/internal/infrastructure/selfupdate"
+	"github.com/dennis-dko/qubitdesk/internal/support/hosting"
 )
 
 // An image update into a database that does not answer is refused before
@@ -30,8 +30,8 @@ func TestAnImageUpdateIntoADatabaseThatDoesNotAnswerIsRefused(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	stored := appconfig.Datasource{
-		Dialect: "postgres", Name: "timepulse", Host: "127.0.0.1", Port: "1",
-		User: "timepulse", Password: "a-password", SSLMode: "disable",
+		Dialect: "postgres", Name: "qubitdesk", Host: "127.0.0.1", Port: "1",
+		User: "qubitdesk", Password: "a-password", SSLMode: "disable",
 	}
 
 	if err := appconfig.SaveDatasource(appconfig.DatasourceFile, stored); err != nil {
@@ -78,8 +78,8 @@ func TestABinaryUpdateIntoADatabaseThatDoesNotAnswerIsRefusedBeforeItIsAnnounced
 	t.Chdir(t.TempDir())
 
 	stored := appconfig.Datasource{
-		Dialect: "postgres", Name: "timepulse", Host: "127.0.0.1", Port: "1",
-		User: "timepulse", Password: "a-password", SSLMode: "disable",
+		Dialect: "postgres", Name: "qubitdesk", Host: "127.0.0.1", Port: "1",
+		User: "qubitdesk", Password: "a-password", SSLMode: "disable",
 	}
 
 	if err := appconfig.SaveDatasource(appconfig.DatasourceFile, stored); err != nil {
@@ -96,7 +96,7 @@ func TestABinaryUpdateIntoADatabaseThatDoesNotAnswerIsRefusedBeforeItIsAnnounced
 		}
 
 		_, _ = fmt.Fprintf(w, `{"tag_name":"v9.9.9","assets":[
-			{"name":"timepulse-web_v9.9.9_%s_%s%s","browser_download_url":"%s/binary"},
+			{"name":"qubitdesk-web_v9.9.9_%s_%s%s","browser_download_url":"%s/binary"},
 			{"name":"SHA256SUMS","browser_download_url":"%s/sums"}]}`,
 			runtime.GOOS, runtime.GOARCH, binarySuffix(), feed.URL, feed.URL)
 	}))
@@ -104,7 +104,7 @@ func TestABinaryUpdateIntoADatabaseThatDoesNotAnswerIsRefusedBeforeItIsAnnounced
 
 	hub := announce.New()
 	h := NewUpdateHandler(NewAuthorizer(false), selfupdate.New(feed.URL, ""), hub, "v1.0.0", true).
-		WithConnection(appconfig.Datasource{Dialect: "sqlite", Name: "timepulse.db"})
+		WithConnection(appconfig.Datasource{Dialect: "sqlite", Name: "qubitdesk.db"})
 
 	_, err := h.Apply(requestContext())
 

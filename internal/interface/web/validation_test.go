@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/security"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/security"
 )
 
 var (
@@ -30,17 +30,10 @@ var (
 // which is how the second factor's code went to the server unchecked - so one
 // that submits what somebody typed belongs in a form, and the rest are named.
 var outsideAForm = map[string]string{
-	"theme-picker":       "applies the appearance as it is chosen; nothing is submitted",
-	"language-picker":    "applies the language as it is chosen",
-	"viewing-for-picker": "chooses whose time the screens show, as it is chosen",
-	"timer-project":      "the stopwatch's project, chosen from what may be booked",
-	"timer-description":  "the stopwatch's optional description, whose one rule - its length - holds while typing",
-	"filter-ts-project":  "filters the entries as it is chosen",
-	"week-add-project":   "adds a row to the week as it is chosen",
-	"statistics-from":    "the statistics' range, asked for as it is changed",
-	"statistics-to":      "the statistics' range, asked for as it is changed",
-	"log-search":         "searches the log as it is typed",
-	"log-delay":          "how often the log is asked again, read within its bounds by logDelaySeconds",
+	"theme-picker":    "applies the appearance as it is chosen; nothing is submitted",
+	"language-picker": "applies the language as it is chosen",
+	"log-search":      "searches the log as it is typed",
+	"log-delay":       "how often the log is asked again, read within its bounds by logDelaySeconds",
 }
 
 // markupFields is every control a person types into or chooses from, by its id or
@@ -97,7 +90,7 @@ func markupFields(t *testing.T) []markupField {
 		fields = append(fields, field)
 	}
 
-	if len(fields) < 100 {
+	if len(fields) < 60 {
 		t.Fatalf("read %d controls from the page; the reading has stopped finding them", len(fields))
 	}
 
@@ -184,20 +177,11 @@ func figure(value float64) string { return strconv.FormatFloat(value, 'f', -1, 6
 
 // numberRules are every number field on the screen, by its form and name, with
 // the server's rule for it. A field the markup holds to more than this refuses a
-// value the server takes - a 38.75-hour week's 7.75 hours a day, 23.33 days of
-// leave for part of a year, an idle time of 7 minutes, all refused by steps of a
-// half or of five while the server took them - and one held to less lets
-// somebody type what the server refuses.
+// value the server takes - an idle time of 7 minutes, refused by steps of five
+// while the server took it - and one held to less lets somebody type what the
+// server refuses.
 var numberRules = map[string]numberRule{
-	"form-timesheet/durationHours":        {figure(model.MinBookableHours), figure(model.HoursPerDay), "any"},
-	"form-workday/breakMinutes":           {"0", figure(model.MinutesPerDay - 1), "1"},
-	"form-vacation/days":                  {"0", figure(model.MaxEntitlementDays), "any"},
-	"form-vacation/fromYear":              {"1900", "9999", "1"},
-	"form-project/budgetHours":            {"0", figure(model.MaxBudgetHours), "any"},
-	"form-working-times/dailyTargetHours": {"0", figure(model.HoursPerDay), "any"},
-	"form-working-times/maxDailyHours":    {"0", figure(model.HoursPerDay), "any"},
-	"form-reminders/timerAlertHours":      {"0", figure(model.MaxTimerAlertHours), "1"},
-	"form-backup-plan/keep":               {"1", figure(model.MaxBackupsKept), "1"},
+	"form-backup-plan/keep": {"1", figure(model.MaxBackupsKept), "1"},
 	"form-operational/sessionLifetimeHours": {
 		figure(model.MinSessionLifetimeHours), figure(model.MaxSessionLifetimeHours), "any",
 	},
@@ -206,26 +190,24 @@ var numberRules = map[string]numberRule{
 	"form-operational/ldapSyncMaxDeleteRatio": {"0", "1", "any"},
 	"form-telemetry/tracerRatio":              {"0", "1", "any"},
 	"form-ldap/port":                          {"1", figure(model.MaxPort), "1"},
+	"form-priority/level":                     {"1", figure(model.MaxPriorityLevel), "1"},
+	"form-queue/unlockMinutes":                {"0", figure(model.MaxUnlockMinutes), "1"},
+	"form-sla/firstResponseMinutes":           {"0", figure(model.MaxServiceMinutes), "1"},
+	"form-sla/updateMinutes":                  {"0", figure(model.MaxServiceMinutes), "1"},
+	"form-sla/solutionMinutes":                {"0", figure(model.MaxServiceMinutes), "1"},
+	"form-ticket/minutes":                     {"0", figure(model.MaxArticleMinutes), "1"},
+	"form-workorder/plannedMinutes":           {"0", figure(model.MaxWorkOrderPlannedMinutes), "1"},
+	"form-workorder/minutes":                  {"0", figure(model.MaxArticleMinutes), "1"},
+	"form-article/minutes":                    {"0", figure(model.MaxArticleMinutes), "1"},
 	"form-datasource/port":                    {"1", figure(model.MaxPort), "1"},
-
-	// The server keeps a rate in hundredths and rounds what it is given, so the
-	// form asks for no finer a figure than is kept rather than rounding unseen.
-	"form-project/hourlyRate": {"0", figure(model.MaxHourlyRate), "0.01"},
 
 	// Zero switches the timeout off; between it and the floor the server refuses
 	// by the field's name, a rule of two parts the markup cannot state.
 	"form-operational/sessionIdleMinutes": {"0", figure(model.MaxSessionIdleMinutes), "1"},
 
-	// The server takes any cap above nothing, which the markup cannot state; a cap
-	// below the smallest booking is the closest it can.
-	"form-operational/maxDailyHours": {figure(model.MinBookableHours), figure(model.HoursPerDay), "any"},
-
-	// Bounds the server keeps unexported, beside the code that checks them:
-	// maxBalanceBound in overtime_application_service.go, and the days a token may
-	// last in apitoken_application_service.go.
-	"form-balance-bounds/upperBound": {"0", "10000", "any"},
-	"form-balance-bounds/lowerBound": {"-10000", "0", "any"},
-	"form-token/expiresInDays":       {"0", "3650", "1"},
+	// A bound the server keeps unexported, beside the code that checks it: the
+	// days a token may last, in apitoken_application_service.go.
+	"form-token/expiresInDays": {"0", "3650", "1"},
 
 	// Not the server's: how often the log viewer asks again, which the page reads
 	// within these bounds itself.

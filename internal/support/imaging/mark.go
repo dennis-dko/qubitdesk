@@ -13,15 +13,15 @@ import (
 	"golang.org/x/image/vector"
 )
 
-// The mark, in the 560-unit box favicon.svg is drawn in: TimePulse's T and P in
-// white on a blue tile, a pulse running out of the T into the P, and a clock in
-// the P's bowl.
+// The mark, in the 560-unit box favicon.svg is drawn in: QubitDesk's Q and D in
+// white on a blue tile, the right of the Q's ring the stem of the D, and a
+// ticket in the Q's counter.
 //
 // Drawn rather than kept as pictures, because a picture in the tree is a copy of
-// favicon.svg nobody can regenerate - and a copy that silently keeps the old mark
+// favicon.svg nobody can regenerate - and a copy that silently keeps an old mark
 // is what happened to the tab icon once already. The numbers are the SVG's, and
 // TestTheMarkIsFaviconSVGsGeometry fails the moment the two part. There is no
-// renderer here that reads SVG documents, and one added to draw five figures
+// renderer here that reads SVG documents, and one added to draw two figures
 // would be a dependency doing far more than this needs; the figures are written
 // in lines and elliptical arcs, which trace below follows.
 const (
@@ -44,17 +44,22 @@ var markGround = []groundStop{
 }
 
 // markFigures are the white shapes, each a path of its own as the SVG has them:
-// the bar of the T and the top of its stem, the foot of the stem, the P with the
-// pulse through it, and the clock's three hands.
+// the Q and the D, their counters cut out by running the other way round, and
+// the ticket with its notches and its three perforations.
 var markFigures = []string{
-	"M78.96 95.95H314.62A130.11 127.97 0 0 0 270.18 134.8H222.7V255.83L205.5 303.96L184.1 221.09V134.8H109.96A31 31 0 0 1 78.96 103.8Z",
-	"M184.5 387.98L197.47 420.93A5.4 5.4 0 0 0 207.45 421.09L222.65 385.88V467.82A3.35 3.35 0 0 1 219.3 471.17H219.8A35.3 40.55 0 0 1 184.5 430.62Z",
-	"M261.75 291.85H374.93A79.18 79.96 0 0 0 454.11 211.89A77.29 79 0 0 0 376.82 132.89A78.06 75.07 0 0 0 298.76 207.96V276.95H261.14V208.49A115.42 113.28 0 0 1 376.56 95.21A115.04 116.8 0 0 1 491.6 212.01A117.12 117.73 0 0 1 374.48 329.74H298.76V465.03A6 6 0 0 1 292.76 471.03H266.64A5.5 5.5 0 0 1 261.14 465.53V360.2L284 307.35H269.82L251.86 343.72L235.47 309.61L202.54 398.88L166.71 276.03L147.72 329.82H83.15A3 3 0 0 1 80.15 326.82V316.88A3 3 0 0 1 83.15 313.88H136.55L168.15 221.93L203.85 350.51L234.35 265.28L253 309.75Z",
-	"M378.63 216.5L378.63 153.95A3.85 3.85 0 0 0 370.93 153.95L370.93 216.5ZM377.11 219.57L426.89 181.79A3.85 3.85 0 0 0 422.23 175.65L372.45 213.43ZM376.8 213.22L338.11 189.43A3.85 3.85 0 0 0 334.07 195.99L372.76 219.78Z",
+	"M73.36 268A140 140 0 0 1 302.82 160.31V128H346.64A140 140 0 0 1 486.64 268A140 140 0 0 1 346.64 408H333.06" +
+		"L297.64 443.42L255.67 401.45A140 140 0 0 1 73.36 268ZM111.36 268A102 102 0 0 0 213.36 370" +
+		"A102 102 0 0 0 315.36 268A102 102 0 0 0 213.36 166A102 102 0 0 0 111.36 268ZM346.64 166H309.26" +
+		"A140 140 0 0 1 309.26 370H346.64A102 102 0 0 0 448.64 268A102 102 0 0 0 346.64 166Z",
+	"M155.38 249.62L194.98 210.02A8 8 0 0 1 206.29 210.02L230.33 234.06A12 12 0 0 0 230.33 251.03" +
+		"A12 12 0 0 0 247.3 251.03L271.34 275.07A8 8 0 0 1 271.34 286.38L231.74 325.98A8 8 0 0 1 220.43 325.98" +
+		"L196.39 301.94A12 12 0 0 0 196.39 284.97A12 12 0 0 0 179.42 284.97L155.38 260.93A8 8 0 0 1 155.38 249.62" +
+		"ZM200.1 275.6A4 4 0 0 0 200.1 281.26A4 4 0 0 0 205.76 281.26L206.47 280.55A4 4 0 0 0 206.47 274.89" +
+		"A4 4 0 0 0 200.81 274.89ZM210.18 265.53A4 4 0 0 0 210.18 271.18A4 4 0 0 0 215.83 271.18" +
+		"L216.54 270.47A4 4 0 0 0 216.54 264.82A4 4 0 0 0 210.89 264.82ZM220.25 255.45" +
+		"A4 4 0 0 0 220.25 261.11A4 4 0 0 0 225.91 261.11L226.62 260.4A4 4 0 0 0 226.62 254.74" +
+		"A4 4 0 0 0 220.96 254.74Z",
 }
-
-// markHub is the clock's centre, the one circle among the figures.
-var markHub = struct{ cx, cy, r float64 }{374.78, 216.5, 13.25}
 
 var (
 	figureInk  = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
@@ -93,12 +98,6 @@ func Mark(size int) (image.Image, error) {
 			return nil, fmt.Errorf("tracing the mark: %w", traced)
 		}
 	}
-
-	layer(figures, coverage(size, func(r *vector.Rasterizer) error {
-		ellipse(r, markHub.cx*scale, markHub.cy*scale, markHub.r*scale, markHub.r*scale)
-
-		return nil
-	}))
 
 	out := image.NewNRGBA(image.Rect(0, 0, size, size))
 
@@ -393,20 +392,6 @@ func arc(r *vector.Rasterizer, x1, y1, rx, ry, rotation float64, large, sweep bo
 
 		r.CubeTo(c1x, c1y, c2x, c2y, ex, ey)
 	}
-}
-
-// ellipse traces a whole ellipse around a centre, as four quarter curves.
-func ellipse(r *vector.Rasterizer, cx, cy, rx, ry float64) {
-	kx, ky := rx*cubicKappa, ry*cubicKappa
-
-	f := func(v float64) float32 { return float32(v) }
-
-	r.MoveTo(f(cx+rx), f(cy))
-	r.CubeTo(f(cx+rx), f(cy+ky), f(cx+kx), f(cy+ry), f(cx), f(cy+ry))
-	r.CubeTo(f(cx-kx), f(cy+ry), f(cx-rx), f(cy+ky), f(cx-rx), f(cy))
-	r.CubeTo(f(cx-rx), f(cy-ky), f(cx-kx), f(cy-ry), f(cx), f(cy-ry))
-	r.CubeTo(f(cx+kx), f(cy-ry), f(cx+rx), f(cy-ky), f(cx+rx), f(cy))
-	r.ClosePath()
 }
 
 // roundedRect traces the tile, which fills the picture. The corners are cubics,

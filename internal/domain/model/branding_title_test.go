@@ -3,10 +3,10 @@ package model_test
 import (
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
-// What an installation calls itself in the language that is reading: TimePulse,
+// What an installation calls itself in the language that is reading: QubitDesk,
 // and the addition written for that language.
 func TestTheInstanceIsNamedInTheLanguageThatAsked(t *testing.T) {
 	t.Parallel()
@@ -19,13 +19,13 @@ func TestTheInstanceIsNamedInTheLanguageThatAsked(t *testing.T) {
 		},
 	}
 
-	if got := branding.NameIn("de"); got != "TimePulse | htp.net Deutschland" {
+	if got := branding.NameIn("de"); got != "QubitDesk | htp.net Deutschland" {
 		t.Errorf("a German reader is shown %q", got)
 	}
 
 	// A language with no addition of its own falls back to the untranslated one
 	// rather than to nothing.
-	if got := branding.NameIn("fr"); got != "TimePulse | htp.net" {
+	if got := branding.NameIn("fr"); got != "QubitDesk | htp.net" {
 		t.Errorf("an untranslated language is shown %q", got)
 	}
 
@@ -35,12 +35,12 @@ func TestTheInstanceIsNamedInTheLanguageThatAsked(t *testing.T) {
 		Translations: map[string]model.BrandingText{"de": {Title: "   "}},
 	}
 
-	if got := empty.NameIn("de"); got != "TimePulse | htp.net" {
+	if got := empty.NameIn("de"); got != "QubitDesk | htp.net" {
 		t.Errorf("a blank translation was used as an addition: %q", got)
 	}
 
-	// Nothing written anywhere is TimePulse alone.
-	if got := (model.Branding{}).NameIn("de"); got != "TimePulse" {
+	// Nothing written anywhere is QubitDesk alone.
+	if got := (model.Branding{}).NameIn("de"); got != "QubitDesk" {
 		t.Errorf("an installation that added nothing is called %q", got)
 	}
 }

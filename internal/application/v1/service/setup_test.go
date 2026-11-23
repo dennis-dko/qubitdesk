@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // The wizard's whole value is that it tells the truth about what is
@@ -30,6 +30,24 @@ func (s *stubSettings) Get(_ context.Context, key string) (string, error) {
 	defer s.mu.RUnlock()
 
 	return s.values[key], nil
+}
+
+func (s *stubSettings) Lookup(_ context.Context, key string) (string, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	value, stored := s.values[key]
+
+	return value, stored, nil
+}
+
+func (s *stubSettings) Delete(_ context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.values, key)
+
+	return nil
 }
 
 func (s *stubSettings) Set(_ context.Context, key, value string) error {

@@ -114,7 +114,7 @@ func (d Directory) List() ([]Stored, error) {
 		}
 
 		made, err := time.Parse("20060102-150405",
-			strings.TrimSuffix(strings.TrimPrefix(entry.Name(), "timepulse-"), Extension))
+			strings.TrimSuffix(strings.TrimPrefix(entry.Name(), "qubitdesk-"), Extension))
 		if err != nil {
 			continue
 		}

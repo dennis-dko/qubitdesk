@@ -17,17 +17,13 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // interactionTimeout bounds one test. Generous, because a cold browser start
 // and the application's first migration both land inside it - and because the
 // suite now runs several cases at once, where all of that happens on a machine
 // doing several times the work.
-//
-// The case that measures a stopwatch spends forty of these seconds deliberately
-// asleep, waiting out the smallest bookable duration; on a busy two-core runner
-// the rest of its work has to fit in what is left.
 const interactionTimeout = 150 * time.Second
 
 // waitPatience is how long the helpers below wait for something that is on its
@@ -290,6 +286,28 @@ func (p *page) evalJSON(expression string, into any) {
 	}
 }
 
+// awaitJSON evaluates an expression that may be a promise, and unpacks its value.
+//
+// evalJSON's sibling for the cases that set up state through the page's own api():
+// that returns a promise, and an evaluation that does not wait for it hands back
+// the pending promise rather than what the server said.
+func (p *page) awaitJSON(expression string, into any) {
+	p.t.Helper()
+
+	var raw string
+
+	p.run("wait for the page's answer", chromedp.Evaluate(
+		`(async () => JSON.stringify(await (`+expression+`)) ?? 'null')()`, &raw, awaitPromise))
+
+	if into == nil {
+		return
+	}
+
+	if err := json.Unmarshal([]byte(raw), into); err != nil {
+		p.t.Fatalf("reading the page's answer: %v\n\n%.400s", err, raw)
+	}
+}
+
 // run executes actions and fails the test with the application's log attached,
 // which is usually where the reason is.
 func (p *page) run(what string, actions ...chromedp.Action) {
@@ -361,7 +379,7 @@ func (p *page) jsBroken() bool {
 	// If app.js failed to parse or threw during init, the functions it defines
 	// are not there.
 	p.run("check that the script initialised",
-		chromedp.Evaluate(`typeof window.timePulseTheme === 'object'`, &ok))
+		chromedp.Evaluate(`typeof window.qubitDeskTheme === 'object'`, &ok))
 
 	return !ok
 }

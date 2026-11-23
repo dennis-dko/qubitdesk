@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
 )
 
 // Every reason the server names has a sentence, and every sentence names a reason
@@ -248,17 +250,17 @@ func serverErrorCodes(t *testing.T) map[string]struct{} {
 // A field the server can reject is named the way the screen names it.
 //
 // Rejections travel as a list of field names, which are column names:
-// "dailyTargetHours" is not what the label above the box says, in any language.
+// "sessionIdleMinutes" is not what the label above the box says, in any language.
 // The interface looks each one up as t(`field.${name}`), so nothing in the source
 // mentions the key and the coverage tests cannot see it - which is how a field
 // could be rejected by name and shown as an identifier for good.
 //
 // In English too, which is the language this used to forget. English has no
 // dictionary on purpose, so the English is whatever the lookup falls back to - and the
-// fallback was the name itself: a refused import row said "Invalid field(s):
-// durationHours" about a box labelled Hours, while the German beside it said
-// Stunden. FIELD_NAMES holds the English, the way PERMISSION_TITLES does for the
-// rights.
+// fallback was the name itself: a refusal said "Invalid field(s):
+// sessionIdleMinutes" about a box labelled Sign out after inactivity, while the
+// German beside it said what the box says. FIELD_NAMES holds the English, the
+// way PERMISSION_TITLES does for the rights.
 func TestEveryRejectedFieldIsNamed(t *testing.T) {
 	fields := rejectedFields(t)
 	if len(fields) == 0 {
@@ -356,6 +358,7 @@ func rejectedFields(t *testing.T) map[string]struct{} {
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`InvalidFields\(([^)]*)\)`),
 		regexp.MustCompile(`append\((?:invalid|fields), ([^)]*)\)`),
+		regexp.MustCompile(`refusedStep\(([^)]*)\)`),
 	}
 	literal := regexp.MustCompile(`"([a-zA-Z][a-zA-Z0-9]*)"`)
 
@@ -387,6 +390,15 @@ func rejectedFields(t *testing.T) map[string]struct{} {
 		})
 	if err != nil {
 		t.Fatalf("walking the source: %v", err)
+	}
+
+	// A macro step is refused by the parameter it cannot hold, which the service
+	// reads off the step's definition rather than writing it out - so the names
+	// are taken from the definitions, where the service takes them.
+	for _, step := range model.MacroActionDefinitions() {
+		for _, parameter := range step.Parameters {
+			fields[parameter.Name] = struct{}{}
+		}
 	}
 
 	return fields
@@ -492,59 +504,6 @@ func restartRefusalCodes(t *testing.T) map[string]struct{} {
 	}
 
 	return codes
-}
-
-// Every state a project can be in has a German word for it.
-//
-// The badge is rendered as t(`status.${status}`) from whatever the server sent, so
-// no literal key appears in the source and the coverage tests cannot see these.
-// Without a word they render as the raw value, which is how "active" sat in the
-// middle of an otherwise German table.
-func TestEveryProjectStateIsNamed(t *testing.T) {
-	states := projectStates(t)
-	if len(states) == 0 {
-		t.Fatal("no project states found; this test is no longer reading the source")
-	}
-
-	dict, ok := dictionaries(t)["de"]
-	if !ok {
-		t.Fatal("app.js has no German dictionary")
-	}
-
-	var unnamed []string
-
-	for state := range states {
-		if _, found := dict["status."+state]; !found {
-			unnamed = append(unnamed, state)
-		}
-	}
-
-	sort.Strings(unnamed)
-
-	if len(unnamed) > 0 {
-		t.Errorf("%d project state(s) have no German word, so the badge shows the raw "+
-			"value: %v", len(unnamed), unnamed)
-	}
-}
-
-// projectStates reads what a project's status can be, out of the model.
-func projectStates(t *testing.T) map[string]struct{} {
-	t.Helper()
-
-	source, err := os.ReadFile(filepath.Join("..", "..", "..",
-		"internal", "domain", "model", "project_model.go"))
-	if err != nil {
-		t.Fatalf("reading the project model: %v", err)
-	}
-
-	states := map[string]struct{}{}
-	pattern := regexp.MustCompile(`ProjectStatus\w+\s*=\s*"([a-z]+)"`)
-
-	for _, match := range pattern.FindAllSubmatch(source, -1) {
-		states[string(match[1])] = struct{}{}
-	}
-
-	return states
 }
 
 // sheetCards reads the tables that have an export/import card out of app.js.

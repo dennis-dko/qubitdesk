@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // Changing the attribute the directory's identifier is read from forgets the
@@ -25,7 +25,7 @@ func TestChangingTheIdentifierAttributeForgetsTheRecordedIdentifiers(t *testing.
 
 	created := admin.api(http.MethodPost, "/users", map[string]any{
 		"name": "Dirk", "email": "dirk@example.com",
-		"role": "user", "password": "dirk-password-1",
+		"role": "agent", "password": "dirk-password-1",
 	})
 
 	var made struct {

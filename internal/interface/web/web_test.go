@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/interface/web"
+	"github.com/dennis-dko/qubitdesk/internal/interface/web"
 )
 
 // nextMarker is what the stand-in for the API routes behind the UI middleware
@@ -50,7 +50,7 @@ func TestServesEmbeddedIndex(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	if !strings.Contains(rec.Body.String(), "<title>TimePulse</title>") {
+	if !strings.Contains(rec.Body.String(), "<title>QubitDesk</title>") {
 		t.Error("expected the embedded index.html")
 	}
 }
@@ -146,13 +146,13 @@ func TestNonGetRequestsPassThrough(t *testing.T) {
 // A deep link must render the app rather than 404, so a browser reload on a
 // client-side route still works.
 func TestUnknownUIPathFallsBackToIndex(t *testing.T) {
-	rec := get(t, http.MethodGet, "/projects/42")
+	rec := get(t, http.MethodGet, "/tickets/42")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	if !strings.Contains(rec.Body.String(), "<title>TimePulse</title>") {
+	if !strings.Contains(rec.Body.String(), "<title>QubitDesk</title>") {
 		t.Error("expected the SPA fallback to serve index.html")
 	}
 }

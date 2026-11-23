@@ -5,28 +5,28 @@ The full reference is at `/api-docs`; the highlights:
 
 ## Connecting an app
 
-An app that books through this API needs two values: the installation's
+An app that works through this API needs two values: the installation's
 address and a personal token. A token is made under *My account*, API tokens,
 and the card shows both once: as text, the token's value and the address, and
 together, as a QR code. The code holds a connection address:
 
 ```text
-timepulse://connect?token=timepulse_...&url=https%3A%2F%2Ftime.example.com
+qubitdesk://connect?token=qubitdesk_...&url=https%3A%2F%2Ftickets.example.com
 ```
 
 `url` is the address the browser reached the installation at when the token
 was made, scheme and host without a path, and `token` is the token itself.
 Both are query-encoded, and the order of the two is not to be relied on. An
-app registers the scheme `timepulse`, so that scanning the code with the
+app registers the scheme `qubitdesk`, so that scanning the code with the
 phone's camera opens it, and from then on asks the API with
 `Authorization: Bearer <token>`.
 
 The Android app in this repository, released as
-`timepulse-mobile_<version>.apk`, is such an app. It scans the code with
+`qubitdesk-mobile_<version>.apk`, is such an app. It scans the code with
 a camera screen of its own as well, and fills its connect form from the code
 however it was read, and connects only once whoever holds the phone has seen the
 address and agreed, because a code is a link any page could open - and an app
-that connected on its own would send what somebody books to wherever such a link
+that connected on its own would hand somebody's token to wherever such a link
 pointed.
 
 The answer that creates a token carries the same thing for a program that makes
@@ -70,7 +70,7 @@ paraphrase of a message that has since been reworded.
 | `ref` | internal failures | The same string as in the log line. This is how a screenshot and a log entry are matched up. |
 
 Two kinds of `code`. Specific ones are declared where the rule is enforced
-(`projectHasEntries`, `timesheetLocked`). The generic ones — the refusals that
+(`deletionNeedsConfirming`, `systemRoleUndeletable`). The generic ones — the refusals that
 belong to no single rule — are declared once in
 [`apperror/code.go`](../internal/support/apperror/code.go): `internal`, `probeFailed`,
 `unauthenticated`, `notFound`, `invalidFields`, `rateLimited`, `csrfRejected`,
@@ -88,25 +88,31 @@ running instance.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/v1/auth/login`, `/auth/logout` | Sign in and out |
+| `POST` | `/api/v1/auth/token` | Exchange a personal token for a session |
 | `GET` | `/api/v1/me` | Own identity and permissions |
-| `PUT` | `/api/v1/me/password`, `/me/language` | Own password, own language |
+| `PUT` | `/api/v1/me/password`, `/me/language`, `/me/timezone`, `/me/theme` | Own password, language, zone and appearance |
 | `POST/PUT/DELETE` | `/api/v1/me/totp` | Two-factor enrolment |
 | `GET/POST` | `/api/v1/me/tokens` | Personal API tokens |
-| `GET/POST/PUT/DELETE` | `/api/v1/users`, `/users/{id}` | User administration |
+| `GET` | `/api/v1/me/export` | Everything held about the own account |
+| `GET/POST/PUT/DELETE` | `/api/v1/users`, `/users/{id}` | User administration; deleting an account that owns unfinished tickets needs `?confirm=true` |
 | `PUT` | `/api/v1/users/{id}/role` | Role |
-| `PUT` | `/api/v1/users/{id}/working-times` | Your own daily target and maximum |
-| `GET` | `/api/v1/users/{id}/overtime` | An overtime balance — your own, unless you may read everybody's |
 | `GET/POST/PUT/DELETE` | `/api/v1/roles`, `/roles/{id}` | Roles |
 | `GET` | `/api/v1/permissions` | Every enforced permission |
-| `GET/POST/PUT/DELETE` | `/api/v1/projects`, `/projects/{id}` | Projects |
-| `POST` | `/api/v1/projects/{id}/archive` | Archive |
-| `GET` | `/api/v1/projects/{id}/report` | Report |
-| `GET/POST/PUT/DELETE` | `/api/v1/timesheets`, `/timesheets/{id}` | Time entries |
-| `GET/POST/DELETE` | `/api/v1/me/timer` | Own stopwatch: read, start, discard |
-| `POST` | `/api/v1/me/timer/stop` | Stop it and book the measured time |
-| `GET` | `/api/v1/me/statistics` | Own hours per day and per project |
-| `POST` | `/api/v1/timesheets/{id}/transfer` | Move to another project |
-| `GET/PUT` | `/api/v1/settings/...` | Branding, database, LDAP, metrics and tracing |
+| `GET/POST/PUT/DELETE` | `/api/v1/tickets`, `/tickets/{id}` | The tickets, reached through their queues: reading takes `tickets:read` and a queue the caller's role reaches, opening and changing take `tickets:create` or `tickets:write` and a queue it works in, deleting `tickets:delete`; a ticket out of reach is not found. Listing is paged - `limit` at most 200, refused above - and filters by `queue`, `state`, `unfinished`, `owner` (an id or `me`) and `q`. A ticket names its `serviceLevelId` and when it is owed its first answer and its solution, and `escalated` says a promise has run out unkept |
+| `GET/POST` | `/api/v1/tickets/{id}/articles` | What is written in a ticket - a note or a call, with the minutes worked, each article listing its files |
+| `POST` | `/api/v1/tickets/{id}/articles/{article}/attachments` | A file for an article, as multipart/form-data in `file`, at most 20 MB |
+| `GET` | `/api/v1/tickets/{id}/attachments/{attachment}` | A file's bytes, always as application/octet-stream, and only through its own ticket |
+| `GET` | `/api/v1/tickets/{id}/history` | What happened to a ticket, by the names things had then |
+| `PUT/DELETE` | `/api/v1/tickets/{id}/watch` | Watching a ticket |
+| `GET` | `/api/v1/tickets/assignees?queue=` | Who a ticket in a queue can be given to |
+| `GET/POST/PUT/DELETE` | `/api/v1/organisations`, `/organisations/{id}` | The companies tickets come from, by `customers:read` and `customers:write`; one that contacts or tickets belong to is made invalid rather than deleted |
+| `GET/POST/PUT/DELETE` | `/api/v1/contacts`, `/contacts/{id}` | The people tickets come from; deleting one that tickets are for needs `?confirm=true`, and the tickets stay without it |
+| `GET/POST/PUT/DELETE` | `/api/v1/queues`, `/queues/{id}` | Where tickets are sorted to, which role reaches each and the service level a new ticket in it starts with; anybody without `queues:write` is shown only the queues their role reaches, and one it does not reach is not found |
+| `GET/POST/PUT/DELETE` | `/api/v1/ticket-states`, `/ticket-priorities`, `/ticket-types` and each `/{id}` | What tickets are sorted by; reading takes `tickets:read` or `queues:write`, changing takes `queues:write`, and what the code relies on stays as it shipped |
+| `GET/POST/PUT/DELETE` | `/api/v1/calendars`, `/calendars/{id}` | When a service is given - the hours of each weekday, less public holidays and free days of its own - which a service level's minutes are counted in; takes `queues:write`, and an empty zone or place follows the installation's |
+| `GET/POST/PUT/DELETE` | `/api/v1/service-levels`, `/service-levels/{id}` | What a ticket is owed - minutes of service time until the first answer, between answers and until it is solved, counted in a calendar or around the clock; read with `tickets:read` or `queues:write`, changed with `queues:write`; one in use is retired rather than deleted, and so is a calendar a level counts in |
+| `GET/PUT` | `/api/v1/settings/...` | Branding, database, LDAP, sign-in provider, public holidays, metrics and tracing |
+| `GET/PUT/DELETE` | `/api/v1/settings/sysconfig`, `/settings/sysconfig/{name}` | The system configuration: options with their defaults, under KIX18's names; every account signed in reads the external ones, `settings:manage` reads and changes all of them, and `DELETE` puts one back to its default |
 
 ## What the metrics endpoint carries
 
@@ -117,24 +123,24 @@ the same: every request is traced by the framework's middleware, which is why
 tracing works here with no span code anywhere.
 
 What it cannot know is whether the application is doing its job. A deployment can
-serve every request in milliseconds while nobody has been able to book time since
+serve every request in milliseconds while nobody has been able to sign in since
 the directory changed. So these are recorded here as well, each because
 somebody would act on it:
 
 | Metric | Says |
 | --- | --- |
-| `timepulse_timesheet_hours_booked` | hours per entry — the sum is what was recorded, the count in how many pieces |
-| `timepulse_signin_failures_total` | refused sign-ins, by reason — `credentials` is somebody guessing, `totp` a second factor that did not take, `directory` a directory that stopped answering, `database` this installation's own database that did |
-| `timepulse_directory_accounts_total` | accounts the synchronisation created or deleted — the one operation that removes people together with their hours |
-| `timepulse_directory_scheduled_runs_total` | what each scheduled synchronisation came to — `completed`, `refused` by a guard, or `failed`; GoFr's own `app_cron_job_success` counts all three as a success |
+| `qubitdesk_signin_failures_total` | refused sign-ins, by reason — `credentials` is somebody guessing, `totp` a second factor that did not take, `directory` a directory that stopped answering, `database` this installation's own database that did |
+| `qubitdesk_directory_accounts_total` | accounts the synchronisation created or deleted — the one operation that removes people |
+| `qubitdesk_directory_scheduled_runs_total` | what each scheduled synchronisation came to — `completed`, `refused` by a guard, or `failed`; GoFr's own `app_cron_job_success` counts all three as a success |
+| `qubitdesk_tickets_opened_total` | tickets opened, by how they arrived — `note` or `phone` while agents open them by hand; the desk's load, and once mail arrives by itself the first sign that it has stopped |
 
-None of them carries a user, an address or a project name as a label. A label is
+None of them carries a user, an address or a ticket as a label. A label is
 a time series: one per person is both a memory leak in the collector and a list
 of who works here, published on a port that asks for no password.
 
 **Before writing an alert:** a metric is published only once it has a value, so
 an installation that has had no refused sign-in publishes no
-`timepulse_signin_failures_total` at all rather than publishing it as zero. Treat an
+`qubitdesk_signin_failures_total` at all rather than publishing it as zero. Treat an
 absent series as absent — `absent()` — rather than as a healthy zero.
 
 Operations: `/.well-known/health` and `/.well-known/alive` on the application's

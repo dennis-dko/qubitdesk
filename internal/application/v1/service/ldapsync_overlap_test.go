@@ -5,9 +5,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/application/v1/service"
-	"github.com/dennis-dko/timepulse/internal/domain/model"
-	"github.com/dennis-dko/timepulse/internal/support/apperror"
+	"github.com/dennis-dko/qubitdesk/internal/application/v1/service"
+	"github.com/dennis-dko/qubitdesk/internal/domain/model"
+	"github.com/dennis-dko/qubitdesk/internal/support/apperror"
 )
 
 // gatedDirectory holds its first listing until it is released, so a second run
@@ -53,7 +53,7 @@ func TestASynchronisationThatStartsWhileAnotherRunsIsTurnedAway(t *testing.T) {
 
 	purger := &recordingPurger{users: f.userRepo}
 	sync := service.NewLDAPSyncService(directory, f.userRepo, f.roleRepo,
-		f.timesheetRepo, purger, nil, 0.9, model.RoleUser)
+		f.owned, purger, nil, 0.9, model.RoleAgent)
 
 	first := make(chan error, 1)
 

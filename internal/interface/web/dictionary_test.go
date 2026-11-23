@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/interface/web"
-	"github.com/dennis-dko/timepulse/internal/support/i18n"
+	"github.com/dennis-dko/qubitdesk/internal/interface/web"
+	"github.com/dennis-dko/qubitdesk/internal/support/i18n"
 )
 
 // A language's dictionary is handed to the page as the binary carries it, at an
@@ -52,7 +52,7 @@ func TestADictionaryIsHandedToThePageAsTheBinaryCarriesIt(t *testing.T) {
 // where the document is what the service worker kept.
 func TestTheDocumentNamesTheLanguagesItMaySpeak(t *testing.T) {
 	rec := httptest.NewRecorder()
-	brandedServer(web.Branding{Title: "Zeiterfassung"}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	brandedServer(web.Branding{Title: "Ticketsystem"}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	tags := regexp.MustCompile(`<meta name="language" content="([^"]*)" data-name="([^"]*)">`).
 		FindAllStringSubmatch(rec.Body.String(), -1)
@@ -94,7 +94,7 @@ func TestTheValuesOfARefusalAreReadAsThePageWritesThem(t *testing.T) {
 		t.Fatalf("REFUSAL_VALUES has %d codes and %d were read: %v", codes, len(named), named)
 	}
 
-	if kind := named["projectClosedForBooking"][1]; kind != "statusName" {
-		t.Errorf("the second value of projectClosedForBooking is read as written by %q, want statusName", kind)
+	if kind := named["notFound"][0]; kind != "entityName" {
+		t.Errorf("the first value of notFound is read as written by %q, want entityName", kind)
 	}
 }

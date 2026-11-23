@@ -5,17 +5,17 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/dennis-dko/timepulse/internal/support/imaging"
+	"github.com/dennis-dko/qubitdesk/internal/support/imaging"
 )
 
-// The mark is drawn at the size asked for, and is the mark: TimePulse's T and P
+// The mark is drawn at the size asked for, and is the mark: QubitDesk's Q and D
 // in white on a tile that runs from a lighter blue at the top to a darker one at
-// the bottom, the bowl of the P open around a clock, and nothing outside the
-// tile's rounded corners.
+// the bottom, a ticket in the Q's counter, and nothing outside the tile's
+// rounded corners.
 //
-// Each point is named in the 560-unit box favicon.svg is drawn in. The one inside
-// the bowl is the one that says the arcs are traced the right way round: an arc
-// swept the wrong way fills the bowl, or cuts the ring.
+// Each point is named in the 560-unit box favicon.svg is drawn in. The ones in
+// the two counters are the ones that say the arcs are traced the right way
+// round: an arc swept the wrong way fills a counter, or cuts a ring.
 func TestTheShippedMarkIsDrawnAtTheSizeAsked(t *testing.T) {
 	for _, size := range []int{16, 192, 512} {
 		encoded, err := imaging.MarkPNG(size)
@@ -32,8 +32,8 @@ func TestTheShippedMarkIsDrawnAtTheSizeAsked(t *testing.T) {
 			t.Fatalf("the mark asked for at %d is %dx%d", size, b.Dx(), b.Dy())
 		}
 
-		// At sixteen pixels a corner of 29 units is under one pixel and the figures
-		// run into each other, so only the size is asked of it.
+		// At sixteen pixels a corner of 29 units is under one pixel and the ticket
+		// runs into the ring, so only the size is asked of it.
 		if size < 64 {
 			continue
 		}
@@ -62,19 +62,21 @@ func TestTheShippedMarkIsDrawnAtTheSizeAsked(t *testing.T) {
 
 		top, middle, bottom := at(280, 30), at(40, 280), at(450, 530)
 
-		blue("the tile above the T", top)
-		blue("the tile left of the T", middle)
-		blue("the tile below the P", bottom)
+		blue("the tile above the Q and the D", top)
+		blue("the tile left of the Q", middle)
+		blue("the tile below the D", bottom)
 
 		if top[0]+top[1]+top[2] <= bottom[0]+bottom[1]+bottom[2]+40 {
 			t.Errorf("the %d mark's tile is %v at the top and %v at the bottom, want it darker going down",
 				size, top, bottom)
 		}
 
-		white("the bar of the T", at(200, 115))
-		white("the ring of the P", at(376, 114))
-		white("the clock's hub", at(374.78, 216.5))
+		white("the ring of the Q", at(92, 268))
+		white("the bow of the D", at(467, 268))
+		white("the tail of the Q", at(297, 425))
+		white("the ticket", at(234.6, 289.2))
 
-		blue("the bowl of the P below the hub", at(330, 250))
+		blue("the Q's counter above the ticket", at(213.36, 180))
+		blue("the D's counter", at(400, 268))
 	}
 }

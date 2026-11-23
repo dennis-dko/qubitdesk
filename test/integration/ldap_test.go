@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dennis-dko/timepulse/test/harness"
+	"github.com/dennis-dko/qubitdesk/test/harness"
 )
 
 // internal/infrastructure/directory is the one package here that talks to
@@ -28,14 +28,14 @@ import (
 // because a fake returns whatever the test told it to.
 //
 //	docker compose --profile ldap up -d --wait          (from test/)
-//	TIMEPULSE_TEST_LDAP=localhost:5389 go test -tags integration ./test/integration
+//	QUBITDESK_TEST_LDAP=localhost:5389 go test -tags integration ./test/integration
 //
 // Or `task test:ldap`, which does both. The seed these cases rely on is
 // test/ldap/people.ldif, and each entry in it is there for a case below. The
 // directory around it - the suffix, ou=people and the bind account - is seeded
 // by the image, which is the deployment one from deploy/ldap.
 
-const ldapEnv = "TIMEPULSE_TEST_LDAP"
+const ldapEnv = "QUBITDESK_TEST_LDAP"
 
 // The seed's own values. Repeated here rather than shared with the compose file,
 // because a test that reads its expectations from the thing under test proves
@@ -44,7 +44,7 @@ const (
 	ldapBaseDN   = "dc=example,dc=com"
 	ldapPeopleDN = "ou=people,dc=example,dc=com"
 	ldapBindDN   = "cn=admin,dc=example,dc=com"
-	ldapBindPass = "timepulse-test-password"
+	ldapBindPass = "qubitdesk-test-password"
 )
 
 // requireLDAP skips unless a directory is configured and answering.
@@ -91,7 +91,7 @@ func ldapSettings(host string, port int, baseDN string) map[string]any {
 		"nameAttribute":  "cn",
 		"emailAttribute": "mail",
 		"idAttribute":    "entryUUID",
-		"defaultRole":    "user",
+		"defaultRole":    "agent",
 	}
 }
 
@@ -176,7 +176,7 @@ func TestADirectoryAccountCanSignInAndIsCreatedLocally(t *testing.T) {
 		t.Errorf("the address came back as %q", me.User.Email)
 	}
 
-	if me.User.Role != "user" {
+	if me.User.Role != "agent" {
 		t.Errorf("the account got the role %q, want the configured default", me.User.Role)
 	}
 
@@ -206,8 +206,8 @@ func TestADirectoryAccountStartsWithTheConfiguredDefaultRole(t *testing.T) {
 
 	admin.must(admin.api(http.MethodPost, "/roles", map[string]any{
 		"name":        "contractor",
-		"description": "Keeps their own time",
-		"permissions": []string{"timesheets:read:own", "timesheets:write:own"},
+		"description": "Works tickets for a while",
+		"permissions": []string{"tickets:read", "tickets:write"},
 	}), http.StatusCreated)
 
 	settings := ldapSettings(host, port, ldapBaseDN)
@@ -279,7 +279,8 @@ func TestAWrongDirectoryPasswordIsRefused(t *testing.T) {
 //
 // Measured with a probe before this was refused: Alice's sign-in landed on the
 // account under her address that recorded another entry, and wrote her identifier
-// over its own - the predecessor's hours and projects were hers from then on. The
+// over its own - the predecessor's account and everything it had done were hers
+// from then on. The
 // answer stays as vague as any refused sign-in, so the line in the log is all an
 // administrator has to go on when somebody says their password is not taken.
 func TestADirectorySignInIsRefusedTheAccountOfAnotherEntry(t *testing.T) {
@@ -293,7 +294,7 @@ func TestADirectorySignInIsRefusedTheAccountOfAnotherEntry(t *testing.T) {
 
 	created := admin.api(http.MethodPost, "/users", map[string]any{
 		"name": "Who Had The Address", "email": "alice@example.com",
-		"role": "user", "password": "a-predecessors-password",
+		"role": "agent", "password": "a-predecessors-password",
 	})
 
 	var made struct {
@@ -457,10 +458,10 @@ type SyncPreview struct {
 	AbortValues    []any  `json:"abortValues"`
 
 	// Candidates are the accounts a real run would delete, with the number of
-	// time entries that would go with each.
+	// unfinished tickets each owns, which would lose their owner.
 	Candidates []struct {
-		Email      string `json:"email"`
-		Timesheets int    `json:"timesheets"`
+		Email   string `json:"email"`
+		Tickets int    `json:"tickets"`
 	} `json:"candidates"`
 
 	// Deleted are the accounts a run removed; empty for a preview.
@@ -630,8 +631,8 @@ func TestAnAccountThatCanSignInIsNeverProposedForDeletion(t *testing.T) {
 	}
 
 	for _, candidate := range preview.Candidates {
-		t.Errorf("%q signed in from the directory and the next synchronisation would delete it "+
-			"together with %d time entries", candidate.Email, candidate.Timesheets)
+		t.Errorf("%q signed in from the directory and the next synchronisation would delete it, "+
+			"leaving %d unfinished ticket(s) without an owner", candidate.Email, candidate.Tickets)
 	}
 }
 

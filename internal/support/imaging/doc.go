@@ -1,5 +1,5 @@
 // Package imaging makes the copies of a logo the bar draws, and draws
-// TimePulse's own mark as pixels.
+// QubitDesk's own mark as pixels.
 //
 // A logo is uploaded once, a few thousand pixels across, and drawn at the left
 // of the bar at a fraction of that. Handing every visitor the original is what
