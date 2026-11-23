@@ -301,3 +301,96 @@ func TestTheStatisticsCountASpanOverHTTP(t *testing.T) {
 		t.Errorf("an account without reports:read read the statistics with %d, want 403", refused.Status)
 	}
 }
+
+// A search is saved under a name of the agent's own, read the way the listing
+// reads its own query - refused for a parameter the listing does not take and
+// for a value it would refuse - and found by nobody else.
+func TestASearchIsSavedAndReadAsTheListingReadsIt(t *testing.T) {
+	t.Parallel()
+
+	a := start(t)
+	admin := a.signInAsAdmin("a-much-better-password")
+	agent := a.signInAsAgent(admin, "Wera", "wera@example.com")
+
+	var saved struct {
+		ID    uint   `json:"id"`
+		Name  string `json:"name"`
+		Query string `json:"query"`
+	}
+
+	admin.must(admin.api(http.MethodPost, "/me/ticket-searches", map[string]any{
+		"name": "Urgent printers", "query": "priority=1&text=printer&sort=priority",
+	}), http.StatusCreated).Data(t, &saved)
+
+	if saved.Name != "Urgent printers" || saved.Query != "priority=1&text=printer&sort=priority" {
+		t.Errorf("the search was kept as %+v", saved)
+	}
+
+	var mine struct {
+		Items []struct {
+			Name string `json:"name"`
+		} `json:"items"`
+	}
+
+	admin.must(admin.api(http.MethodGet, "/me/ticket-searches", nil), http.StatusOK).Data(t, &mine)
+
+	if len(mine.Items) != 1 || mine.Items[0].Name != "Urgent printers" {
+		t.Errorf("the administrator keeps %+v", mine.Items)
+	}
+
+	for name, tc := range map[string]struct {
+		body   map[string]any
+		status int
+		param  string
+		code   string
+	}{
+		"a parameter the listing does not take": {map[string]any{"name": "Odd", "query": "colour=red"},
+			http.StatusBadRequest, "query", ""},
+		"a value the listing would refuse": {map[string]any{"name": "Odd", "query": "locked=maybe"},
+			http.StatusBadRequest, "locked", ""},
+		"where somebody was": {map[string]any{"name": "Odd", "query": "page=2"},
+			http.StatusBadRequest, "query", ""},
+		"a name kept already": {map[string]any{"name": "urgent PRINTERS", "query": "text=toner"},
+			http.StatusConflict, "", "ticketSearchNameTaken"},
+	} {
+		got := admin.api(http.MethodPost, "/me/ticket-searches", tc.body)
+		if got.Status != tc.status {
+			t.Errorf("saving %s answered %d, want %d: %s", name, got.Status, tc.status, got.Body)
+
+			continue
+		}
+
+		var body struct {
+			Error struct {
+				Code  string   `json:"code"`
+				Param []string `json:"param"`
+			} `json:"error"`
+		}
+
+		if err := json.Unmarshal(got.Body, &body); err != nil {
+			t.Fatalf("saving %s: the refusal is not JSON: %v", name, err)
+		}
+
+		if tc.param != "" && !slices.Equal(body.Error.Param, []string{tc.param}) {
+			t.Errorf("saving %s named %q, want %q", name, body.Error.Param, tc.param)
+		}
+
+		if tc.code != "" && body.Error.Code != tc.code {
+			t.Errorf("saving %s was refused with %q, want %q", name, body.Error.Code, tc.code)
+		}
+	}
+
+	path := "/me/ticket-searches/" + strconv.FormatUint(uint64(saved.ID), 10)
+
+	if got := agent.api(http.MethodDelete, path, nil); got.Status != http.StatusNotFound {
+		t.Errorf("another account deleting the search answered %d, want 404", got.Status)
+	}
+
+	admin.must(admin.api(http.MethodDelete, path, nil), http.StatusNoContent, http.StatusOK)
+
+	admin.must(admin.api(http.MethodGet, "/me/ticket-searches", nil), http.StatusOK).Data(t, &mine)
+
+	if len(mine.Items) != 0 {
+		t.Errorf("after deleting it the administrator keeps %+v", mine.Items)
+	}
+}

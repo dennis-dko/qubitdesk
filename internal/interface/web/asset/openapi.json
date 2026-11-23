@@ -2493,6 +2493,55 @@
         }
       }
     },
+    "/me/ticket-searches": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "The searches the caller saved",
+        "description": "Takes `tickets:read`. The caller's own saved searches of the ticket list, by name, each with the query the listing takes (`query`) - without `limit` and `page`, which say where somebody was rather than what they searched for.",
+        "responses": {
+          "200": {
+            "description": "Saved searches"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Save a search of the ticket list",
+        "description": "Takes `tickets:read`. Keeps `query` under `name` (at most 120 characters, the caller's own: unique among their searches, not across accounts). The query is read the way the listing reads its own and refused for whatever the listing would refuse, and for a parameter the listing does not take. An account keeps at most 50 searches.",
+        "responses": {
+          "201": {
+            "description": "The search, kept"
+          },
+          "400": {
+            "description": "A name missing or too long, or a query the listing could not read"
+          },
+          "409": {
+            "description": "The caller keeps a search of that name already, or keeps 50"
+          }
+        }
+      }
+    },
+    "/me/ticket-searches/{id}": {
+      "delete": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Delete a saved search",
+        "description": "Takes `tickets:read`. Deletes one of the caller's own searches; another account's is not found.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "The caller keeps no such search"
+          }
+        }
+      }
+    },
     "/reports/tickets": {
       "get": {
         "tags": [

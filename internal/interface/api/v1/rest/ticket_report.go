@@ -43,11 +43,11 @@ func (h *TicketHandler) Report(c *gofr.Context) (any, error) {
 
 	var query service.ReportQuery
 
-	if query.Days.First, err = queryDay(c, "from"); err != nil {
+	if query.Days.First, err = queryDay(c.Param, "from"); err != nil {
 		return nil, toHTTPError(err)
 	}
 
-	if query.Days.Last, err = queryDay(c, "to"); err != nil {
+	if query.Days.Last, err = queryDay(c.Param, "to"); err != nil {
 		return nil, toHTTPError(err)
 	}
 

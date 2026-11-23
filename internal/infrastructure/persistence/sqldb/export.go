@@ -48,6 +48,7 @@ var accountExport = []struct {
 	{"notifications", "SELECT ticket_id, definition_id, created_at, read_at " +
 		"FROM notifications WHERE user_id = ? ORDER BY id"},
 	{"queues-told-about", "SELECT queue_id FROM user_queues WHERE user_id = ? ORDER BY queue_id"},
+	{"saved-searches", "SELECT name, query, created_at FROM ticket_searches WHERE user_id = ? ORDER BY name"},
 	{"notifications-switched-off", "SELECT definition_id FROM notification_opt_outs WHERE user_id = ? " +
 		"ORDER BY definition_id"},
 	{"faq-articles-written", "SELECT id, title, updated_at FROM faq_articles WHERE updated_by = ? ORDER BY id"},

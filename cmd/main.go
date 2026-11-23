@@ -1224,8 +1224,10 @@ func main() {
 			sqldb.NewNotificationDefinitionRepository(db, cfg.Dialect), automationRefs), authorizer),
 		Told:      rest.NewNotificationHandler(notifications, authorizer),
 		Templates: rest.NewResponseTemplateHandler(templates, authorizer),
-		FAQ:       rest.NewFAQHandler(faq, authorizer),
-		Portal:    rest.NewPortalHandler(tickets, authorizer),
+		TicketSearches: rest.NewTicketSearchHandler(
+			appservice.NewTicketSearchApplicationService(sqldb.NewTicketSearchRepository(db, cfg.Dialect)), authorizer),
+		FAQ:    rest.NewFAQHandler(faq, authorizer),
+		Portal: rest.NewPortalHandler(tickets, authorizer),
 		GeneralCatalog: rest.NewGeneralCatalogHandler(
 			appservice.NewGeneralCatalogApplicationService(generalCatalogRepo), authorizer),
 		ClassDefinitions: rest.NewClassDefinitionHandler(appservice.NewClassDefinitionApplicationService(

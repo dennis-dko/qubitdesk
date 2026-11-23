@@ -8,29 +8,32 @@ import (
 
 // Handlers bundles the handlers a route registration needs.
 type Handlers struct {
-	Auth     *rest.AuthHandler
-	Users    *rest.UserHandler
-	Roles    *rest.RoleHandler
-	Catalog  *rest.TicketCatalogHandler
-	Queues   *rest.QueueHandler
-	Tickets  *rest.TicketHandler
-	Customer *rest.CustomerHandler
-	Me       *rest.MeHandler
-	Settings *rest.SettingsHandler
-	Tokens   *rest.APITokenHandler
-	LDAPSync *rest.LDAPSyncHandler
-	Setup    *rest.SetupHandler
-	Passkeys *rest.PasskeyHandler
-	Logs     *rest.LogHandler
-	Restart  *rest.RestartHandler
-	Update   *rest.UpdateHandler
-	Backups  *rest.BackupHandler
-	Holidays *rest.HolidayHandler
-	OpenID   *rest.OpenIDHandler
-	Sheets   *rest.SheetHandler
-	Exports  *rest.ExportHandler
-	AdminLog *rest.AdminLogHandler
-	Push     *rest.PushHandler
+	Auth    *rest.AuthHandler
+	Users   *rest.UserHandler
+	Roles   *rest.RoleHandler
+	Catalog *rest.TicketCatalogHandler
+	Queues  *rest.QueueHandler
+	Tickets *rest.TicketHandler
+
+	// TicketSearches are the searches an agent saved.
+	TicketSearches *rest.TicketSearchHandler
+	Customer       *rest.CustomerHandler
+	Me             *rest.MeHandler
+	Settings       *rest.SettingsHandler
+	Tokens         *rest.APITokenHandler
+	LDAPSync       *rest.LDAPSyncHandler
+	Setup          *rest.SetupHandler
+	Passkeys       *rest.PasskeyHandler
+	Logs           *rest.LogHandler
+	Restart        *rest.RestartHandler
+	Update         *rest.UpdateHandler
+	Backups        *rest.BackupHandler
+	Holidays       *rest.HolidayHandler
+	OpenID         *rest.OpenIDHandler
+	Sheets         *rest.SheetHandler
+	Exports        *rest.ExportHandler
+	AdminLog       *rest.AdminLogHandler
+	Push           *rest.PushHandler
 
 	SysConfig *rest.SysConfigHandler
 	Calendars *rest.CalendarHandler
@@ -184,6 +187,9 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.DELETE(base+"/me/push", h.Push.Unsubscribe)
 
 	app.GET(base+"/me/notifications", h.Told.Mine)
+	app.GET(base+"/me/ticket-searches", h.TicketSearches.Mine)
+	app.POST(base+"/me/ticket-searches", h.TicketSearches.Save)
+	app.DELETE(base+"/me/ticket-searches/{id}", h.TicketSearches.Delete)
 	app.GET(base+"/me/notifications/{id}", h.Told.Get)
 	app.PUT(base+"/me/notifications/read", h.Told.MarkAllRead)
 	app.PUT(base+"/me/notifications/{id}/read", h.Told.MarkRead)

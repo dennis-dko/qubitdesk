@@ -243,7 +243,23 @@ func All(dialect string) map[int64]migration.Migrate {
 		}},
 		20261121040300: {UP: func(d migration.Datasource) error { return createWorkOrderTransitions(d, dialect) }},
 		20261121040400: {UP: func(d migration.Datasource) error { return seedWorkOrderTransitions(d, dialect) }},
+		20261123010000: {UP: func(d migration.Datasource) error { return createTicketSearches(d, dialect) }},
 	}
+}
+
+// createTicketSearches keeps the searches of the ticket list an agent saved
+// under names of their own, as OTRS keeps search profiles and current help desks
+// keep views. A name is the agent's alone, so it is unique per account and not
+// across them.
+func createTicketSearches(d migration.Datasource, dialect string) error {
+	return exec(d, fmt.Sprintf(`CREATE TABLE ticket_searches (
+		%[1]s,
+		user_id %[2]s NOT NULL REFERENCES users(id),
+		name VARCHAR(120) NOT NULL,
+		query VARCHAR(2000) NOT NULL,
+		created_at %[3]s NOT NULL,
+		UNIQUE (user_id, name)
+	)`, primaryKey(dialect), foreignKeyID(dialect), timestamp(dialect)))
 }
 
 // seedChangeCatalog adds the lists change management picks from to the general

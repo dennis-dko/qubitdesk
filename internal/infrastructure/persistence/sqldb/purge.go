@@ -63,6 +63,7 @@ func (r *UserRepository) PurgeUser(ctx context.Context, userID uint) error {
 			{"watched tickets", "DELETE FROM ticket_watchers WHERE user_id = ?"},
 			{"notifications", "DELETE FROM notifications WHERE user_id = ?"},
 			{"queues to be told about", "DELETE FROM user_queues WHERE user_id = ?"},
+			{"saved searches", "DELETE FROM ticket_searches WHERE user_id = ?"},
 			{"notifications switched off", "DELETE FROM notification_opt_outs WHERE user_id = ?"},
 			{"api tokens", "DELETE FROM api_tokens WHERE user_id = ?"},
 			{"passkeys", "DELETE FROM passkeys WHERE user_id = ?"},

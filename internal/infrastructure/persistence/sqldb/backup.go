@@ -50,6 +50,7 @@ var BackupTables = []string{
 	"queues",
 	"queue_roles",
 	"user_queues",
+	"ticket_searches",
 	"response_templates",
 	"mail_accounts",
 	"organisations",

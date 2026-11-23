@@ -591,6 +591,7 @@ const FIELD_NAMES = {
   from: 'From',
   to: 'To',
   by: 'Counted by',
+  query: 'The search',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */
