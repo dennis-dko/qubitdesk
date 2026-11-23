@@ -90,3 +90,63 @@ func TestMaintenanceOnlyAsksWhenItIsBeingSwitchedOn(t *testing.T) {
 		t.Error("the box now says the installation is in service, and it is not")
 	}
 }
+
+// What a save switched on is remembered as what the server says, even when
+// somebody starts typing the notice before the reload after it has answered.
+//
+// The form learnt what the server last said only from a load, and a load leaves
+// a form alone while somebody types in it. So a load triggered by the save's own
+// announcement drew the banner, the administrator began the notice, and the
+// reload the save itself ran found the form being typed in and left it: the form
+// went on remembering "in service", and the next save asked whether to put the
+// installation out of service - the full suite lost that race once. The order is
+// forced here, by typing as that reload starts, rather than waited for.
+func TestMaintenanceRemembersWhatItSavedWhileSomebodyTypes(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+
+	p.run("open the card", p.click(`.tab[data-view="admin"]`),
+		p.click(`#admin-tabs [data-card-tab="operation"]`),
+		chromedp.WaitVisible("#form-maintenance", chromedp.ByID))
+
+	p.run("type the notice as the reload after the save starts", chromedp.Evaluate(`(() => {
+		const original = loadMaintenance;
+
+		window.loadMaintenance = (...args) => {
+			window.loadMaintenance = original;
+
+			const form = document.querySelector('#form-maintenance');
+			form.elements.message.value = 'Back at 14:00';
+			form.elements.message.dispatchEvent(new Event('input', { bubbles: true }));
+
+			return original(...args).finally(() => { window.reloadAfterTheSave = 'done'; });
+		};
+
+		const box = document.querySelector('#form-maintenance').elements.enabled;
+		box.checked = true;
+		box.dispatchEvent(new Event('change', { bubbles: true }));
+
+		return true;
+	})()`, nil))
+
+	p.run("switch it on", p.click(`#form-maintenance button[type="submit"]`),
+		chromedp.WaitVisible(".confirm-card", chromedp.ByQuery),
+		p.click(".confirm-card button.confirm-proceed"))
+
+	p.waitShown("#maintenance-banner")
+	p.waitEvaluates("the reload after the save has run", `String(window.reloadAfterTheSave)`, "done")
+
+	p.run("save the notice", p.click(`#form-maintenance button[type="submit"]`))
+
+	// Long enough for a dialog to have appeared if one was coming.
+	time.Sleep(1500 * time.Millisecond)
+
+	if p.visible(".confirm-card") {
+		t.Error("saving the notice asked again whether to put the installation out of service, " +
+			"which the save before had already done")
+
+		p.run("dismiss", p.click(".confirm-card button.confirm-proceed"))
+	}
+}

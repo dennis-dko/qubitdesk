@@ -18514,7 +18514,16 @@ function wireMaintenance() {
       enabled
         ? t('maint.onSaved', 'The installation is now out of service.')
         : t('maint.offSaved', 'The installation is back in service.'),
-      loadMaintenance);
+      () => {
+        // What was just saved is what the server says now. Remembered here
+        // rather than left to the reload, which leaves the form alone once
+        // somebody types in it: an administrator starting the notice as it ran
+        // left the form remembering "in service", and the next save asked
+        // again whether to put the installation out of it.
+        form.elements.enabled.defaultChecked = enabled;
+
+        return loadMaintenance();
+      });
   });
 }
 
