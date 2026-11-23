@@ -62,7 +62,7 @@ func newResponseTemplateResponse(template model.ResponseTemplate) ResponseTempla
 
 // List handles GET /api/v1/response-templates.
 func (h *ResponseTemplateHandler) List(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+	if _, err := h.authz.Require(c, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 
@@ -78,7 +78,7 @@ func (h *ResponseTemplateHandler) List(c *gofr.Context) (any, error) {
 
 // Get handles GET /api/v1/response-templates/{id}.
 func (h *ResponseTemplateHandler) Get(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+	if _, err := h.authz.Require(c, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 
@@ -97,7 +97,7 @@ func (h *ResponseTemplateHandler) Get(c *gofr.Context) (any, error) {
 
 // Create handles POST /api/v1/response-templates.
 func (h *ResponseTemplateHandler) Create(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+	if _, err := h.authz.Require(c, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 
@@ -116,7 +116,7 @@ func (h *ResponseTemplateHandler) Create(c *gofr.Context) (any, error) {
 
 // Update handles PUT /api/v1/response-templates/{id}.
 func (h *ResponseTemplateHandler) Update(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+	if _, err := h.authz.Require(c, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 
@@ -140,7 +140,7 @@ func (h *ResponseTemplateHandler) Update(c *gofr.Context) (any, error) {
 
 // Delete handles DELETE /api/v1/response-templates/{id}.
 func (h *ResponseTemplateHandler) Delete(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+	if _, err := h.authz.Require(c, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 

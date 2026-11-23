@@ -49,9 +49,11 @@ type AutomationChoicesResponse struct {
 	Accounts   []AutomationChoice      `json:"accounts"`
 }
 
-// Choices handles GET /api/v1/automation/choices.
+// Choices handles GET /api/v1/automation/choices, for whoever sets up a rule
+// that names tickets: the automation, and the notifications the communication
+// sends.
 func (h *MacroHandler) Choices(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermAutomationWrite); err != nil {
+	if _, err := h.authz.RequireAny(c, model.PermAutomationWrite, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 

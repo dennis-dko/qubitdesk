@@ -35,7 +35,7 @@ func TestAnArticleStartsFromAnAnswerTemplate(t *testing.T) {
 		t.Fatal("could not make the other queue's template and open the ticket")
 	}
 
-	p.run("open the ticket setup", p.click(`.tab[data-view="ticketsetup"]`),
+	p.run("open the communication", p.click(`.tab[data-view="communication"]`),
 		chromedp.WaitVisible("#form-template", chromedp.ByID))
 	p.run("set the desk's template up",
 		chromedp.SetValue(`#form-template [name="name"]`, "Desk thanks", chromedp.ByQuery),

@@ -21,7 +21,7 @@ func TestANotificationIsSetUpOnTheTicketSetupScreen(t *testing.T) {
 	p := open(t)
 	p.readyAdmin()
 
-	p.run("open the ticket setup", p.click(`.tab[data-view="ticketsetup"]`),
+	p.run("open the communication", p.click(`.tab[data-view="communication"]`),
 		chromedp.WaitVisible("#form-notification", chromedp.ByID))
 
 	const english = `#notification-messages [data-language="en"]`

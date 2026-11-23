@@ -2633,6 +2633,7 @@ const PERMISSION_TITLES = {
   'settings:manage': 'Administer the installation',
   'queues:write': 'Set up queues',
   'automation:write': 'Set up the automation',
+  'communication:write': 'Set up communication',
   'tickets:read': 'See tickets',
   'tickets:create': 'Open tickets',
   'tickets:write': 'Work on tickets',
@@ -2664,8 +2665,9 @@ const PERMISSION_DETAILS = {
   'roles:read': 'The roles on this screen and what each grants.',
   'roles:write': 'Make a role, change what it grants, remove one nobody holds. The roles shipped with the application stay as they are.',
   'settings:manage': 'The installation itself: the database connection, the directory, the mailboxes tickets arrive through, appearance, maintenance mode, telemetry, the log and the restart. This is the right that makes somebody an administrator.',
-  'queues:write': 'Make and change queues and decide which role reaches each - and with them the states, priorities and types tickets are sorted by, the service levels and the answer templates. Whoever holds it reaches every queue.',
+  'queues:write': 'Make and change queues and decide which role reaches each - and with them the states, priorities and types tickets are sorted by and the service levels. Whoever holds it reaches every queue.',
   'automation:write': 'Make and change the macros and what runs them. A macro acts as the application on every ticket it is given, in any queue and deleting included - so this reaches further than any right on tickets.',
+  'communication:write': 'Make and change the notifications the agents around a ticket are told and the answer templates an article starts from - and the mailboxes still to come.',
   'tickets:read': 'The tickets in the queues this role reaches, with everything written in them. A queue the role does not reach is not there for it.',
   'tickets:create': 'Open a ticket for a customer - one who called, or one to write to - in a queue this role may work in.',
   'tickets:write': 'Answer, note, change state and priority, take a ticket and hand it over, move it to another queue - in the queues this role may work in.',
@@ -2690,6 +2692,7 @@ const PERMISSION_GROUPS = {
   settings: 'Settings',
   queues: 'Queues',
   automation: 'Automation',
+  communication: 'Communication',
   tickets: 'Tickets',
   customers: 'Customers',
   faq: 'Knowledge base',
@@ -10750,9 +10753,9 @@ const CATALOGS = {
 async function loadTicketSetup() {
   if (!can('queues:write')) return;
 
-  const [queues, states, priorities, types, levels, unlocking, notifying, templates] = await Promise.all(
+  const [queues, states, priorities, types, levels, unlocking] = await Promise.all(
     ['/queues', CATALOGS.state.path, CATALOGS.priority.path, CATALOGS.type.path, '/service-levels',
-      '/unlock-state-types', '/notification-definitions', '/response-templates']
+      '/unlock-state-types']
       .map((path) => api(path)),
   );
 
@@ -10786,10 +10789,27 @@ async function loadTicketSetup() {
   drawUnlockTypes(unlocking?.items ?? []);
   await loadCalendars();
   loadSlaCard();
+}
+
+/**
+ * Fills the communication screen, for whoever may set communication up: the
+ * notifications and the answer templates, KIX18's communication area. What a
+ * notification's criteria and a template's queue name is read through the
+ * rules' own choices, which this right reads as the automation's does, so that
+ * setting communication up takes no right to set the queues up.
+ */
+async function loadCommunication() {
+  if (!can('communication:write')) return;
+
+  const [notifying, templates, choices] = await Promise.all(
+    ['/notification-definitions', '/response-templates', '/automation/choices'].map((path) => api(path)),
+  );
+
   drawNotifications(notifying, {
-    queues: queues?.items ?? [], states: lists.state, priorities: lists.priority, types: lists.type,
+    queues: choices?.queues ?? [], states: choices?.states ?? [], priorities: choices?.priorities ?? [],
+    types: choices?.types ?? [],
   });
-  drawTemplates(templates, queues?.items ?? []);
+  drawTemplates(templates, choices?.queues ?? []);
 }
 
 /**
@@ -14583,8 +14603,8 @@ const TOUR_STEPS = [
   },
   {
     target: '#notification-card',
-    view: 'ticketsetup',
-    permission: 'queues:write',
+    view: 'communication',
+    permission: 'communication:write',
     title: () => t('tour.notifications.title', 'Who is told what'),
     text: () => t('tour.notifications.text',
       'A notification tells the agents around a ticket - its owner, those watching it, those who work in its queue - '
@@ -14592,8 +14612,8 @@ const TOUR_STEPS = [
   },
   {
     target: '#template-card',
-    view: 'ticketsetup',
-    permission: 'queues:write',
+    view: 'communication',
+    permission: 'communication:write',
     title: () => t('tour.templates.title', 'Answers written once'),
     text: () => t('tour.templates.text',
       'An answer template is offered to whoever writes in a ticket of its queue, or of every queue, with the '
@@ -19177,6 +19197,7 @@ async function refreshAll() {
   await loadRoles();
   await loadSysConfig();
   await loadTicketSetup();
+  await loadCommunication();
   await loadCustomers();
   await loadGeneralCatalog();
   await loadClassDefinitions();

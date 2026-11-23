@@ -43,6 +43,13 @@ const (
 	// than part of setting up the queues.
 	PermAutomationWrite = "automation:write"
 
+	// PermCommunicationWrite sets up what the installation says to people: the
+	// notifications the agents around a ticket are told, the answer templates an
+	// article starts from, and the mailboxes still to come - KIX18's
+	// communication area, which sets none of the tickets' sorting up and is its
+	// own right rather than part of setting up the queues.
+	PermCommunicationWrite = "communication:write"
+
 	// The four rights on tickets. Each reaches only the queues the holder's role
 	// was given - reading where the role may read a queue, the other three where it
 	// may work in it - and a ticket in a queue the role does not reach is not found
@@ -111,6 +118,7 @@ func AllPermissions() []string {
 		PermSettingsManage,
 		PermQueueWrite,
 		PermAutomationWrite,
+		PermCommunicationWrite,
 		PermTicketRead, PermTicketCreate, PermTicketWrite, PermTicketDelete,
 		PermCustomerRead, PermCustomerWrite,
 		PermFAQRead, PermFAQWrite,
@@ -140,6 +148,7 @@ func AdminPermissions() []string {
 		PermSettingsManage,
 		PermQueueWrite,
 		PermAutomationWrite,
+		PermCommunicationWrite,
 		PermTicketRead, PermTicketCreate, PermTicketWrite, PermTicketDelete,
 		PermCustomerRead, PermCustomerWrite,
 		PermFAQRead, PermFAQWrite,

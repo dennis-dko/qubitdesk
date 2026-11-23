@@ -89,6 +89,10 @@
         <path d="M4 12l8 4 8-4"/>
         <path d="M4 16.5l8 4 8-4"/>
       </symbol>
+      <symbol id="icon-communication" viewBox="0 0 24 24">
+        <path d="M4 5.5h16v10H9l-5 4z"/>
+        <path d="M8 9.5h8M8 12.5h5"/>
+      </symbol>
       <symbol id="icon-changes" viewBox="0 0 24 24">
         <path d="M4 8h14"/>
         <path d="m15 5 3 3-3 3"/>
@@ -237,6 +241,7 @@
       <button class="tab" data-view="roles" data-perm="roles:read" data-i18n="nav.roles">Roles<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-roles"/></svg></button>
       <button class="tab" data-view="ticketsetup" data-perm="queues:write" data-i18n="nav.ticketSetup">Ticket setup<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-ticketsetup"/></svg></button>
       <button class="tab" data-view="assets" data-perm="assets:read,catalog:write" data-i18n="nav.assets">Assets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-assets"/></svg></button>
+      <button class="tab" data-view="communication" data-perm="communication:write" data-i18n="nav.communication">Communication<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-communication"/></svg></button>
       <button class="tab" data-view="changes" data-perm="changes:read" data-i18n="nav.changes">Changes<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-changes"/></svg></button>
       <button class="tab" data-view="automation" data-perm="automation:write" data-i18n="nav.automation">Automation<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-automation"/></svg></button>
       <button class="tab" data-view="settings" data-i18n="nav.settings">My account<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-account"/></svg></button>
@@ -1369,10 +1374,15 @@
           </div>
         </form>
       </div>
+    </section>
 
+    <!-- What the installation says to people, as KIX18's communication area
+         keeps it: the notifications the agents around a ticket are told, and
+         the answer templates an article starts from. -->
+    <section id="view-communication" class="view" hidden>
       <!-- What the agents around a ticket are told when something happens to it,
            as KIX18's ticket notifications tell them. -->
-      <div class="card" id="notification-card" data-perm="queues:write">
+      <div class="card" id="notification-card" data-perm="communication:write">
         <h2 data-i18n="notification.title">Notifications</h2>
         <p class="muted" data-i18n="notification.hint">What the agents around a ticket are told when something happens to it, each in their language. Nobody is told about their own change.</p>
         <div class="table-wrap">
@@ -1439,7 +1449,7 @@
       </div>
 
       <!-- Answers written once and sent often, as KIX18's text modules. -->
-      <div class="card" id="template-card" data-perm="queues:write">
+      <div class="card" id="template-card" data-perm="communication:write">
         <h2 data-i18n="template.title">Answer templates</h2>
         <p class="muted" data-i18n="template.hint">Answers written once and sent often. Whoever writes in a ticket starts from one offered in its queue, with the ticket's placeholders filled in their words, and changes it before it is sent.</p>
         <div class="table-wrap">

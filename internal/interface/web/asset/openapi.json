@@ -3485,7 +3485,7 @@
           "automation"
         ],
         "summary": "What a step and a job's criteria can name",
-        "description": "Every queue, state, priority and type, and the accounts whose role may work on tickets, each by id and name and whether it is still offered - what choosing takes and no more. Takes automation:write alone, so that setting the automation up needs no right to the tickets, the accounts or the customers themselves.",
+        "description": "Every queue, state, priority and type, and the accounts whose role may work on tickets, each by id and name and whether it is still offered - what choosing takes and no more. Takes automation:write or communication:write alone - the two set up the rules that name tickets - so that neither needs a right to the tickets, the accounts or the customers themselves.",
         "responses": {
           "200": {
             "description": "OK"
@@ -4277,7 +4277,7 @@
           "tickets"
         ],
         "summary": "List the notifications",
-        "description": "What the agents around a ticket are told when something happens to it. Under `events`, `recipients` and `languages` what a notification can name and speak, and under `subjectLimit` and `bodyLimit` how long a subject and a text may be. Takes `queues:write`.",
+        "description": "What the agents around a ticket are told when something happens to it. Under `events`, `recipients` and `languages` what a notification can name and speak, and under `subjectLimit` and `bodyLimit` how long a subject and a text may be. Takes `communication:write`.",
         "responses": {
           "200": {
             "description": "The notifications, and what one can name"
@@ -4292,7 +4292,7 @@
           "tickets"
         ],
         "summary": "Create a notification",
-        "description": "Needs a `name`, at least one event, one recipient and one message. Takes `queues:write`.",
+        "description": "Needs a `name`, at least one event, one recipient and one message. Takes `communication:write`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4377,7 +4377,7 @@
           "tickets"
         ],
         "summary": "Read a notification",
-        "description": "Takes `queues:write`.",
+        "description": "Takes `communication:write`.",
         "responses": {
           "200": {
             "description": "The notification"
@@ -4392,7 +4392,7 @@
           "tickets"
         ],
         "summary": "Change a notification",
-        "description": "A field left out stays as it was; a list sent takes the place of the one it had. Takes `queues:write`.",
+        "description": "A field left out stays as it was; a list sent takes the place of the one it had. Takes `communication:write`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4478,7 +4478,7 @@
           "tickets"
         ],
         "summary": "Delete a notification",
-        "description": "What it already told somebody stays told. Takes `queues:write`.",
+        "description": "What it already told somebody stays told. Takes `communication:write`.",
         "responses": {
           "200": {
             "description": "Deleted"
@@ -4619,7 +4619,7 @@
           "tickets"
         ],
         "summary": "List the answer templates",
-        "description": "Answers written once and sent often, as KIX18's text modules. Takes `queues:write`.",
+        "description": "Answers written once and sent often, as KIX18's text modules. Takes `communication:write`.",
         "responses": {
           "200": {
             "description": "The templates"
@@ -4634,7 +4634,7 @@
           "tickets"
         ],
         "summary": "Create an answer template",
-        "description": "Needs a `name` and a `body`; both it and the `subject` may carry KIX18's ticket placeholders. Takes `queues:write`.",
+        "description": "Needs a `name` and a `body`; both it and the `subject` may carry KIX18's ticket placeholders. Takes `communication:write`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4686,7 +4686,7 @@
           "tickets"
         ],
         "summary": "Read an answer template",
-        "description": "Takes `queues:write`.",
+        "description": "Takes `communication:write`.",
         "responses": {
           "200": {
             "description": "The template"
@@ -4701,7 +4701,7 @@
           "tickets"
         ],
         "summary": "Change an answer template",
-        "description": "A field left out stays as it was. Takes `queues:write`.",
+        "description": "A field left out stays as it was. Takes `communication:write`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4754,7 +4754,7 @@
           "tickets"
         ],
         "summary": "Delete an answer template",
-        "description": "Takes `queues:write`.",
+        "description": "Takes `communication:write`.",
         "responses": {
           "200": {
             "description": "Deleted"

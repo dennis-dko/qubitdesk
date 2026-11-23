@@ -124,7 +124,7 @@ func newNotificationDefinitionResponse(definition *model.NotificationDefinition)
 
 // List handles GET /api/v1/notification-definitions.
 func (h *NotificationDefinitionHandler) List(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+	if _, err := h.authz.Require(c, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 
@@ -149,7 +149,7 @@ func (h *NotificationDefinitionHandler) List(c *gofr.Context) (any, error) {
 
 // Get handles GET /api/v1/notification-definitions/{id}.
 func (h *NotificationDefinitionHandler) Get(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+	if _, err := h.authz.Require(c, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 
@@ -168,7 +168,7 @@ func (h *NotificationDefinitionHandler) Get(c *gofr.Context) (any, error) {
 
 // Create handles POST /api/v1/notification-definitions.
 func (h *NotificationDefinitionHandler) Create(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+	if _, err := h.authz.Require(c, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 
@@ -187,7 +187,7 @@ func (h *NotificationDefinitionHandler) Create(c *gofr.Context) (any, error) {
 
 // Update handles PUT /api/v1/notification-definitions/{id}.
 func (h *NotificationDefinitionHandler) Update(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+	if _, err := h.authz.Require(c, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 
@@ -211,7 +211,7 @@ func (h *NotificationDefinitionHandler) Update(c *gofr.Context) (any, error) {
 
 // Delete handles DELETE /api/v1/notification-definitions/{id}.
 func (h *NotificationDefinitionHandler) Delete(c *gofr.Context) (any, error) {
-	if _, err := h.authz.Require(c, model.PermQueueWrite); err != nil {
+	if _, err := h.authz.Require(c, model.PermCommunicationWrite); err != nil {
 		return nil, err
 	}
 
