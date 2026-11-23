@@ -190,3 +190,48 @@ func TestASearchOrdersByWhatItIsAskedTo(t *testing.T) {
 		}
 	}
 }
+
+// What the overview counts is counted as a listing would list it: how many
+// tickets a filter allows, how many in each queue, and the moments they were
+// opened and finished - a ticket not finished having no moment of finishing,
+// and a span of finishing taking only the tickets finished in it.
+func TestTicketsAreCountedAsTheyAreListed(t *testing.T) {
+	ctx := context.Background()
+	tables := newSearchTables(t)
+	locked := true
+
+	if total, err := tables.tickets.Count(ctx, repository.TicketFilter{QueueIDs: []uint{tables.desk}}); err != nil || total != 5 {
+		t.Errorf("the desk counts %d tickets, %v; want 5", total, err)
+	}
+
+	if total, _ := tables.tickets.Count(ctx, repository.TicketFilter{QueueIDs: []uint{tables.desk}, Locked: &locked}); total != 1 {
+		t.Errorf("the desk counts %d locked tickets, want 1", total)
+	}
+
+	if total, _ := tables.tickets.Count(ctx, repository.TicketFilter{}); total != 0 {
+		t.Errorf("no queue counts %d tickets, want none", total)
+	}
+
+	byQueue, err := tables.tickets.CountByQueue(ctx, repository.TicketFilter{QueueIDs: []uint{tables.desk, 999}})
+	if err != nil || len(byQueue) != 1 || byQueue[tables.desk] != 5 {
+		t.Errorf("by queue the tickets count %v, %v; want the desk's 5 and nothing else", byQueue, err)
+	}
+
+	opened, err := tables.tickets.Moments(ctx, repository.TicketFilter{QueueIDs: []uint{tables.desk}}, repository.MomentOpened)
+	if err != nil || len(opened) != 5 || !slices.ContainsFunc(opened, func(at time.Time) bool {
+		return at.Equal(time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC))
+	}) {
+		t.Errorf("the tickets were opened at %v, %v; want the five moments they were", opened, err)
+	}
+
+	closed, err := tables.tickets.Moments(ctx, repository.TicketFilter{QueueIDs: []uint{tables.desk}}, repository.MomentClosed)
+	if err != nil || len(closed) != 1 || !closed[0].Equal(time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC)) {
+		t.Errorf("the tickets were finished at %v, %v; want only the promised one's moment", closed, err)
+	}
+
+	after := time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)
+	if late, _ := tables.tickets.Count(ctx, repository.TicketFilter{QueueIDs: []uint{tables.desk},
+		Closed: &repository.Span{From: &after}}); late != 0 {
+		t.Errorf("%d tickets count as finished after the 11th, want none", late)
+	}
+}

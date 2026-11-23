@@ -170,3 +170,55 @@ func TestATicketSearchItCannotAnswerIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// An agent's overview counts their own work, each queue's unfinished tickets
+// and the tickets opened today, over HTTP and on every database.
+func TestTheOverviewCountsAnAgentsWorkOverHTTP(t *testing.T) {
+	t.Parallel()
+
+	a := start(t)
+	admin := a.signInAsAdmin("a-much-better-password")
+	desk := theDesk(t, admin)
+
+	var me struct {
+		User userResponse `json:"user"`
+	}
+
+	admin.must(admin.api(http.MethodGet, "/me", nil), http.StatusOK).Data(t, &me)
+
+	openTicket(t, admin, desk, "Owned", map[string]any{"ownerId": me.User.ID})
+	openTicket(t, admin, desk, "Nobody's", nil)
+
+	var overview struct {
+		Owned  uint `json:"owned"`
+		Queues []struct {
+			QueueID uint `json:"queueId"`
+			New     uint `json:"new"`
+		} `json:"queues"`
+		Days []struct {
+			Day    string `json:"day"`
+			Opened uint   `json:"opened"`
+		} `json:"days"`
+	}
+
+	admin.must(admin.api(http.MethodGet, "/tickets/overview", nil), http.StatusOK).Data(t, &overview)
+
+	if overview.Owned != 1 {
+		t.Errorf("the overview counts %d tickets owned, want 1", overview.Owned)
+	}
+
+	deskNew := uint(0)
+	for _, queue := range overview.Queues {
+		if queue.QueueID == desk {
+			deskNew = queue.New
+		}
+	}
+
+	if deskNew != 2 {
+		t.Errorf("the desk counts %d new tickets, want 2: %+v", deskNew, overview.Queues)
+	}
+
+	if len(overview.Days) != 14 || overview.Days[13].Opened != 2 {
+		t.Errorf("the overview's days are %+v; want fourteen, the two tickets opened on the last", overview.Days)
+	}
+}

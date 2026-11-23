@@ -25,6 +25,17 @@ type TicketRepository interface {
 	// changed first, and how many it allows altogether.
 	List(ctx context.Context, filter TicketFilter) ([]*model.Ticket, uint, error)
 
+	// Count is how many tickets a filter allows, read without the tickets.
+	Count(ctx context.Context, filter TicketFilter) (uint, error)
+
+	// CountByQueue is how many tickets a filter allows in each queue, for the
+	// queues that hold any.
+	CountByQueue(ctx context.Context, filter TicketFilter) (map[uint]uint, error)
+
+	// Moments are the moments the tickets a filter allows had - opened, or
+	// finished where they were - for counting them by the day each fell on.
+	Moments(ctx context.Context, filter TicketFilter, moment TicketMoment) ([]time.Time, error)
+
 	// Update stores what changed on a ticket, with the history saying so.
 	Update(ctx context.Context, ticket *model.Ticket, history []model.HistoryEntry) (*model.Ticket, error)
 
@@ -166,10 +177,11 @@ type TicketFilter struct {
 	// promises, when given.
 	ServiceLevelID *uint
 
-	// Created and Changed narrow it to the tickets opened, and last changed, in
-	// a span, when given.
+	// Created, Changed and Closed narrow it to the tickets opened, last changed
+	// and finished in a span, when given.
 	Created *Span
 	Changed *Span
+	Closed  *Span
 
 	// Text narrows it to the tickets that say every one of its words, when
 	// given.
@@ -187,6 +199,17 @@ type TicketFilter struct {
 	Limit int
 	Page  int
 }
+
+// TicketMoment names a moment every ticket may have, for counting tickets by
+// the day it fell on.
+type TicketMoment string
+
+// The moments tickets are counted by: when each was opened, and when it was
+// finished - which a ticket not finished has none of.
+const (
+	MomentOpened TicketMoment = "opened"
+	MomentClosed TicketMoment = "closed"
+)
 
 // Span is the moments from From up to, and not including, Before; either end
 // may be open.

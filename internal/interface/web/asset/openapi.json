@@ -2493,6 +2493,20 @@
         }
       }
     },
+    "/tickets/overview": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "An agent's overview",
+        "description": "Takes `tickets:read`. Counted in the queues the caller reaches: the unfinished tickets the caller owns (`owned`), answers for (`responsible`) and watches (`watched`), the unfinished tickets a promise has run out on unkept (`overdue`), each reached queue's unfinished tickets by where they stand (`queues`: `new`, `open`, `waiting`, `overdue`), and the tickets opened and finished on each of the last 14 days of the caller's calendar, today last (`days`).",
+        "responses": {
+          "200": {
+            "description": "The overview"
+          }
+        }
+      }
+    },
     "/tickets/assignees": {
       "get": {
         "tags": [

@@ -93,26 +93,7 @@ func (r *TicketRepository) List(_ context.Context, filter repository.TicketFilte
 		return nil, 0, apperror.Internal(errors.New("the in-memory tickets cannot be ordered by priority"))
 	}
 
-	search := strings.ToLower(strings.TrimSpace(filter.Search))
-	matching := make([]*model.Ticket, 0)
-
-	for _, ticket := range r.tickets {
-		switch {
-		case !slices.Contains(filter.QueueIDs, ticket.QueueID):
-		case len(filter.StateIDs) > 0 && !slices.Contains(filter.StateIDs, ticket.StateID):
-		case filter.OwnerID != nil && (ticket.OwnerID == nil || *ticket.OwnerID != *filter.OwnerID):
-		case filter.ContactID != nil && (ticket.ContactID == nil || *ticket.ContactID != *filter.ContactID):
-		case filter.OrganisationID != nil &&
-			(ticket.OrganisationID == nil || *ticket.OrganisationID != *filter.OrganisationID):
-		case filter.Follower != nil && !follows(filter.Follower, &ticket):
-		case search != "" && !strings.Contains(strings.ToLower(ticket.Title), search) &&
-			!strings.Contains(ticket.Number, search):
-		case !r.narrowedFurther(filter, &ticket):
-		default:
-			found := ticket
-			matching = append(matching, &found)
-		}
-	}
+	matching := r.matching(filter)
 
 	slices.SortFunc(matching, func(a, b *model.Ticket) int {
 		at, bt := a.UpdatedAt, b.UpdatedAt
@@ -142,6 +123,74 @@ func (r *TicketRepository) List(_ context.Context, filter repository.TicketFilte
 	return matching[start:min(start+filter.Limit, len(matching))], total, nil
 }
 
+// matching is every ticket a filter allows, in no order. The caller holds the
+// lock.
+func (r *TicketRepository) matching(filter repository.TicketFilter) []*model.Ticket {
+	search := strings.ToLower(strings.TrimSpace(filter.Search))
+	matching := make([]*model.Ticket, 0)
+
+	for _, ticket := range r.tickets {
+		switch {
+		case !slices.Contains(filter.QueueIDs, ticket.QueueID):
+		case len(filter.StateIDs) > 0 && !slices.Contains(filter.StateIDs, ticket.StateID):
+		case filter.OwnerID != nil && (ticket.OwnerID == nil || *ticket.OwnerID != *filter.OwnerID):
+		case filter.ContactID != nil && (ticket.ContactID == nil || *ticket.ContactID != *filter.ContactID):
+		case filter.OrganisationID != nil &&
+			(ticket.OrganisationID == nil || *ticket.OrganisationID != *filter.OrganisationID):
+		case filter.Follower != nil && !follows(filter.Follower, &ticket):
+		case search != "" && !strings.Contains(strings.ToLower(ticket.Title), search) &&
+			!strings.Contains(ticket.Number, search):
+		case !r.narrowedFurther(filter, &ticket):
+		default:
+			found := ticket
+			matching = append(matching, &found)
+		}
+	}
+
+	return matching
+}
+
+func (r *TicketRepository) Count(_ context.Context, filter repository.TicketFilter) (uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return uint(len(r.matching(filter))), nil
+}
+
+func (r *TicketRepository) CountByQueue(_ context.Context, filter repository.TicketFilter) (map[uint]uint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	counted := map[uint]uint{}
+	for _, ticket := range r.matching(filter) {
+		counted[ticket.QueueID]++
+	}
+
+	return counted, nil
+}
+
+func (r *TicketRepository) Moments(
+	_ context.Context,
+	filter repository.TicketFilter,
+	moment repository.TicketMoment,
+) ([]time.Time, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	moments := []time.Time{}
+
+	for _, ticket := range r.matching(filter) {
+		switch {
+		case moment == repository.MomentOpened:
+			moments = append(moments, ticket.CreatedAt)
+		case ticket.ClosedAt != nil:
+			moments = append(moments, *ticket.ClosedAt)
+		}
+	}
+
+	return moments, nil
+}
+
 // narrowedFurther says whether a ticket meets the conditions of a search beyond
 // the queues, states, people and words a plain listing knows. The caller holds
 // the lock.
@@ -154,7 +203,8 @@ func (r *TicketRepository) narrowedFurther(filter repository.TicketFilter, ticke
 	case !is(filter.ResponsibleID, ticket.ResponsibleID), !is(filter.ServiceLevelID, ticket.ServiceLevelID):
 	case filter.WatcherID != nil && !r.watchers[ticket.ID][*filter.WatcherID]:
 	case filter.Locked != nil && ticket.Locked != *filter.Locked:
-	case !within(filter.Created, ticket.CreatedAt), !within(filter.Changed, ticket.UpdatedAt):
+	case !within(filter.Created, ticket.CreatedAt), !within(filter.Changed, ticket.UpdatedAt),
+		filter.Closed != nil && (ticket.ClosedAt == nil || !within(filter.Closed, *ticket.ClosedAt)):
 	case filter.Text != nil && !r.says(ticket, filter.Text):
 	case filter.OverdueAt != nil && !ticket.Escalated(*filter.OverdueAt):
 	default:
