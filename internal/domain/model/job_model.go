@@ -57,7 +57,9 @@ func (c TicketCriteria) Matches(ticket *Ticket) bool {
 // come and lies after the job's last run - as KIX18's TimeBased plan decides
 // it, so that a time missed while the application was down is run once it is
 // back. A job that has never run is owed only a time that has just come, and
-// not one that passed before it was set up, which KIX18 would run at once.
+// not one that passed before it was set up, which KIX18 would run at once: a
+// job runs at the times its plan names, as a cron schedule and the scheduled
+// rules of current help desks do, and whoever wants it at once runs it by hand.
 func (j Job) DueOn(plan ExecPlan, now time.Time, zone *time.Location) bool {
 	wall := now.In(zone)
 	if plan.Type != PlanTimeBased || !plan.Valid || !slices.Contains(plan.Weekdays, wall.Weekday()) {

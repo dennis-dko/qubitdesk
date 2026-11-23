@@ -18,11 +18,10 @@ What is below was raised and is not recorded as decided anywhere.
 
 ## Decisions waiting on the maintainer
 
-Two, raised on 2026-11-17 by the automation and the mail to come.
+One, raised on 2026-11-17 by the mail to come.
 
 | | Question |
 | --- | --- |
-| K4 | A job that has never run is owed only a time of its plan that has just come (`Job.DueOn`); KIX18 counts its last run from nought, so a job set up at three in the afternoon on a plan for eight runs at once, and the first eight o'clock after that again. A job that has run catches up on a time missed while the application was down in both. Keep it - a job runs at the times it says, and not when it was saved - or run a new job at once as KIX18 does? |
 | K7 | The mail (P10) fetches from mailboxes and sends through a mail server. Sending needs nothing beyond the standard library (`net/smtp`, `net/mail`, `mime/multipart`); fetching needs IMAP or POP3, which the standard library does not speak. Write the client for the part KIX18 uses - log in, list what is unseen, fetch it, mark it seen - or take a library such as github.com/emersion/go-imap v2, a dependency this repository would carry from then on? Until it is decided the knowledge base (P12) and the customer portal (P11) go first. |
 
 ## Measurements reading cannot make
