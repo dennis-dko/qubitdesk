@@ -9804,6 +9804,263 @@ async function loadTickets() {
   if (openTicketShown) await openTicket(openTicketShown.id, { keepPlace: true });
 }
 
+// ---------------------------------------------------------------- overview
+
+/** The overview's tiles, each opening the ticket list searched for what it counts. */
+const OVERVIEW_TILES = [
+  {
+    key: 'owned',
+    label: () => t('overview.owned', 'Yours, still to do'),
+    search: (filter) => { filter.elements.mine.checked = true; },
+  },
+  {
+    key: 'responsible',
+    label: () => t('overview.responsible', 'Yours to answer for'),
+    search: (filter) => { filter.elements.responsible.value = 'me'; },
+  },
+  {
+    key: 'watched',
+    label: () => t('overview.watched', 'Watched by you'),
+    search: (filter) => { filter.elements.watched.checked = true; },
+  },
+  {
+    key: 'overdue',
+    label: () => t('overview.overdueTile', 'Overdue'),
+    search: (filter) => { filter.elements.overdue.checked = true; },
+  },
+];
+
+/** Fills the overview for whoever reads tickets. */
+async function loadOverview() {
+  if (!can('tickets:read')) return;
+
+  const overview = await api('/tickets/overview');
+  if (!overview) return;
+
+  cache.overviewDays = overview.days ?? [];
+
+  drawOverviewTiles(overview);
+  drawQueueLoads(overview.queues ?? []);
+  drawDayLoads(cache.overviewDays);
+}
+
+/** A count, written the way the reader writes a whole number. */
+function fmtCount(n) {
+  return new Intl.NumberFormat(activeLocale(), { maximumFractionDigits: 0 }).format(n ?? 0);
+}
+
+/** The four tiles of the agent's own work. */
+function drawOverviewTiles(overview) {
+  const row = $('#overview-tiles');
+  if (!row) return;
+
+  row.replaceChildren(...OVERVIEW_TILES.map((tile) => el('button', {
+    type: 'button',
+    class: 'overview-tile',
+    'data-tile': tile.key,
+    onclick: () => showSearchedTickets(tile.search),
+  },
+  el('span', { class: 'overview-value', text: fmtCount(overview[tile.key]) }),
+  el('span', { class: 'overview-label', text: tile.label() }))));
+}
+
+/** Each reached queue's unfinished tickets by where they stand. */
+function drawQueueLoads(loads) {
+  const tbody = $('#table-overview-queues tbody');
+  if (!tbody) return;
+
+  const byId = new Map(cache.ticketQueues.map((queue) => [queue.id, queue]));
+
+  fillTable(tbody, loads.map((load) => {
+    const queue = byId.get(load.queueId);
+
+    return el('tr', {},
+      el('td', { class: 'text' }, el('button', {
+        type: 'button',
+        class: 'link',
+        text: queue ? queuePath(queue, byId) : `#${load.queueId}`,
+        onclick: () => showSearchedTickets((filter) => { filter.elements.queue.value = String(load.queueId); }),
+      })),
+      el('td', { class: 'num', text: fmtCount(load.new) }),
+      el('td', { class: 'num', text: fmtCount(load.open) }),
+      el('td', { class: 'num', text: fmtCount(load.waiting) }),
+      el('td', { class: 'num', text: fmtCount(load.overdue) }));
+  }), 5, t('overview.noQueues', 'No queue reaches you.'));
+}
+
+/**
+ * Opens the ticket list searched for what a tile or a queue counts: the search
+ * put back to asking for nothing, then given the one thing asked, and folded out
+ * where that thing is one of its further criteria.
+ */
+function showSearchedTickets(search) {
+  const filter = $('#form-ticket-filter');
+  if (!filter) return;
+
+  filter.reset();
+  search(filter);
+
+  const further = $('#ticket-search');
+  further.open = $$('select, input', further).some((field) =>
+    (field.type === 'checkbox' ? field.checked : field.value !== '' && field.name !== 'sort'));
+
+  ticketPaging.page = 1;
+  switchView('tickets');
+  loadTicketPage().catch((err) => toastFailure(err));
+}
+
+/** A day of the overview, as the chart's axis writes it. */
+function overviewDayNumber(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+
+  return new Intl.DateTimeFormat(activeLocale(), { day: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(y, m - 1, d)));
+}
+
+/** A day of the overview, as the tooltip and the table write it. */
+function overviewDayName(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+
+  return new Intl.DateTimeFormat(activeLocale(), {
+    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
+  }).format(new Date(Date.UTC(y, m - 1, d)));
+}
+
+/** An element of the chart, in SVG's namespace. */
+function svgEl(name, attributes = {}) {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', name);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+  return node;
+}
+
+/** The smallest clean number at or above a count, for the top of the axis. */
+function chartTop(max) {
+  for (let scale = 1; ; scale *= 10) {
+    for (const step of [1, 2, 4, 5]) {
+      if (step * scale >= Math.max(max, 1)) return step * scale;
+    }
+  }
+}
+
+/** A column grown from the baseline: square at the foot, its top corners rounded. */
+function columnPath(x, top, width, baseline) {
+  const r = Math.min(4, width / 2, baseline - top);
+
+  return `M${x},${baseline}V${top + r}Q${x},${top} ${x + r},${top}H${x + width - r}`
+    + `Q${x + width},${top} ${x + width},${top + r}V${baseline}Z`;
+}
+
+/**
+ * The last two weeks as pairs of columns, opened beside finished, with a
+ * tooltip per day and a table of the same numbers under it. Drawn at the
+ * width the card has, so the axis text stays its size on a telephone.
+ */
+function drawDayLoads(days) {
+  const holder = $('#overview-chart');
+  const tbody = $('#table-overview-days tbody');
+  if (!holder || !tbody) return;
+
+  fillTable(tbody, days.map((day) => el('tr', {},
+    el('td', { class: 'text', text: overviewDayName(day.day) }),
+    el('td', { class: 'num', text: fmtCount(day.opened) }),
+    el('td', { class: 'num', text: fmtCount(day.closed) }))), 3, '');
+
+  const width = holder.clientWidth;
+  if (!width || days.length === 0) return;
+
+  const height = 180;
+  const left = 32;
+  const bottom = 24;
+  const top = chartTop(Math.max(...days.map((day) => Math.max(day.opened, day.closed))));
+  const plot = { x: left, y: 8, w: width - left - 4, h: height - 8 - bottom };
+  const slot = plot.w / days.length;
+  const bar = Math.max(3, Math.min(12, (slot - 2 - 6) / 2));
+  const baseline = plot.y + plot.h;
+  const y = (value) => baseline - (value / top) * plot.h;
+
+  const chart = svgEl('svg', {
+    viewBox: `0 0 ${width} ${height}`, height, role: 'group', 'aria-label': t('overview.days', 'The last two weeks'),
+  });
+
+  for (const tick of (top % 2 === 0 ? [0, top / 2, top] : [0, top])) {
+    chart.append(svgEl('line', {
+      class: tick === 0 ? 'chart-axis' : 'chart-grid', x1: plot.x, x2: plot.x + plot.w, y1: y(tick), y2: y(tick),
+    }));
+    const label = svgEl('text', { class: 'chart-tick', x: plot.x - 6, y: y(tick) + 4, 'text-anchor': 'end' });
+    label.textContent = fmtCount(tick);
+    chart.append(label);
+  }
+
+  const tip = el('div', { class: 'chart-tip', hidden: true });
+  const columns = [];
+
+  days.forEach((day, i) => {
+    const x = plot.x + i * slot + (slot - (2 * bar + 2)) / 2;
+    const pair = [];
+
+    for (const [value, series, offset] of [[day.opened, 'opened', 0], [day.closed, 'closed', bar + 2]]) {
+      if (value > 0) {
+        const column = svgEl('path', {
+          class: `chart-bar chart-bar-${series}`, d: columnPath(x + offset, y(value), bar, baseline),
+        });
+        pair.push(column);
+        chart.append(column);
+      }
+    }
+
+    columns.push(pair);
+
+    // Every second day from today back, so the labels never touch.
+    if ((days.length - 1 - i) % 2 === 0) {
+      const label = svgEl('text', {
+        class: 'chart-tick', x: plot.x + i * slot + slot / 2, y: height - 6, 'text-anchor': 'middle',
+      });
+      label.textContent = overviewDayNumber(day.day);
+      chart.append(label);
+    }
+  });
+
+  days.forEach((day, i) => {
+    const said = t('overview.dayLoad', '{0}: {1} opened, {2} finished')
+      .replace('{0}', overviewDayName(day.day)).replace('{1}', fmtCount(day.opened))
+      .replace('{2}', fmtCount(day.closed));
+    const hit = svgEl('rect', {
+      class: 'chart-hit', x: plot.x + i * slot, y: plot.y, width: slot, height: plot.h,
+      tabindex: 0, role: 'img', 'aria-label': said,
+    });
+
+    const show = () => {
+      columns[i].forEach((column) => column.classList.add('lifted'));
+      tip.replaceChildren(
+        el('div', { class: 'chart-tip-day', text: overviewDayName(day.day) }),
+        ...[['opened', day.opened, t('overview.opened', 'Opened')],
+          ['closed', day.closed, t('overview.closed', 'Finished')]].map(([series, value, label]) =>
+          el('div', { class: 'chart-tip-row' },
+            el('span', { class: `chart-tip-line ${series}` }),
+            el('strong', { text: fmtCount(value) }),
+            el('span', { text: label }))));
+      tip.hidden = false;
+
+      const middle = plot.x + i * slot + slot / 2;
+      tip.style.left = `${Math.max(0, Math.min(middle - tip.offsetWidth / 2, width - tip.offsetWidth))}px`;
+      tip.style.top = `${Math.max(0, y(Math.max(day.opened, day.closed)) - tip.offsetHeight - 8)}px`;
+    };
+
+    const hide = () => {
+      columns[i].forEach((column) => column.classList.remove('lifted'));
+      tip.hidden = true;
+    };
+
+    hit.addEventListener('pointerenter', show);
+    hit.addEventListener('focus', show);
+    hit.addEventListener('pointerleave', hide);
+    hit.addEventListener('blur', hide);
+    chart.append(hit);
+  });
+
+  holder.replaceChildren(chart, tip);
+}
+
 /**
  * Fills the search's choices with every value tickets can carry, retired ones
  * included: a ticket keeps a retired state or priority, and the search has to
@@ -13816,6 +14073,12 @@ function forgetTheLastAccount() {
   assetLists.definitions.clear();
   closeConfigItem();
   $('#form-configitem-filter').reset();
+  // And the overview, which counts the last account's work and names its queues.
+  cache.overviewDays = [];
+  for (const drawn of ['#overview-tiles', '#table-overview-queues tbody', '#overview-chart',
+    '#table-overview-days tbody']) {
+    $(drawn).replaceChildren();
+  }
   ticketPaging.page = 1;
   itemPaging.page = 1;
   Object.keys(itsmChangeLists).forEach((list) => { itsmChangeLists[list] = []; });
@@ -14257,6 +14520,33 @@ const TOUR_STEPS = [
     text: () => t('tour.roles.text',
       'A role is a set of rights, and each one is enforced by real code rather than by a '
       + 'hidden button. Tick what the role may do; every account holding it changes with it.'),
+  },
+  {
+    target: '#overview-mine-card',
+    view: 'overview',
+    permission: 'tickets:read',
+    title: () => t('tour.overviewMine.title', 'Your work at a glance'),
+    text: () => t('tour.overviewMine.text',
+      'What is yours and still to do, what you answer for, what you watch and what is overdue in your queues. '
+      + 'Each number opens the tickets it counts.'),
+  },
+  {
+    target: '#overview-queues-card',
+    view: 'overview',
+    permission: 'tickets:read',
+    title: () => t('tour.overviewQueues.title', 'What waits in each queue'),
+    text: () => t('tour.overviewQueues.text',
+      'Every queue you reach, with what is new, being worked on, waiting and overdue in it. '
+      + 'A queue\'s name opens its tickets.'),
+  },
+  {
+    target: '#overview-days-card',
+    view: 'overview',
+    permission: 'tickets:read',
+    title: () => t('tour.overviewDays.title', 'Whether the work is kept up with'),
+    text: () => t('tour.overviewDays.text',
+      'The tickets opened and finished on each of the last fourteen days. Point at a day for its numbers, '
+      + 'or read them all as a table beneath.'),
   },
   {
     target: '#ticket-list-card',
@@ -19060,6 +19350,9 @@ function switchView(name) {
   // offers them may have changed since it was last drawn.
   if (name === 'welcome') renderWelcome();
 
+  // Drawn to the width it has, which a hidden screen does not have.
+  if (name === 'overview') drawDayLoads(cache.overviewDays ?? []);
+
   // And what the reader was told, which other people's changes add to while
   // nothing on this page moves.
   if (name === 'tickets') loadTold().catch((err) => toastFailure(err));
@@ -19281,6 +19574,7 @@ async function refreshAll() {
   await loadPortal();
   await loadFAQ();
   await loadTickets();
+  await loadOverview();
   await loadUsers();
   await loadAutomation();
   await loadAdmin();

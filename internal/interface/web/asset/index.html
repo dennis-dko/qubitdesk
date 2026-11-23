@@ -70,6 +70,9 @@
         <path d="M12 2.8 20 6v6.1c0 4.5-3.2 7.8-8 9.1-4.8-1.3-8-4.6-8-9.1V6z"/>
         <path d="m8.8 11.9 2.3 2.4 4.3-4.7"/>
       </symbol>
+      <symbol id="icon-overview" viewBox="0 0 24 24">
+        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>
+      </symbol>
       <symbol id="icon-tickets" viewBox="0 0 24 24">
         <path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5z"/>
         <path d="M14 5v14" stroke-dasharray="2 2"/>
@@ -234,6 +237,7 @@
 
     <nav id="tabs">
       <button class="tab" data-view="portal" data-perm="portal:use" data-i18n="nav.portal">My tickets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-tickets"/></svg></button>
+      <button class="tab" data-view="overview" data-perm="tickets:read" data-i18n="nav.overview">Overview<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-overview"/></svg></button>
       <button class="tab" data-view="tickets" data-perm="tickets:read" data-i18n="nav.tickets">Tickets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-tickets"/></svg></button>
       <button class="tab" data-view="customers" data-perm="customers:read" data-i18n="nav.customers">Customers<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-customers"/></svg></button>
       <button class="tab" data-view="faq" data-perm="faq:read" data-i18n="nav.faq">Knowledge base<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-faq"/></svg></button>
@@ -688,6 +692,60 @@
          from it, and the one form that opens a ticket or corrects the one that
          is open - told apart by the hidden id, as every form here is. Writing in
          a ticket is a job of its own, with a form of its own. -->
+    <!-- An agent's overview: the work that is theirs, what waits in each queue
+         they reach, and whether the last two weeks' tickets were kept up with.
+         Every number opens the ticket list searched for what it counts. -->
+    <section id="view-overview" class="view" hidden>
+      <div class="card" id="overview-mine-card">
+        <h2 data-i18n="overview.mine">Your work</h2>
+        <div class="overview-tiles" id="overview-tiles"></div>
+      </div>
+
+      <div class="card" id="overview-queues-card">
+        <h2 data-i18n="overview.queues">The queues</h2>
+        <p class="muted" data-i18n="overview.queuesHint">What is still to do in each queue you reach.</p>
+        <div class="table-wrap">
+          <table id="table-overview-queues">
+            <thead>
+              <tr>
+                <th data-i18n="field.queue">Queue</th>
+                <th class="num" data-i18n="overview.new">New</th>
+                <th class="num" data-i18n="overview.open">Being worked on</th>
+                <th class="num" data-i18n="overview.waiting">Waiting</th>
+                <th class="num" data-i18n="overview.overdue">Overdue</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="overview-days-card">
+        <h2 data-i18n="overview.days">The last two weeks</h2>
+        <p class="muted" data-i18n="overview.daysHint">The tickets opened and finished each day in the queues you reach, today last.</p>
+        <div class="chart-legend">
+          <span><span class="chart-key chart-key-opened"></span><span data-i18n="overview.opened">Opened</span></span>
+          <span><span class="chart-key chart-key-closed"></span><span data-i18n="overview.closed">Finished</span></span>
+        </div>
+        <div class="overview-chart" id="overview-chart"></div>
+        <details class="overview-table">
+          <summary data-i18n="overview.asTable">As a table</summary>
+          <div class="table-wrap">
+            <table id="table-overview-days">
+              <thead>
+                <tr>
+                  <th data-i18n="overview.day">Day</th>
+                  <th class="num" data-i18n="overview.opened">Opened</th>
+                  <th class="num" data-i18n="overview.closed">Finished</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+    </section>
+
     <section id="view-tickets" class="view" hidden>
       <div class="card" id="ticket-list-card">
         <h2 data-i18n="nav.tickets">Tickets</h2>

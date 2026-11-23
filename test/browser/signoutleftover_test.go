@@ -367,6 +367,37 @@ func TestASignOutTakesTheTicketListBackToItsFirstPage(t *testing.T) {
 		`String(document.querySelectorAll('#table-tickets tbody tr').length)`, "25")
 }
 
+// The overview an account was shown goes with it as well: its counts and the
+// names of the queues it reaches stay in the document under the sign-in screen
+// otherwise, and an account that may not read tickets never draws the overview
+// again, so the last person's would wait under a tab merely hidden.
+func TestASignOutTakesTheOverviewWithIt(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+
+	var made bool
+
+	p.awaitJSON(`(async () => {
+		const desk = (await api('/queues')).items.find((queue) => queue.name === 'Service Desk');
+		await api('/tickets', { method: 'POST', body: JSON.stringify(
+			{ title: 'Printer', queueId: desk.id, body: 'It jams.', ownerId: me.user.id }) });
+		await refreshAll();
+		return true;
+	})()`, &made)
+
+	p.run("open the overview", p.click(`.tab[data-view="overview"]`),
+		chromedp.WaitVisible("#overview-tiles", chromedp.ByID))
+	p.waitForText("#table-overview-queues tbody", "Service Desk")
+
+	p.run("sign out", p.click("#logout"), chromedp.WaitVisible("#form-login", chromedp.ByID))
+
+	if left := p.text("#view-overview"); strings.Contains(left, "Service Desk") || p.count(".overview-tile") > 0 {
+		t.Errorf("the overview is still in the document under the sign-in screen: %q", left)
+	}
+}
+
 // The greeting an account was shown goes with it as well.
 //
 // The greeting names whoever it greeted, and is drawn again only when somebody

@@ -21,6 +21,12 @@
   --danger: #c0392b;
   --radius: 10px;
 
+  /* The overview's two series, opened and finished: the first two slots of the
+   * validated categorical palette, checked against this surface in both modes
+   * for colour-blind separation and contrast rather than chosen by eye. */
+  --series-opened: #2a78d6;
+  --series-closed: #eb6834;
+
   /* What fields and the quieter buttons are drawn with. Mixed from the palette
      rather than set per theme, so the light and the dark one each have them
      without a line of their own and keep them when one of their colours
@@ -68,6 +74,8 @@
     --log-error: #f07a6a;
     --log-debug: #8b949e;
     --log-notice: #6cb6ff;
+    --series-opened: #3987e5;
+    --series-closed: #d95926;
     color-scheme: dark;
   }
 }
@@ -85,6 +93,8 @@
   --log-error: #f07a6a;
   --log-debug: #8b949e;
   --log-notice: #6cb6ff;
+  --series-opened: #3987e5;
+  --series-closed: #d95926;
   color-scheme: dark;
 }
 
@@ -102,6 +112,8 @@
   --log-debug: #6a737d;
   --log-notice: #0b6bcb;
   color-scheme: light;
+  --series-opened: #2a78d6;
+  --series-closed: #eb6834;
 }
 
 * { box-sizing: border-box; }
@@ -707,14 +719,14 @@ button {
    weak as the rule above, so each of those wins with a rule of its own. The
    list is written twice more, for the shadow below and for a touch screen. */
 button:where(:not(.link, .link-button, .tab, .screen-tab, .app-title, .nav-toggle, .logo-use-button,
-  .password-toggle, .date-open, .toast-close)) {
+  .password-toggle, .date-open, .toast-close, .overview-tile)) {
   min-height: var(--control);
   padding: 0 22px;
 }
 
 /* The form's own answer, lifted off the card on a shadow of its own colour. */
 button:where(:not(.secondary, .link, .link-button, .tab, .screen-tab, .danger, .app-title, .nav-toggle,
-  .logo-use-button, .password-toggle, .date-open, .toast-close, :disabled)) {
+  .logo-use-button, .password-toggle, .date-open, .toast-close, .overview-tile, :disabled)) {
   box-shadow: 0 4px 12px var(--ring);
 }
 
@@ -2853,7 +2865,7 @@ input[readonly]:focus, textarea[readonly]:focus {
   /* The fields and the buttons that act are as high as a finger needs on every
      screen already; written again here so the line above does not lower them. */
   button:where(:not(.link, .link-button, .tab, .screen-tab, .app-title, .nav-toggle, .logo-use-button,
-  .password-toggle, .date-open, .toast-close)),
+  .password-toggle, .date-open, .toast-close, .overview-tile)),
   select,
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
     min-height: var(--control);
@@ -2898,3 +2910,69 @@ input[readonly]:focus, textarea[readonly]:focus {
 .published-faq-list li:last-child { border-bottom: 0; }
 .published-faq-article { margin-top: 16px; }
 .login-faq-offer { text-align: center; margin: 12px 0 0; }
+
+/* The overview. Its tiles are buttons, because each opens the ticket list
+ * searched for what it counts; the figure leads and the words follow. */
+.overview-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.overview-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: var(--control);
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.overview-tile:hover { background: var(--quiet-hover); }
+.overview-value { font-size: 28px; font-weight: 600; line-height: 1.15; }
+.overview-label { color: var(--muted); font-size: 14px; }
+
+/* The chart: thin columns grown from one baseline with rounded tops, hairline
+ * gridlines a step off the surface, and axis text in the muted ink - never in a
+ * series colour. Each day's hit area is the whole of its slot, so the pointer
+ * and the keyboard find a day rather than a two-pixel bar. */
+.chart-legend { display: flex; flex-wrap: wrap; gap: 16px; color: var(--muted); font-size: 14px; }
+.chart-key { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
+.chart-key-opened { background: var(--series-opened); }
+.chart-key-closed { background: var(--series-closed); }
+.overview-chart { position: relative; margin-top: 8px; }
+.overview-chart svg { display: block; width: 100%; overflow: visible; }
+.chart-grid { stroke: var(--border); stroke-width: 1; }
+.chart-axis { stroke: var(--field-border); stroke-width: 1; }
+.chart-tick { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart-bar-opened { fill: var(--series-opened); }
+.chart-bar-closed { fill: var(--series-closed); }
+.chart-bar.lifted { opacity: 0.75; }
+.chart-hit { fill: transparent; outline: none; }
+.chart-hit:focus-visible { stroke: var(--accent); stroke-width: 2; }
+
+.chart-tip {
+  position: absolute;
+  z-index: 2;
+  min-width: 140px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--text) 14%, transparent);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.chart-tip-day { margin-bottom: 4px; color: var(--muted); }
+.chart-tip-row { display: flex; align-items: center; gap: 8px; }
+.chart-tip-row strong { min-width: 2ch; font-variant-numeric: tabular-nums; text-align: right; }
+.chart-tip-line { width: 12px; height: 2px; border-radius: 1px; }
+.chart-tip-line.opened { background: var(--series-opened); }
+.chart-tip-line.closed { background: var(--series-closed); }
+.overview-table { margin-top: 12px; }
