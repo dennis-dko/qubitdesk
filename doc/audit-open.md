@@ -18,11 +18,7 @@ What is below was raised and is not recorded as decided anywhere.
 
 ## Decisions waiting on the maintainer
 
-One, raised on 2026-11-17 by the mail to come.
-
-| | Question |
-| --- | --- |
-| K7 | The mail (P10) fetches from mailboxes and sends through a mail server. Sending needs nothing beyond the standard library (`net/smtp`, `net/mail`, `mime/multipart`); fetching needs IMAP or POP3, which the standard library does not speak. Write the client for the part KIX18 uses - log in, list what is unseen, fetch it, mark it seen - or take a library such as github.com/emersion/go-imap v2, a dependency this repository would carry from then on? Until it is decided the knowledge base (P12) and the customer portal (P11) go first. |
+None.
 
 ## Measurements reading cannot make
 
