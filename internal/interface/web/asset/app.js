@@ -588,6 +588,9 @@ const FIELD_NAMES = {
   text: 'Words in the ticket',
   sort: 'Order',
   order: 'Direction',
+  from: 'From',
+  to: 'To',
+  by: 'Counted by',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */

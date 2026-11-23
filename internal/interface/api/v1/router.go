@@ -252,6 +252,7 @@ func RegisterRoutes(app *gofr.App, h Handlers) {
 	app.GET(base+"/portal/queues", h.Portal.Queues)
 	app.GET(base+"/tickets/assignees", h.Tickets.Assignees)
 	app.GET(base+"/tickets/overview", h.Tickets.Overview)
+	app.GET(base+"/reports/tickets", h.Tickets.Report)
 	app.POST(base+"/tickets", h.Tickets.Create)
 	app.GET(base+"/tickets/{id}", h.Tickets.Get)
 	app.PUT(base+"/tickets/{id}", h.Tickets.Update)

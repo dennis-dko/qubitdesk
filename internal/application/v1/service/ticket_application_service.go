@@ -18,6 +18,7 @@ import (
 type TicketService interface {
 	ListTickets(ctx context.Context, caller *Principal, filter TicketListFilter) ([]*model.Ticket, uint, error)
 	Overview(ctx context.Context, caller *Principal) (*TicketOverview, error)
+	Report(ctx context.Context, caller *Principal, query ReportQuery) (*TicketReport, error)
 	GetTicket(ctx context.Context, caller *Principal, id uint) (*model.Ticket, error)
 	CreateTicket(ctx context.Context, caller *Principal, cmd command.CreateTicketCommand) (*model.Ticket, error)
 	UpdateTicket(ctx context.Context, caller *Principal, id uint, cmd command.UpdateTicketCommand) (*model.Ticket, error)

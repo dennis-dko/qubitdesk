@@ -2493,6 +2493,23 @@
         }
       }
     },
+    "/reports/tickets": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Ticket statistics for a span of days",
+        "description": "Takes `reports:read`. Counted in the queues the caller reaches, over the calendar days `from` to `to` (YYYY-MM-DD, both included, read in the caller's zone; the last 30 days unless given, at most 366): a row for each value of `by` - `queue` unless one of `priority`, `type`, `owner`, `organisation` or `serviceLevel` - that a ticket of the span carries, id 0 for tickets naming none, then `total` and the tickets opened and finished on each day (`days`). A row counts the tickets opened (`opened`) and finished (`closed`) in the span; the first answers owed by the tickets opened in it that were given or have run out (`responseOwed`) and those given in time (`responseKept`); the solutions owed by the tickets finished in it (`solutionOwed`) and those in time (`solutionKept`); and the average whole wall-clock minutes to the first answer and to the finish (`averageResponseMinutes`, `averageResolutionMinutes`), absent where nothing was counted. A span holding more than 50,000 tickets is refused rather than counted in part.",
+        "responses": {
+          "200": {
+            "description": "The statistics"
+          },
+          "400": {
+            "description": "A day that is not YYYY-MM-DD, a span that ends before it starts or is longer than 366 days, a `by` it does not know, or a span holding more tickets than a report counts"
+          }
+        }
+      }
+    },
     "/tickets/overview": {
       "get": {
         "tags": [

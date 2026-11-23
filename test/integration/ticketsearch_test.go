@@ -222,3 +222,82 @@ func TestTheOverviewCountsAnAgentsWorkOverHTTP(t *testing.T) {
 		t.Errorf("the overview's days are %+v; want fourteen, the two tickets opened on the last", overview.Days)
 	}
 }
+
+// The statistics count the span's tickets over HTTP, by what they are asked to,
+// refuse what they cannot count, and are read only with reports:read.
+func TestTheStatisticsCountASpanOverHTTP(t *testing.T) {
+	t.Parallel()
+
+	a := start(t)
+	admin := a.signInAsAdmin("a-much-better-password")
+	desk := theDesk(t, admin)
+
+	openTicket(t, admin, desk, "Printer jams", nil)
+	openTicket(t, admin, desk, "Paper stuck", nil)
+
+	var report struct {
+		By    string `json:"by"`
+		Total struct {
+			Opened uint `json:"opened"`
+		} `json:"total"`
+		Rows []struct {
+			Name   string `json:"name"`
+			Opened uint   `json:"opened"`
+		} `json:"rows"`
+		Days []struct {
+			Day string `json:"day"`
+		} `json:"days"`
+	}
+
+	admin.must(admin.api(http.MethodGet, "/reports/tickets?by=priority", nil), http.StatusOK).Data(t, &report)
+
+	if report.By != "priority" || report.Total.Opened != 2 || len(report.Rows) != 1 ||
+		report.Rows[0].Name != "normal" || report.Rows[0].Opened != 2 || len(report.Days) != 30 {
+		t.Errorf("the last thirty days by priority read %+v; want both tickets under normal", report)
+	}
+
+	today := time.Now().Format(time.DateOnly)
+
+	for name, tc := range map[string]struct {
+		query string
+		param string
+	}{
+		"an unknown dimension":    {"by=size", "by"},
+		"a span running backward": {"from=" + today + "&to=2026-01-01", "to"},
+		"a span too long":         {"from=2020-01-01&to=" + today, "from"},
+		"a day that is no day":    {"from=2026-13-01", ""},
+	} {
+		got := admin.api(http.MethodGet, "/reports/tickets?"+tc.query, nil)
+		if got.Status != http.StatusBadRequest {
+			t.Errorf("statistics with %s answered %d, want 400", name, got.Status)
+
+			continue
+		}
+
+		var body struct {
+			Error struct {
+				Param []string `json:"param"`
+			} `json:"error"`
+		}
+
+		if err := json.Unmarshal(got.Body, &body); err != nil {
+			t.Fatalf("statistics with %s: the refusal is not JSON: %v", name, err)
+		}
+
+		if tc.param != "" && !slices.Equal(body.Error.Param, []string{tc.param}) {
+			t.Errorf("statistics with %s named %q, want %q", name, body.Error.Param, tc.param)
+		}
+	}
+
+	admin.must(admin.api(http.MethodPost, "/roles", map[string]any{"name": "reader",
+		"permissions": []string{"tickets:read"}}), http.StatusCreated, http.StatusOK)
+	admin.must(admin.api(http.MethodPost, "/users", map[string]any{"name": "Reader", "email": "reader@example.com",
+		"role": "reader", "password": "reader-password-1"}), http.StatusCreated, http.StatusOK)
+
+	reader := a.newClient()
+	reader.signIn("reader@example.com", "reader-password-1")
+
+	if refused := reader.api(http.MethodGet, "/reports/tickets", nil); refused.Status != http.StatusForbidden {
+		t.Errorf("an account without reports:read read the statistics with %d, want 403", refused.Status)
+	}
+}
