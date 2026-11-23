@@ -581,6 +581,13 @@ const FIELD_NAMES = {
   categoryId: 'Category',
   keywords: 'Keywords',
   visibility: 'Who may read it',
+  watched: 'Only tickets I watch',
+  overdue: 'Only overdue tickets',
+  createdTo: 'Opened until',
+  changedTo: 'Changed until',
+  text: 'Words in the ticket',
+  sort: 'Order',
+  order: 'Direction',
 };
 
 /** fieldName names a refused field the way the screen names it, in the reader's language. */

@@ -149,6 +149,8 @@ func (r *TicketRepository) List(ctx context.Context, filter repository.TicketFil
 		args = append(args, pattern, pattern)
 	}
 
+	where, args = narrowedFurther(filter, where, args)
+
 	condition := strings.Join(where, " AND ")
 
 	var total uint
@@ -162,7 +164,7 @@ func (r *TicketRepository) List(ctx context.Context, filter repository.TicketFil
 	args = append(args, filter.Limit, (page-1)*filter.Limit)
 
 	rows, err := r.db.QueryContext(ctx, r.rebind(
-		"SELECT "+ticketColumns+" FROM tickets WHERE "+condition+" ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?"),
+		"SELECT "+ticketColumns+" FROM tickets WHERE "+condition+" ORDER BY "+ticketOrder(filter.Sort)+" LIMIT ? OFFSET ?"),
 		args...)
 	if err != nil {
 		return nil, 0, apperror.Internal(err)
@@ -185,6 +187,125 @@ func (r *TicketRepository) List(ctx context.Context, filter repository.TicketFil
 	}
 
 	return tickets, total, nil
+}
+
+// narrowedFurther adds the conditions of a search beyond the queues, states,
+// people and words a plain listing knows. Each is a clause written out whole;
+// only how many placeholders a list has comes from the filter.
+//
+// A moment is compared in UTC, because SQLite keeps one as the text the driver
+// writes and compares that text: the tickets' moments are written in UTC, and
+// the same moment written with another offset sorts as another time.
+func narrowedFurther(filter repository.TicketFilter, where []string, args []any) ([]string, []any) {
+	for _, in := range []struct {
+		column string
+		ids    []uint
+	}{{"priority_id", filter.PriorityIDs}, {"type_id", filter.TypeIDs}} {
+		if len(in.ids) == 0 {
+			continue
+		}
+
+		where = append(where, in.column+" IN "+marks(len(in.ids)))
+
+		for _, id := range in.ids {
+			args = append(args, id)
+		}
+	}
+
+	if filter.ResponsibleID != nil {
+		where = append(where, "responsible_id = ?")
+		args = append(args, *filter.ResponsibleID)
+	}
+
+	if filter.WatcherID != nil {
+		where = append(where, "EXISTS (SELECT 1 FROM ticket_watchers w WHERE w.ticket_id = tickets.id AND w.user_id = ?)")
+		args = append(args, *filter.WatcherID)
+	}
+
+	if filter.Locked != nil {
+		where = append(where, "locked = ?")
+		args = append(args, *filter.Locked)
+	}
+
+	if filter.ServiceLevelID != nil {
+		where = append(where, "service_level_id = ?")
+		args = append(args, *filter.ServiceLevelID)
+	}
+
+	for _, in := range []struct {
+		column string
+		span   *repository.Span
+	}{{"created_at", filter.Created}, {"updated_at", filter.Changed}} {
+		if in.span == nil {
+			continue
+		}
+
+		if in.span.From != nil {
+			where = append(where, in.column+" >= ?")
+			args = append(args, in.span.From.UTC())
+		}
+
+		if in.span.Before != nil {
+			where = append(where, in.column+" < ?")
+			args = append(args, in.span.Before.UTC())
+		}
+	}
+
+	if text := filter.Text; text != nil {
+		articles := "SELECT 1 FROM articles a WHERE a.ticket_id = tickets.id AND "
+		if text.CustomerArticlesOnly {
+			articles += "a.customer_visible = ? AND "
+		}
+
+		clause := "(LOWER(title) LIKE ? ESCAPE '!' OR number LIKE ? ESCAPE '!' OR EXISTS (" + articles +
+			"(LOWER(a.subject) LIKE ? ESCAPE '!' OR LOWER(a.body) LIKE ? ESCAPE '!')))"
+
+		for _, word := range text.Words {
+			pattern := "%" + strings.ToLower(likeEscaped(word)) + "%"
+			where = append(where, clause)
+			args = append(args, pattern, pattern)
+
+			if text.CustomerArticlesOnly {
+				args = append(args, true)
+			}
+
+			args = append(args, pattern, pattern)
+		}
+	}
+
+	if at := filter.OverdueAt; at != nil {
+		where = append(where, "((first_response_due IS NOT NULL AND first_response_at IS NULL AND first_response_due < ?) "+
+			"OR (update_due IS NOT NULL AND update_due < ?) "+
+			"OR (solution_due IS NOT NULL AND closed_at IS NULL AND solution_due < ?))")
+		args = append(args, at.UTC(), at.UTC(), at.UTC())
+	}
+
+	return where, args
+}
+
+// ticketOrder is the ORDER BY a sort asks for, chosen from a fixed set rather
+// than written from it.
+func ticketOrder(sort repository.TicketSort) string {
+	direction := "DESC"
+	if sort.Ascending {
+		direction = "ASC"
+	}
+
+	switch sort.By {
+	case repository.SortByCreated:
+		return "created_at " + direction + ", id " + direction
+	case repository.SortByPriority:
+		// Level 1 is the most urgent, so urgency runs against the level.
+		urgency := "ASC"
+		if sort.Ascending {
+			urgency = "DESC"
+		}
+
+		return "(SELECT p.level FROM ticket_priorities p WHERE p.id = tickets.priority_id) " + urgency +
+			", created_at ASC, id ASC"
+	default:
+		return "updated_at " + direction + ", id " + direction
+	}
 }
 
 func (r *TicketRepository) Update(

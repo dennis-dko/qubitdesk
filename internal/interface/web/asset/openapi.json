@@ -2461,13 +2461,13 @@
           "tickets"
         ],
         "summary": "List tickets",
-        "description": "Takes `tickets:read`. One page of the tickets in the queues the caller reaches, the most recently changed first, and `totalCount` saying how many there are altogether. `queue` narrows to one queue, `state` to a comma-separated list of state ids, `unfinished=true` to tickets somebody still has to do something about, `owner` to an agent's id or `me`, `contact` and `organisation` to one customer's, and `q` to a title or number holding the words. `limit` is 50 unless given and at most 200 - more is refused rather than quietly lowered - and `page` counts from 1.",
+        "description": "Takes `tickets:read`. One page of the tickets in the queues the caller reaches, the most recently changed first, and `totalCount` saying how many there are altogether. `queue` narrows to one queue, `state` to a comma-separated list of state ids, `unfinished=true` to tickets somebody still has to do something about, `owner` to an agent's id or `me`, `contact` and `organisation` to one customer's, and `q` to a title or number holding the words. The search narrows further: `priority` and `type` to comma-separated lists of ids, `responsible` to an agent's id or `me`, `watched=true` to the tickets the caller watches, `locked` to `true` or `false`, `serviceLevel` to one level's id, `createdFrom` and `createdTo`, and `changedFrom` and `changedTo`, to calendar days (YYYY-MM-DD, both included) read in the caller's zone, `text` to tickets saying each of up to ten words in the title, the number or the subject or text of an article, and `overdue=true` to tickets a promise has run out on unkept. `sort` is `changed`, `created` or `priority`, and `order` is `desc` - the latest, or the most urgent, first - unless `asc`; equally urgent tickets come oldest first either way. `limit` is 50 unless given and at most 200 - more is refused rather than quietly lowered - and `page` counts from 1.",
         "responses": {
           "200": {
             "description": "A page of tickets"
           },
           "400": {
-            "description": "A limit above 200, or a filter that is not a number"
+            "description": "A limit above 200, a filter that is not a number, a day that is not YYYY-MM-DD, a span that ends before it starts, more than ten words, or a `locked`, `watched`, `overdue`, `sort` or `order` it does not know"
           }
         }
       },

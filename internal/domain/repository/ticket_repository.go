@@ -149,7 +149,85 @@ type TicketFilter struct {
 	// Search narrows it to tickets whose title or number holds the words.
 	Search string
 
+	// PriorityIDs and TypeIDs narrow it to tickets of these priorities and of
+	// these types, when given.
+	PriorityIDs []uint
+	TypeIDs     []uint
+
+	// ResponsibleID narrows it to the tickets one agent is responsible for, and
+	// WatcherID to the tickets one agent watches, when given.
+	ResponsibleID *uint
+	WatcherID     *uint
+
+	// Locked narrows it to locked or to free tickets, when given.
+	Locked *bool
+
+	// ServiceLevelID narrows it to the tickets owed what one service level
+	// promises, when given.
+	ServiceLevelID *uint
+
+	// Created and Changed narrow it to the tickets opened, and last changed, in
+	// a span, when given.
+	Created *Span
+	Changed *Span
+
+	// Text narrows it to the tickets that say every one of its words, when
+	// given.
+	Text *TicketText
+
+	// OverdueAt narrows it to the tickets a promise has run out on unkept at that
+	// moment, as model.Ticket.Escalated judges one, when given.
+	OverdueAt *time.Time
+
+	// Sort orders the listing. Its zero value puts the ticket changed last
+	// first.
+	Sort TicketSort
+
 	// Limit and Page choose the page: Limit tickets, the first page being 1.
 	Limit int
 	Page  int
 }
+
+// Span is the moments from From up to, and not including, Before; either end
+// may be open.
+type Span struct {
+	From   *time.Time
+	Before *time.Time
+}
+
+// TicketText is a search of what tickets say. Each of Words is found, case
+// aside, in the ticket's title or number or in the subject or the text of one
+// of its articles - not necessarily all in the same one.
+//
+// CustomerArticlesOnly keeps the search to the articles a customer is shown.
+// Whoever is shown only those must be searched only in those, or a word from an
+// internal note would put a ticket among their results and so say what the note
+// says.
+type TicketText struct {
+	Words                []string
+	CustomerArticlesOnly bool
+}
+
+// TicketSort orders a listing of tickets; the zero value is the ticket changed
+// last first. Ascending runs from the earliest moment, or from the least urgent
+// ticket, and its absence the other way.
+type TicketSort struct {
+	By        TicketSortKey
+	Ascending bool
+}
+
+// TicketSortKey is what a listing of tickets is ordered by.
+type TicketSortKey string
+
+// What a listing of tickets can be ordered by: when each was last changed,
+// when it was opened, and how urgent it is by its priority's level - the most
+// urgent first unless ascending, level 1 being the most urgent. A tie in
+// either moment is broken by the ticket's id in the same direction, so that a
+// page never shuffles between two reads; of two tickets equally urgent the one
+// opened first comes first whichever way the levels run, because it has waited
+// longer.
+const (
+	SortByChanged  TicketSortKey = ""
+	SortByCreated  TicketSortKey = "created"
+	SortByPriority TicketSortKey = "priority"
+)

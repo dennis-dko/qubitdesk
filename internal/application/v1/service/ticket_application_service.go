@@ -63,9 +63,64 @@ type TicketListFilter struct {
 	ContactID      uint
 	OrganisationID uint
 	Search         string
-	Limit          int
-	Page           int
+
+	// PriorityIDs and TypeIDs narrow the listing to tickets of these priorities
+	// and of these types.
+	PriorityIDs []uint
+	TypeIDs     []uint
+
+	// ResponsibleID narrows it to the tickets one agent is responsible for, and
+	// WatcherID to the tickets one agent watches.
+	ResponsibleID uint
+	WatcherID     uint
+
+	// Locked narrows it to locked or to free tickets, when given.
+	Locked *bool
+
+	// ServiceLevelID narrows it to the tickets owed what one service level
+	// promises.
+	ServiceLevelID uint
+
+	// Created and Changed narrow it to the tickets opened, and last changed, on
+	// calendar days read in the caller's zone.
+	Created Days
+	Changed Days
+
+	// Text is words every ticket listed says somewhere - in its title or number,
+	// or in the subject or text of an article - each on its own, case aside.
+	Text string
+
+	// Overdue narrows it to the tickets a promise has run out on unkept.
+	Overdue bool
+
+	// Sort orders the listing; its zero value puts the ticket changed last
+	// first.
+	Sort repository.TicketSort
+
+	Limit int
+	Page  int
 }
+
+// Days are the calendar days from First to Last, both included, as somebody
+// reads them on their own calendar; either end may be open. Each is midnight
+// UTC of its day, model.CalendarDay's shape, which says the day and no moment.
+type Days struct {
+	First *time.Time
+	Last  *time.Time
+}
+
+// What a listing of tickets can be ordered by besides when each was changed,
+// in the repository's words, so that a handler says it without reaching past
+// this package.
+const (
+	TicketsByCreated  = repository.SortByCreated
+	TicketsByPriority = repository.SortByPriority
+)
+
+// MaxTicketTextWords bounds the words one search of what tickets say looks
+// for. Chosen rather than derived: every word is a search of every article the
+// caller reaches, and a dozen words is a sentence rather than a search.
+const MaxTicketTextWords = 10
 
 // DefaultTicketPage and MaxTicketPage bound a page of tickets. A limit above the
 // maximum is refused rather than quietly lowered: a list that does not match what
@@ -259,6 +314,11 @@ func (s *TicketApplicationService) ListTickets(
 		return nil, 0, apperror.InvalidFields("page")
 	}
 
+	narrowed, err := s.searched(ctx, caller, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	queues, err := s.queues.GetAll(ctx)
 	if err != nil {
 		return nil, 0, err
@@ -294,10 +354,102 @@ func (s *TicketApplicationService) ListTickets(
 		}
 	}
 
-	return s.tickets.List(ctx, repository.TicketFilter{
-		QueueIDs: reached, StateIDs: states, OwnerID: given(filter.OwnerID), ContactID: given(filter.ContactID),
-		OrganisationID: given(filter.OrganisationID), Search: filter.Search, Limit: filter.Limit, Page: filter.Page,
-	})
+	narrowed.QueueIDs, narrowed.StateIDs = reached, states
+
+	return s.tickets.List(ctx, narrowed)
+}
+
+// searched checks what a listing asks for beyond the queues and states it
+// reaches, and says it as the repository's filter: the days read in the
+// caller's zone, the words one by one, and the moment overdue is judged at.
+func (s *TicketApplicationService) searched(
+	ctx context.Context,
+	caller *Principal,
+	filter TicketListFilter,
+) (repository.TicketFilter, error) {
+	narrowed := repository.TicketFilter{
+		OwnerID: given(filter.OwnerID), ContactID: given(filter.ContactID),
+		OrganisationID: given(filter.OrganisationID), Search: filter.Search,
+		PriorityIDs: filter.PriorityIDs, TypeIDs: filter.TypeIDs,
+		ResponsibleID: given(filter.ResponsibleID), WatcherID: given(filter.WatcherID),
+		Locked: filter.Locked, ServiceLevelID: given(filter.ServiceLevelID),
+		Sort: filter.Sort, Limit: filter.Limit, Page: filter.Page,
+	}
+
+	switch filter.Sort.By {
+	case repository.SortByChanged, repository.SortByCreated, repository.SortByPriority:
+	default:
+		return narrowed, apperror.InvalidFields("sort")
+	}
+
+	if words := strings.Fields(filter.Text); len(words) > 0 {
+		if len(words) > MaxTicketTextWords || len(filter.Text) > maxTicketText {
+			return narrowed, apperror.InvalidFields("text")
+		}
+
+		narrowed.Text = &repository.TicketText{Words: words}
+	}
+
+	zone := s.readerZone(ctx, caller)
+
+	for _, span := range []struct {
+		days    Days
+		into    **repository.Span
+		refused error
+	}{
+		{filter.Created, &narrowed.Created, apperror.InvalidFields("createdTo")},
+		{filter.Changed, &narrowed.Changed, apperror.InvalidFields("changedTo")},
+	} {
+		if span.days.First != nil && span.days.Last != nil && span.days.Last.Before(*span.days.First) {
+			return narrowed, span.refused
+		}
+
+		*span.into = spanOf(span.days, zone)
+	}
+
+	if filter.Overdue {
+		now := s.now().UTC()
+		narrowed.OverdueAt = &now
+	}
+
+	return narrowed, nil
+}
+
+// maxTicketText bounds the text one search of what tickets say is given, as
+// the search field does.
+const maxTicketText = 255
+
+// readerZone is the zone the caller reads a calendar in: their own, or the
+// installation's while they have chosen none.
+func (s *TicketApplicationService) readerZone(ctx context.Context, caller *Principal) *time.Location {
+	if caller != nil && caller.User != nil {
+		return caller.User.TimezoneOf(s.zone(ctx))
+	}
+
+	return model.EffectiveTimezone("", s.zone(ctx))
+}
+
+// spanOf turns calendar days into the moments they take in zone: from the
+// first day's midnight up to the midnight after the last, so that the last day
+// is included whole, however long the day is.
+func spanOf(days Days, zone *time.Location) *repository.Span {
+	if days.First == nil && days.Last == nil {
+		return nil
+	}
+
+	span := &repository.Span{}
+
+	if first := days.First; first != nil {
+		from := time.Date(first.Year(), first.Month(), first.Day(), 0, 0, 0, 0, zone)
+		span.From = &from
+	}
+
+	if last := days.Last; last != nil {
+		before := time.Date(last.Year(), last.Month(), last.Day()+1, 0, 0, 0, 0, zone)
+		span.Before = &before
+	}
+
+	return span
 }
 
 func (s *TicketApplicationService) GetTicket(ctx context.Context, caller *Principal, id uint) (*model.Ticket, error) {

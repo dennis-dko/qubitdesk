@@ -1,7 +1,9 @@
 package memory
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
@@ -85,6 +87,12 @@ func (r *TicketRepository) List(_ context.Context, filter repository.TicketFilte
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// The priorities' levels live in another repository, which this one does
+	// not hold; answering in some other order would pass for the right one.
+	if filter.Sort.By == repository.SortByPriority {
+		return nil, 0, apperror.Internal(errors.New("the in-memory tickets cannot be ordered by priority"))
+	}
+
 	search := strings.ToLower(strings.TrimSpace(filter.Search))
 	matching := make([]*model.Ticket, 0)
 
@@ -99,6 +107,7 @@ func (r *TicketRepository) List(_ context.Context, filter repository.TicketFilte
 		case filter.Follower != nil && !follows(filter.Follower, &ticket):
 		case search != "" && !strings.Contains(strings.ToLower(ticket.Title), search) &&
 			!strings.Contains(ticket.Number, search):
+		case !r.narrowedFurther(filter, &ticket):
 		default:
 			found := ticket
 			matching = append(matching, &found)
@@ -106,11 +115,21 @@ func (r *TicketRepository) List(_ context.Context, filter repository.TicketFilte
 	}
 
 	slices.SortFunc(matching, func(a, b *model.Ticket) int {
-		if c := b.UpdatedAt.Compare(a.UpdatedAt); c != 0 {
+		at, bt := a.UpdatedAt, b.UpdatedAt
+		if filter.Sort.By == repository.SortByCreated {
+			at, bt = a.CreatedAt, b.CreatedAt
+		}
+
+		c := at.Compare(bt)
+		if c == 0 {
+			c = cmp.Compare(a.ID, b.ID)
+		}
+
+		if filter.Sort.Ascending {
 			return c
 		}
 
-		return int(b.ID) - int(a.ID)
+		return -c
 	})
 
 	total := uint(len(matching))
@@ -121,6 +140,58 @@ func (r *TicketRepository) List(_ context.Context, filter repository.TicketFilte
 	}
 
 	return matching[start:min(start+filter.Limit, len(matching))], total, nil
+}
+
+// narrowedFurther says whether a ticket meets the conditions of a search beyond
+// the queues, states, people and words a plain listing knows. The caller holds
+// the lock.
+func (r *TicketRepository) narrowedFurther(filter repository.TicketFilter, ticket *model.Ticket) bool {
+	is := func(want, got *uint) bool { return want == nil || (got != nil && *got == *want) }
+
+	switch {
+	case len(filter.PriorityIDs) > 0 && !slices.Contains(filter.PriorityIDs, ticket.PriorityID):
+	case len(filter.TypeIDs) > 0 && !slices.Contains(filter.TypeIDs, ticket.TypeID):
+	case !is(filter.ResponsibleID, ticket.ResponsibleID), !is(filter.ServiceLevelID, ticket.ServiceLevelID):
+	case filter.WatcherID != nil && !r.watchers[ticket.ID][*filter.WatcherID]:
+	case filter.Locked != nil && ticket.Locked != *filter.Locked:
+	case !within(filter.Created, ticket.CreatedAt), !within(filter.Changed, ticket.UpdatedAt):
+	case filter.Text != nil && !r.says(ticket, filter.Text):
+	case filter.OverdueAt != nil && !ticket.Escalated(*filter.OverdueAt):
+	default:
+		return true
+	}
+
+	return false
+}
+
+// within says whether a moment lies in a span; no span holds every moment.
+func within(span *repository.Span, at time.Time) bool {
+	return span == nil ||
+		(span.From == nil || !at.Before(*span.From)) && (span.Before == nil || at.Before(*span.Before))
+}
+
+// says reports whether every word of a text search is found in the ticket's
+// title or number or in an article it may be searched in. The caller holds the
+// lock.
+func (r *TicketRepository) says(ticket *model.Ticket, text *repository.TicketText) bool {
+	for _, word := range text.Words {
+		word = strings.ToLower(word)
+
+		found := strings.Contains(strings.ToLower(ticket.Title), word) || strings.Contains(ticket.Number, word)
+
+		for i := 0; !found && i < len(r.articles); i++ {
+			article := &r.articles[i]
+			found = article.TicketID == ticket.ID && (article.CustomerVisible || !text.CustomerArticlesOnly) &&
+				(strings.Contains(strings.ToLower(article.Subject), word) ||
+					strings.Contains(strings.ToLower(article.Body), word))
+		}
+
+		if !found {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (r *TicketRepository) Update(
