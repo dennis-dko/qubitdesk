@@ -367,10 +367,10 @@ func TestASignOutTakesTheTicketListBackToItsFirstPage(t *testing.T) {
 		`String(document.querySelectorAll('#table-tickets tbody tr').length)`, "25")
 }
 
-// The overview an account was shown goes with it as well: its counts and the
-// names of the queues it reaches stay in the document under the sign-in screen
-// otherwise, and an account that may not read tickets never draws the overview
-// again, so the last person's would wait under a tab merely hidden.
+// The overview and the statistics an account was shown go with it as well:
+// their counts and the names of the queues it reaches stay in the document under
+// the sign-in screen otherwise, and an account that may not read tickets never
+// draws them again, so the last person's would wait under a tab merely hidden.
 func TestASignOutTakesTheOverviewWithIt(t *testing.T) {
 	t.Parallel()
 
@@ -390,11 +390,18 @@ func TestASignOutTakesTheOverviewWithIt(t *testing.T) {
 	p.run("open the overview", p.click(`.tab[data-view="overview"]`),
 		chromedp.WaitVisible("#overview-tiles", chromedp.ByID))
 	p.waitForText("#table-overview-queues tbody", "Service Desk")
+	p.run("open the statistics", p.click(`.tab[data-view="reports"]`),
+		chromedp.WaitVisible("#report-tiles", chromedp.ByID))
+	p.waitForText("#table-report-rows tbody", "Service Desk")
 
 	p.run("sign out", p.click("#logout"), chromedp.WaitVisible("#form-login", chromedp.ByID))
 
 	if left := p.text("#view-overview"); strings.Contains(left, "Service Desk") || p.count(".overview-tile") > 0 {
 		t.Errorf("the overview is still in the document under the sign-in screen: %q", left)
+	}
+
+	if left := p.text("#view-reports"); strings.Contains(left, "Service Desk") || p.count(".report-tile") > 0 {
+		t.Errorf("the statistics are still in the document under the sign-in screen: %q", left)
 	}
 }
 

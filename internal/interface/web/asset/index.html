@@ -70,6 +70,10 @@
         <path d="M12 2.8 20 6v6.1c0 4.5-3.2 7.8-8 9.1-4.8-1.3-8-4.6-8-9.1V6z"/>
         <path d="m8.8 11.9 2.3 2.4 4.3-4.7"/>
       </symbol>
+      <symbol id="icon-reports" viewBox="0 0 24 24">
+        <path d="M3 3v18h18"/>
+        <path d="M7 15l4-4 3 3 5-6"/>
+      </symbol>
       <symbol id="icon-overview" viewBox="0 0 24 24">
         <path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>
       </symbol>
@@ -241,6 +245,7 @@
       <button class="tab" data-view="tickets" data-perm="tickets:read" data-i18n="nav.tickets">Tickets<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-tickets"/></svg></button>
       <button class="tab" data-view="customers" data-perm="customers:read" data-i18n="nav.customers">Customers<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-customers"/></svg></button>
       <button class="tab" data-view="faq" data-perm="faq:read" data-i18n="nav.faq">Knowledge base<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-faq"/></svg></button>
+      <button class="tab" data-view="reports" data-perm="reports:read" data-i18n="nav.reports">Statistics<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-reports"/></svg></button>
       <button class="tab" data-view="users" data-perm="users:read" data-i18n="nav.users">Users<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-users"/></svg></button>
       <button class="tab" data-view="roles" data-perm="roles:read" data-i18n="nav.roles">Roles<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-roles"/></svg></button>
       <button class="tab" data-view="ticketsetup" data-perm="queues:write" data-i18n="nav.ticketSetup">Ticket setup<svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#icon-ticketsetup"/></svg></button>
@@ -743,6 +748,84 @@
             </table>
           </div>
         </details>
+      </div>
+    </section>
+
+    <!-- The statistics: a span of days chosen above everything it scopes, the
+         whole of it as figures, its days as columns, and its tickets broken down
+         by what was chosen. -->
+    <section id="view-reports" class="view" hidden>
+      <div class="card" id="report-card">
+        <h2 data-i18n="nav.reports">Statistics</h2>
+        <form method="post" id="form-report" class="form">
+          <div class="grid">
+            <label data-i18n="report.period">Period<select name="period">
+              <option value="7" data-i18n="report.last7">the last 7 days</option>
+              <option value="30" selected data-i18n="report.last30">the last 30 days</option>
+              <option value="90" data-i18n="report.last90">the last 90 days</option>
+              <option value="month" data-i18n="report.thisMonth">this month</option>
+              <option value="lastMonth" data-i18n="report.lastMonth">last month</option>
+              <option value="year" data-i18n="report.thisYear">this year</option>
+              <option value="custom" data-i18n="report.custom">days of my choosing</option>
+            </select></label>
+            <label class="report-custom" data-i18n="field.from" hidden>From<input type="date" name="from"></label>
+            <label class="report-custom" data-i18n="field.to" hidden>To<input type="date" name="to"></label>
+            <label data-i18n="field.by">Counted by<select name="by">
+              <option value="queue" data-i18n="field.queue">Queue</option>
+              <option value="priority" data-i18n="field.priority">Priority</option>
+              <option value="type" data-i18n="field.type">Type</option>
+              <option value="owner" data-i18n="ticket.owner">Owner</option>
+              <option value="organisation" data-i18n="field.organisationId">Organisation</option>
+              <option value="serviceLevel" data-i18n="field.serviceLevelId">Service level</option>
+            </select></label>
+          </div>
+        </form>
+        <div class="overview-tiles" id="report-tiles"></div>
+      </div>
+
+      <div class="card" id="report-days-card">
+        <h2 data-i18n="report.days">Over the span</h2>
+        <p class="muted" data-i18n="report.daysHint">The tickets opened and finished in the span - by day, by week over a longer span, by month over a longer one still.</p>
+        <div class="chart-legend">
+          <span><span class="chart-key chart-key-opened"></span><span data-i18n="overview.opened">Opened</span></span>
+          <span><span class="chart-key chart-key-closed"></span><span data-i18n="overview.closed">Finished</span></span>
+        </div>
+        <div class="overview-chart" id="report-chart"></div>
+        <details class="overview-table">
+          <summary data-i18n="overview.asTable">As a table</summary>
+          <div class="table-wrap">
+            <table id="table-report-days">
+              <thead>
+                <tr>
+                  <th data-i18n="report.when">When</th>
+                  <th class="num" data-i18n="overview.opened">Opened</th>
+                  <th class="num" data-i18n="overview.closed">Finished</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+
+      <div class="card" id="report-rows-card">
+        <h2 data-i18n="report.rows">Broken down</h2>
+        <div class="table-wrap">
+          <table id="table-report-rows">
+            <thead>
+              <tr>
+                <th id="report-rows-by" data-i18n="field.queue">Queue</th>
+                <th class="num" data-i18n="overview.opened">Opened</th>
+                <th class="num" data-i18n="overview.closed">Finished</th>
+                <th class="num" data-i18n="report.responseKept">First answers in time</th>
+                <th class="num" data-i18n="report.solutionKept">Solutions in time</th>
+                <th class="num" data-i18n="report.responseAverage">Average first answer</th>
+                <th class="num" data-i18n="report.resolutionAverage">Average time to finish</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </section>
 

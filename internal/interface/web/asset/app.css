@@ -2934,6 +2934,18 @@ input[readonly]:focus, textarea[readonly]:focus {
 }
 
 .overview-tile:hover { background: var(--quiet-hover); }
+
+/* A figure of the statistics: a tile that leads nowhere, so not a button. */
+.report-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.report-tile .overview-label + .overview-label { font-size: 13px; }
 .overview-value { font-size: 28px; font-weight: 600; line-height: 1.15; }
 .overview-label { color: var(--muted); font-size: 14px; }
 

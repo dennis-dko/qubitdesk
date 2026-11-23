@@ -9953,36 +9953,92 @@ function columnPath(x, top, width, baseline) {
     + `Q${x + width},${top} ${x + width},${top + r}V${baseline}Z`;
 }
 
-/**
- * The last two weeks as pairs of columns, opened beside finished, with a
- * tooltip per day and a table of the same numbers under it. Drawn at the
- * width the card has, so the axis text stays its size on a telephone.
- */
+/** The overview's last two weeks, day by day. */
 function drawDayLoads(days) {
-  const holder = $('#overview-chart');
-  const tbody = $('#table-overview-days tbody');
+  drawColumns($('#overview-chart'), $('#table-overview-days tbody'), dailyBuckets(days));
+}
+
+/** Days as the chart's buckets, one each. */
+function dailyBuckets(days) {
+  return days.map((day) => ({
+    axis: overviewDayNumber(day.day), name: overviewDayName(day.day), opened: day.opened, closed: day.closed,
+  }));
+}
+
+/**
+ * A span's days as the chart's buckets: one a day up to a month, a week each
+ * up to a quarter - counted back from the last day, so the last week ends on
+ * it - and a calendar month each over a longer span, so that a year is still a
+ * row of columns a screen holds.
+ */
+function spanBuckets(days) {
+  if (days.length <= 31) return dailyBuckets(days);
+
+  const named = (iso, options) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Intl.DateTimeFormat(activeLocale(), { ...options, timeZone: 'UTC' })
+      .format(new Date(Date.UTC(y, m - 1, d)));
+  };
+
+  const groups = [];
+
+  if (days.length <= 93) {
+    for (let end = days.length; end > 0; end -= 7) groups.unshift(days.slice(Math.max(0, end - 7), end));
+
+    return groups.map((week) => ({
+      axis: named(week[0].day, { day: 'numeric', month: 'short' }),
+      name: `${overviewDayName(week[0].day)} – ${overviewDayName(week[week.length - 1].day)}`,
+      opened: week.reduce((sum, day) => sum + day.opened, 0),
+      closed: week.reduce((sum, day) => sum + day.closed, 0),
+    }));
+  }
+
+  for (const day of days) {
+    const month = day.day.slice(0, 7);
+    if (groups.length === 0 || groups[groups.length - 1].month !== month) groups.push({ month, days: [] });
+    groups[groups.length - 1].days.push(day);
+  }
+
+  return groups.map((group) => ({
+    axis: named(group.days[0].day, { month: 'short' }),
+    name: named(group.days[0].day, { month: 'long', year: 'numeric' }),
+    opened: group.days.reduce((sum, day) => sum + day.opened, 0),
+    closed: group.days.reduce((sum, day) => sum + day.closed, 0),
+  }));
+}
+
+/**
+ * Buckets as pairs of columns, opened beside finished, with a tooltip per
+ * bucket and a table of the same numbers under it. Drawn at the width the card
+ * has, so the axis text stays its size on a telephone.
+ */
+function drawColumns(holder, tbody, buckets) {
   if (!holder || !tbody) return;
 
-  fillTable(tbody, days.map((day) => el('tr', {},
-    el('td', { class: 'text', text: overviewDayName(day.day) }),
-    el('td', { class: 'num', text: fmtCount(day.opened) }),
-    el('td', { class: 'num', text: fmtCount(day.closed) }))), 3, '');
+  fillTable(tbody, buckets.map((bucket) => el('tr', {},
+    el('td', { class: 'text', text: bucket.name }),
+    el('td', { class: 'num', text: fmtCount(bucket.opened) }),
+    el('td', { class: 'num', text: fmtCount(bucket.closed) }))), 3, '');
 
   const width = holder.clientWidth;
-  if (!width || days.length === 0) return;
+  if (!width || buckets.length === 0) return;
 
   const height = 180;
   const left = 32;
   const bottom = 24;
-  const top = chartTop(Math.max(...days.map((day) => Math.max(day.opened, day.closed))));
+  const top = chartTop(Math.max(...buckets.map((bucket) => Math.max(bucket.opened, bucket.closed))));
   const plot = { x: left, y: 8, w: width - left - 4, h: height - 8 - bottom };
-  const slot = plot.w / days.length;
-  const bar = Math.max(3, Math.min(12, (slot - 2 - 6) / 2));
+  const slot = plot.w / buckets.length;
+  const bar = Math.max(1, Math.min(12, (slot - 2 - 6) / 2));
   const baseline = plot.y + plot.h;
   const y = (value) => baseline - (value / top) * plot.h;
 
+  // As many axis labels as fit side by side, counted back from the last bucket.
+  const every = Math.max(1, Math.ceil((44 * buckets.length) / plot.w));
+
   const chart = svgEl('svg', {
-    viewBox: `0 0 ${width} ${height}`, height, role: 'group', 'aria-label': t('overview.days', 'The last two weeks'),
+    viewBox: `0 0 ${width} ${height}`, height, role: 'group',
+    'aria-label': holder.closest('.card')?.querySelector('h2')?.textContent ?? '',
   });
 
   for (const tick of (top % 2 === 0 ? [0, top / 2, top] : [0, top])) {
@@ -9997,11 +10053,11 @@ function drawDayLoads(days) {
   const tip = el('div', { class: 'chart-tip', hidden: true });
   const columns = [];
 
-  days.forEach((day, i) => {
+  buckets.forEach((bucket, i) => {
     const x = plot.x + i * slot + (slot - (2 * bar + 2)) / 2;
     const pair = [];
 
-    for (const [value, series, offset] of [[day.opened, 'opened', 0], [day.closed, 'closed', bar + 2]]) {
+    for (const [value, series, offset] of [[bucket.opened, 'opened', 0], [bucket.closed, 'closed', bar + 2]]) {
       if (value > 0) {
         const column = svgEl('path', {
           class: `chart-bar chart-bar-${series}`, d: columnPath(x + offset, y(value), bar, baseline),
@@ -10013,20 +10069,18 @@ function drawDayLoads(days) {
 
     columns.push(pair);
 
-    // Every second day from today back, so the labels never touch.
-    if ((days.length - 1 - i) % 2 === 0) {
+    if ((buckets.length - 1 - i) % every === 0) {
       const label = svgEl('text', {
         class: 'chart-tick', x: plot.x + i * slot + slot / 2, y: height - 6, 'text-anchor': 'middle',
       });
-      label.textContent = overviewDayNumber(day.day);
+      label.textContent = bucket.axis;
       chart.append(label);
     }
   });
 
-  days.forEach((day, i) => {
+  buckets.forEach((bucket, i) => {
     const said = t('overview.dayLoad', '{0}: {1} opened, {2} finished')
-      .replace('{0}', overviewDayName(day.day)).replace('{1}', fmtCount(day.opened))
-      .replace('{2}', fmtCount(day.closed));
+      .replace('{0}', bucket.name).replace('{1}', fmtCount(bucket.opened)).replace('{2}', fmtCount(bucket.closed));
     const hit = svgEl('rect', {
       class: 'chart-hit', x: plot.x + i * slot, y: plot.y, width: slot, height: plot.h,
       tabindex: 0, role: 'img', 'aria-label': said,
@@ -10035,9 +10089,9 @@ function drawDayLoads(days) {
     const show = () => {
       columns[i].forEach((column) => column.classList.add('lifted'));
       tip.replaceChildren(
-        el('div', { class: 'chart-tip-day', text: overviewDayName(day.day) }),
-        ...[['opened', day.opened, t('overview.opened', 'Opened')],
-          ['closed', day.closed, t('overview.closed', 'Finished')]].map(([series, value, label]) =>
+        el('div', { class: 'chart-tip-day', text: bucket.name }),
+        ...[['opened', bucket.opened, t('overview.opened', 'Opened')],
+          ['closed', bucket.closed, t('overview.closed', 'Finished')]].map(([series, value, label]) =>
           el('div', { class: 'chart-tip-row' },
             el('span', { class: `chart-tip-line ${series}` }),
             el('strong', { text: fmtCount(value) }),
@@ -10046,7 +10100,7 @@ function drawDayLoads(days) {
 
       const middle = plot.x + i * slot + slot / 2;
       tip.style.left = `${Math.max(0, Math.min(middle - tip.offsetWidth / 2, width - tip.offsetWidth))}px`;
-      tip.style.top = `${Math.max(0, y(Math.max(day.opened, day.closed)) - tip.offsetHeight - 8)}px`;
+      tip.style.top = `${Math.max(0, y(Math.max(bucket.opened, bucket.closed)) - tip.offsetHeight - 8)}px`;
     };
 
     const hide = () => {
@@ -10062,6 +10116,132 @@ function drawDayLoads(days) {
   });
 
   holder.replaceChildren(chart, tip);
+}
+
+// ------------------------------------------------------------- statistics
+
+/** The report the statistics last answered, to draw again at a new width. */
+let reportShown = null;
+
+/** What the statistics count by, as its column is headed: the key and the English. */
+const REPORT_BY = {
+  queue: ['field.queue', 'Queue'],
+  priority: ['field.priority', 'Priority'],
+  type: ['field.type', 'Type'],
+  owner: ['ticket.owner', 'Owner'],
+  organisation: ['field.organisationId', 'Organisation'],
+  serviceLevel: ['field.serviceLevelId', 'Service level'],
+};
+
+/** The days a period choice covers, as the report's from and to. */
+function reportPeriod(form) {
+  const today = todayISO();
+  const [y, m, d] = today.split('-').map(Number);
+  const back = (days) => ISO_DAY(new Date(y, m - 1, d - days));
+
+  switch (form.elements.period.value) {
+    case '7': return { from: back(6), to: today };
+    case '90': return { from: back(89), to: today };
+    case 'month': return { from: ISO_DAY(new Date(y, m - 1, 1)), to: today };
+    case 'lastMonth': return { from: ISO_DAY(new Date(y, m - 2, 1)), to: ISO_DAY(new Date(y, m - 1, 0)) };
+    case 'year': return { from: ISO_DAY(new Date(y, 0, 1)), to: today };
+    case 'custom': return { from: form.elements.from.value, to: form.elements.to.value };
+    default: return { from: back(29), to: today };
+  }
+}
+
+/** Reads the statistics the form asks for, and draws them. */
+async function loadReport() {
+  const form = $('#form-report');
+  if (!form || !can('reports:read')) return;
+
+  const custom = form.elements.period.value === 'custom';
+  $$('.report-custom', form).forEach((label) => { label.hidden = !custom; });
+
+  const { from, to } = reportPeriod(form);
+  if (custom && (!from || !to)) return;
+
+  const query = new URLSearchParams({ from, to, by: form.elements.by.value });
+
+  reportShown = await api(`/reports/tickets?${query}`);
+  if (!reportShown) return;
+
+  drawReport(reportShown, form);
+}
+
+/** A share kept of what was owed, as a figure and in words; a dash where nothing was owed. */
+function keptShare(kept, owed) {
+  if (!owed) return { value: '–', of: '' };
+
+  return {
+    value: new Intl.NumberFormat(activeLocale(), { style: 'percent', maximumFractionDigits: 0 }).format(kept / owed),
+    of: t('report.keptOf', '{0} of {1}').replace('{0}', fmtCount(kept)).replace('{1}', fmtCount(owed)),
+  };
+}
+
+/** Whole minutes as the screen writes a span of time: minutes under an hour, hours above it. */
+function fmtMinutesTaken(minutes) {
+  if (minutes === null || minutes === undefined) return '–';
+  if (minutes < 60) return t('ticket.minutes', '{0} minutes').replace('{0}', fmtCount(minutes));
+
+  return fmtHours(minutes / 60);
+}
+
+/** What a row of the statistics is the tickets of, in words. */
+function reportRowName(row, by) {
+  if (row.id === 0) return by === 'owner' ? t('ticket.nobody', 'nobody') : t('report.none', 'none');
+  if (!row.name) return `#${row.id}`;
+  if (by === 'priority') return priorityName(row.name);
+  if (by === 'type') return ticketTypeName(row.name);
+
+  return row.name;
+}
+
+/** The statistics: the figures of the whole span, its columns and its rows. */
+function drawReport(report, form) {
+  const total = report.total ?? {};
+  const answers = keptShare(total.responseKept, total.responseOwed);
+  const solutions = keptShare(total.solutionKept, total.solutionOwed);
+
+  $('#report-tiles').replaceChildren(...[
+    [fmtCount(total.opened), t('overview.opened', 'Opened'), ''],
+    [fmtCount(total.closed), t('overview.closed', 'Finished'), ''],
+    [answers.value, t('report.responseKept', 'First answers in time'), answers.of],
+    [solutions.value, t('report.solutionKept', 'Solutions in time'), solutions.of],
+    [fmtMinutesTaken(total.averageResponseMinutes), t('report.responseAverage', 'Average first answer'), ''],
+    [fmtMinutesTaken(total.averageResolutionMinutes), t('report.resolutionAverage', 'Average time to finish'), ''],
+  ].map(([value, label, detail]) => el('div', { class: 'report-tile' },
+    el('span', { class: 'overview-value', text: value }),
+    el('span', { class: 'overview-label', text: label }),
+    detail ? el('span', { class: 'overview-label', text: detail }) : null)));
+
+  drawColumns($('#report-chart'), $('#table-report-days tbody'), spanBuckets(report.days ?? []));
+
+  const by = form.elements.by.value;
+  swapTheLabel($('#report-rows-by'), ...(REPORT_BY[by] ?? REPORT_BY.queue));
+
+  fillTable($('#table-report-rows tbody'), (report.rows ?? []).map((row) => {
+    const rowAnswers = keptShare(row.responseKept, row.responseOwed);
+    const rowSolutions = keptShare(row.solutionKept, row.solutionOwed);
+
+    return el('tr', {},
+      el('td', { class: 'text', text: reportRowName(row, by) }),
+      el('td', { class: 'num', text: fmtCount(row.opened) }),
+      el('td', { class: 'num', text: fmtCount(row.closed) }),
+      el('td', { class: 'num', text: rowAnswers.value, title: rowAnswers.of }),
+      el('td', { class: 'num', text: rowSolutions.value, title: rowSolutions.of }),
+      el('td', { class: 'num', text: fmtMinutesTaken(row.averageResponseMinutes) }),
+      el('td', { class: 'num', text: fmtMinutesTaken(row.averageResolutionMinutes) }));
+  }), 7, t('report.noRows', 'No tickets in this span.'));
+}
+
+/** Wires the statistics' form: every change asks again. */
+function wireReport() {
+  const form = $('#form-report');
+  if (!form) return;
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); loadReport().catch((err) => toastFailure(err)); });
+  form.addEventListener('change', () => loadReport().catch((err) => toastFailure(err)));
 }
 
 /**
@@ -10901,6 +11081,8 @@ function wireTickets() {
   }
 
   $('#ticket-search-clear').addEventListener('click', () => clearTicketSearch(filter));
+
+  wireReport();
 
   $('#tickets-previous').addEventListener('click', () => {
     ticketPaging.page = Math.max(1, ticketPaging.page - 1);
@@ -14076,10 +14258,13 @@ function forgetTheLastAccount() {
   assetLists.definitions.clear();
   closeConfigItem();
   $('#form-configitem-filter').reset();
-  // And the overview, which counts the last account's work and names its queues.
+  // And the overview and the statistics, which count the last account's work and
+  // name its queues.
   cache.overviewDays = [];
+  reportShown = null;
   for (const drawn of ['#overview-tiles', '#table-overview-queues tbody', '#overview-chart',
-    '#table-overview-days tbody']) {
+    '#table-overview-days tbody', '#report-tiles', '#report-chart', '#table-report-days tbody',
+    '#table-report-rows tbody']) {
     $(drawn).replaceChildren();
   }
   ticketPaging.page = 1;
@@ -14550,6 +14735,32 @@ const TOUR_STEPS = [
     text: () => t('tour.overviewDays.text',
       'The tickets opened and finished on each of the last fourteen days. Point at a day for its numbers, '
       + 'or read them all as a table beneath.'),
+  },
+  {
+    target: '#report-card',
+    view: 'reports',
+    permission: 'reports:read',
+    title: () => t('tour.reportSpan.title', 'Statistics over a span'),
+    text: () => t('tour.reportSpan.text',
+      'Choose a span of days and what to count by. The figures say how many tickets were opened and finished in it, '
+      + 'how many first answers and solutions came in time, and how long they took.'),
+  },
+  {
+    target: '#report-days-card',
+    view: 'reports',
+    permission: 'reports:read',
+    title: () => t('tour.reportDays.title', 'The span as columns'),
+    text: () => t('tour.reportDays.text',
+      'The tickets opened and finished in the span, by day - by week or by month over a longer one. '
+      + 'Point at a column for its numbers, or read them as a table beneath.'),
+  },
+  {
+    target: '#report-rows-card',
+    view: 'reports',
+    permission: 'reports:read',
+    title: () => t('tour.reportRows.title', 'Broken down by what you chose'),
+    text: () => t('tour.reportRows.text',
+      'The same figures for each queue, priority, type, owner, organisation or service level the span\'s tickets carry.'),
   },
   {
     target: '#ticket-list-card',
@@ -19355,6 +19566,7 @@ function switchView(name) {
 
   // Drawn to the width it has, which a hidden screen does not have.
   if (name === 'overview') drawDayLoads(cache.overviewDays ?? []);
+  if (name === 'reports' && reportShown) drawReport(reportShown, $('#form-report'));
 
   // And what the reader was told, which other people's changes add to while
   // nothing on this page moves.
@@ -19578,6 +19790,7 @@ async function refreshAll() {
   await loadFAQ();
   await loadTickets();
   await loadOverview();
+  await loadReport();
   await loadUsers();
   await loadAutomation();
   await loadAdmin();
