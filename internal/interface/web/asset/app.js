@@ -13816,6 +13816,7 @@ function forgetTheLastAccount() {
   assetLists.definitions.clear();
   closeConfigItem();
   $('#form-configitem-filter').reset();
+  ticketPaging.page = 1;
   itemPaging.page = 1;
   Object.keys(itsmChangeLists).forEach((list) => { itsmChangeLists[list] = []; });
   closeItsmChange();

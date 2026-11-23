@@ -328,6 +328,45 @@ func TestASignOutTakesTheOpenTicketWithIt(t *testing.T) {
 	}
 }
 
+// The page of the ticket list an account had reached goes with it as well.
+//
+// Every list that pages put its page back to the first on the way out but this
+// one, so whoever signed in next at the same desk was shown the page the last
+// person had turned to - the second of twenty-six tickets, a single row, under a
+// count saying there were twenty-six.
+func TestASignOutTakesTheTicketListBackToItsFirstPage(t *testing.T) {
+	t.Parallel()
+
+	p := open(t)
+	p.readyAdmin()
+
+	var made bool
+
+	p.awaitJSON(`(async () => {
+		const desk = (await api('/queues')).items.find((queue) => queue.name === 'Service Desk');
+		for (let i = 1; i <= 26; i++) {
+			await api('/tickets', { method: 'POST', body: JSON.stringify(
+				{ title: 'Ticket ' + i, queueId: desk.id, body: 'Number ' + i + '.' }) });
+		}
+		await refreshAll();
+		return true;
+	})()`, &made)
+
+	p.run("open the tickets", p.click(`.tab[data-view="tickets"]`),
+		chromedp.WaitVisible("#table-tickets", chromedp.ByID))
+	p.waitEvaluates("the first page", `String(document.querySelectorAll('#table-tickets tbody tr').length)`, "25")
+	p.run("turn to the second page", p.click("#tickets-next"))
+	p.waitEvaluates("the second page", `String(document.querySelectorAll('#table-tickets tbody tr').length)`, "1")
+
+	p.run("sign out", p.click("#logout"), chromedp.WaitVisible("#form-login", chromedp.ByID))
+	p.readyAdminAgain()
+
+	p.run("open the tickets again", p.click(`.tab[data-view="tickets"]`),
+		chromedp.WaitVisible("#table-tickets", chromedp.ByID))
+	p.waitEvaluates("the next account starts on the first page",
+		`String(document.querySelectorAll('#table-tickets tbody tr').length)`, "25")
+}
+
 // The greeting an account was shown goes with it as well.
 //
 // The greeting names whoever it greeted, and is drawn again only when somebody
