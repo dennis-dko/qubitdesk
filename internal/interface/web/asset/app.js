@@ -9784,6 +9784,7 @@ async function loadTickets() {
   if (filter && !beingEdited(filter)) {
     fillSelect(filter.elements.queue, queueChoices(cache.ticketQueues),
       { placeholder: t('ticket.allQueues', 'every queue'), labelKey: 'label', valueKey: 'value' });
+    fillTicketSearch(filter);
   }
 
   const form = $('#form-ticket');
@@ -9801,6 +9802,58 @@ async function loadTickets() {
   await loadNotifyChoices();
 
   if (openTicketShown) await openTicket(openTicketShown.id, { keepPlace: true });
+}
+
+/**
+ * Fills the search's choices with every value tickets can carry, retired ones
+ * included: a ticket keeps a retired state or priority, and the search has to
+ * be able to find it by one.
+ */
+function fillTicketSearch(filter) {
+  const any = { placeholder: t('ticket.any', 'any'), labelKey: 'label', valueKey: 'value' };
+
+  fillSelect(filter.elements.state,
+    cache.states.map((state) => ({ value: String(state.id), label: statusName(state.name) })), any);
+  fillSelect(filter.elements.priority,
+    cache.priorities.map((priority) => ({ value: String(priority.id), label: priorityName(priority.name) })), any);
+  fillSelect(filter.elements.type,
+    cache.types.map((type) => ({ value: String(type.id), label: ticketTypeName(type.name) })), any);
+  fillSelect(filter.elements.serviceLevel,
+    cache.levels.map((level) => ({ value: String(level.id), label: level.name })), any);
+}
+
+/**
+ * What the search asks for beyond the queue and the words, as the listing's
+ * query takes it: only what is chosen, so that an untouched search asks for
+ * nothing.
+ */
+function ticketSearchQuery(filter, query) {
+  const chosen = filter.elements;
+
+  for (const name of ['state', 'priority', 'type', 'serviceLevel', 'responsible', 'locked',
+    'createdFrom', 'createdTo', 'changedFrom', 'changedTo']) {
+    if (chosen[name].value) query.set(name, chosen[name].value);
+  }
+
+  if (chosen.text.value.trim()) query.set('text', chosen.text.value.trim());
+  if (chosen.watched.checked) query.set('watched', 'true');
+  if (chosen.overdue.checked) query.set('overdue', 'true');
+
+  const [sort, order] = chosen.sort.value.split('-');
+  if (sort && sort !== 'changed') query.set('sort', sort);
+  if (order === 'asc') query.set('order', 'asc');
+}
+
+/** Puts every criterion of the search back to asking for nothing. */
+function clearTicketSearch(filter) {
+  for (const field of $$('select, input', $('#ticket-search'))) {
+    if (field.type === 'checkbox') field.checked = false;
+    else if (field.type === 'date') setDateField(field, '');
+    else if (field.tagName === 'SELECT') field.selectedIndex = 0;
+    else if (!field.classList.contains('date-shown')) field.value = '';
+  }
+
+  filter.dispatchEvent(new Event('change'));
 }
 
 /** Queues as choices, by their place in the tree. */
@@ -9927,6 +9980,7 @@ async function loadTicketPage() {
   if (filter.elements.q.value.trim()) query.set('q', filter.elements.q.value.trim());
   if (filter.elements.unfinished.checked) query.set('unfinished', 'true');
   if (filter.elements.mine.checked) query.set('owner', 'me');
+  ticketSearchQuery(filter, query);
 
   const page = await api(`/tickets?${query}`);
   ticketPaging.total = page?.totalCount ?? 0;
@@ -10579,10 +10633,14 @@ function wireTickets() {
   filter.addEventListener('change', refilter);
 
   let typing;
-  filter.elements.q.addEventListener('input', () => {
-    clearTimeout(typing);
-    typing = setTimeout(refilter, 300);
-  });
+  for (const words of [filter.elements.q, filter.elements.text]) {
+    words.addEventListener('input', () => {
+      clearTimeout(typing);
+      typing = setTimeout(refilter, 300);
+    });
+  }
+
+  $('#ticket-search-clear').addEventListener('click', () => clearTicketSearch(filter));
 
   $('#tickets-previous').addEventListener('click', () => {
     ticketPaging.page = Math.max(1, ticketPaging.page - 1);

@@ -700,6 +700,43 @@
           </div>
           <label class="switch"><input type="checkbox" name="unfinished" checked><span class="switch-track"></span><span class="switch-label" data-i18n="ticket.unfinished">Only what is still to do</span></label>
           <label class="switch"><input type="checkbox" name="mine"><span class="switch-track"></span><span class="switch-label" data-i18n="ticket.mine">Only my tickets</span></label>
+          <!-- The search: everything else a ticket can be found by, kept folded
+               away until somebody needs more than the queue and the words. -->
+          <details class="ticket-search" id="ticket-search">
+            <summary data-i18n="ticket.searchMore">More criteria</summary>
+            <div class="grid">
+              <label data-i18n="field.state">State<select name="state"></select></label>
+              <label data-i18n="field.priority">Priority<select name="priority"></select></label>
+              <label data-i18n="field.type">Type<select name="type"></select></label>
+              <label data-i18n="field.serviceLevelId">Service level<select name="serviceLevel"></select></label>
+              <label data-i18n="field.responsibleId">Responsible<select name="responsible">
+                <option value="" data-i18n="ticket.any">any</option>
+                <option value="me" data-i18n="ticket.me">me</option>
+              </select></label>
+              <label data-i18n="ticket.lock">Lock<select name="locked">
+                <option value="" data-i18n="ticket.any">any</option>
+                <option value="true" data-i18n="ticket.lockedOnly">locked</option>
+                <option value="false" data-i18n="ticket.freeOnly">free</option>
+              </select></label>
+              <label data-i18n="ticket.createdFrom">Opened from<input type="date" name="createdFrom"></label>
+              <label data-i18n="ticket.createdTo">Opened until<input type="date" name="createdTo"></label>
+              <label data-i18n="ticket.changedFrom">Changed from<input type="date" name="changedFrom"></label>
+              <label data-i18n="ticket.changedTo">Changed until<input type="date" name="changedTo"></label>
+              <label data-i18n="ticket.text">Words in the ticket<input type="search" name="text" maxlength="255" data-i18n-placeholder="ticket.textHint" placeholder="each word, in the title or an article"></label>
+              <label data-i18n="ticket.sort">Order<select name="sort">
+                <option value="changed" data-i18n="ticket.sortChanged">changed last first</option>
+                <option value="changed-asc" data-i18n="ticket.sortUnchanged">unchanged longest first</option>
+                <option value="created" data-i18n="ticket.sortNewest">newest first</option>
+                <option value="created-asc" data-i18n="ticket.sortOldest">oldest first</option>
+                <option value="priority" data-i18n="ticket.sortUrgent">most urgent first</option>
+              </select></label>
+            </div>
+            <label class="switch"><input type="checkbox" name="watched"><span class="switch-track"></span><span class="switch-label" data-i18n="ticket.watchedOnly">Only tickets I watch</span></label>
+            <label class="switch"><input type="checkbox" name="overdue"><span class="switch-track"></span><span class="switch-label" data-i18n="ticket.overdueOnly">Only overdue tickets</span></label>
+            <div class="row">
+              <button type="button" class="link" id="ticket-search-clear" data-i18n="ticket.searchClear">clear the criteria</button>
+            </div>
+          </details>
         </form>
         <div class="table-wrap">
           <table id="table-tickets">
